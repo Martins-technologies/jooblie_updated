@@ -1,0 +1,19 @@
+[Unit]
+Description=Jooblie Shared API
+After=network.target
+
+[Service]
+Type=simple
+User=jooblie
+WorkingDirectory=/srv/jooblie/backend
+EnvironmentFile=/srv/jooblie/backend/.env
+ExecStart=/usr/bin/node /srv/jooblie/backend/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
