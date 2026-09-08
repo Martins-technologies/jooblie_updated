@@ -1,238 +1,207 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ShieldCheck } from 'lucide-react';
-import PageHero from '../components/PageHero';
-import PageSection from '../components/PageSection';
-import Reveal from '../components/Reveal';
-import usePublicData, { clearPublicDataCache } from '../hooks/usePublicData';
-import { createJob, getRecruiterCompanies } from '../lib/data';
-import { SITE_SLUG } from '../config/site';
-
-const initialForm = {
-  title: '',
-  companyId: '',
-  categoryId: '',
-  province: '',
-  city: '',
-  isRemote: false,
-  employmentType: 'full_time',
-  salaryMin: '',
-  salaryMax: '',
-  salaryCurrency: 'CAD',
-  salaryPeriod: 'yearly',
-  skills: '',
-  description: '',
-  newcomerFriendly: false,
-  aboriginalFriendly: false,
-};
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  Briefcase, MapPin, AlignLeft, Building2, ArrowLeft, 
+  Loader2, Link as LinkIcon, Wrench, GraduationCap, Clock 
+} from 'lucide-react';
+import DashboardLayout from '../components/DashboardLayout';
+import { apiRequest } from '../lib/api';
 
 export default function PostJobPage() {
-  const { data } = usePublicData();
-  const [companies, setCompanies] = useState([]);
-  const [companiesLoading, setCompaniesLoading] = useState(true);
-  const [form, setForm] = useState(initialForm);
-  const [state, setState] = useState({ submitting: false, error: '', success: false });
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  // Job Form State (Updated with Professional Fields)
+  const [form, setForm] = useState({
+    title: '',
+    workplace_type: 'onsite', // 'onsite', 'remote', 'hybrid'
+    employment_type: 'full_time', // 'full_time', 'part_time', 'contract', 'internship'
+    experience_level: 'mid_level', // 'entry_level', 'mid_level', 'senior', 'executive'
+    city: '',
+    province: '',
+    skills: '', // Comma separated string
+    external_link: '', // e.g. LinkedIn or company career page
+    description: '',
+    status: 'active'
+  });
 
-  useEffect(() => {
-    let active = true;
-    getRecruiterCompanies().then(({ data: recruiterCompanies, error }) => {
-      if (!active) return;
-      setCompanies(recruiterCompanies || []);
-      setCompaniesLoading(false);
-      if (error) setState((current) => ({ ...current, error: error.message }));
-    });
-    return () => { active = false; };
-  }, []);
-
-  const categories = useMemo(
-    () => data.categories.slice().sort((a, b) => a.name.localeCompare(b.name)),
-    [data.categories],
-  );
-
-  const set = (key) => (event) => {
-    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
-    setForm((current) => ({ ...current, [key]: value }));
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      // Agar 'remote' select ho to city aur province empty kar dein
+      ...(name === 'workplace_type' && value === 'remote' ? { city: '', province: '' } : {})
+    }));
   };
 
-  const submit = async (event) => {
-    event.preventDefault();
-    setState({ submitting: true, error: '', success: false });
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    const audienceSites = [
-      form.newcomerFriendly ? 'newcomers' : null,
-      form.aboriginalFriendly ? 'aboriginal' : null,
-    ].filter(Boolean);
+    try {
+      // Backend par job post karne ki API call
+      // Skills ko array mein convert kar rahe hain database ke liye
+      const payload = {
+        ...form,
+        skills: form.skills.split(',').map(skill => skill.trim()).filter(Boolean)
+      };
 
-    const payload = {
-      title: form.title.trim(),
-      company_id: form.companyId,
-      category_id: Number(form.categoryId),
-      province: form.province.trim() || null,
-      city: form.city.trim() || null,
-      is_remote: form.isRemote,
-      employment_type: form.employmentType,
-      salary_min: form.salaryMin === '' ? null : Number(form.salaryMin),
-      salary_max: form.salaryMax === '' ? null : Number(form.salaryMax),
-      salary_currency: form.salaryCurrency,
-      salary_period: form.salaryPeriod || null,
-      skills: form.skills.split(',').map((value) => value.trim()).filter(Boolean).slice(0, 50),
-      description: form.description.trim(),
-      audience_sites: audienceSites,
-    };
-
-    const { error } = await createJob(payload);
-
-    if (error) {
-      setState({ submitting: false, error: error.message || 'The job could not be submitted.', success: false });
-      return;
+      await apiRequest('/recruiter/jobs', {
+        method: 'POST',
+        auth: true,
+        body: payload,
+      });
+      
+      navigate('/dashboard', { state: { successMsg: 'Job posted successfully!' } });
+    } catch (err) {
+      setError(err.message || 'Failed to post job. Please try again.');
+      setLoading(false);
     }
-
-    clearPublicDataCache();
-    setForm(initialForm);
-    setState({ submitting: false, error: '', success: true });
   };
 
   return (
-    <>
-      <PageHero
-        eyebrow="Recruiter workspace"
-        title="Post a job"
-        text="Submit one job to the shared backend. Jooblie and the matching specialist portal are assigned automatically from the selected category."
-      />
+    <DashboardLayout 
+      title="Post a New Job" 
+      subtitle="Fill out the details below to publish a professional job opening."
+      actions={
+        <Link to="/dashboard" className="button button--secondary">
+          <ArrowLeft size={16} style={{ marginRight: '6px' }} /> Back to Dashboard
+        </Link>
+      }
+    >
+      <div className="dashboard-panel" style={{ maxWidth: '850px', margin: '0 auto', padding: '2.5rem' }}>
+        {error && <div className="error-banner" style={{ marginBottom: '1.5rem' }}>{error}</div>}
 
-      <PageSection soft reveal={false}>
-        <div className="form-page-grid">
-          <Reveal as="form" className="content-card form-card" onSubmit={submit} direction="left">
-            {state.success && (
-              <div className="success-banner">
-                <CheckCircle2 size={20} />
-                Job submitted for admin review. Its Jooblie and specialist-portal visibility is already mapped in the shared database.
-              </div>
-            )}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          {/* ROW 1: Title & External Link */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Briefcase size={16} /> Job Title *
+              </span>
+              <input 
+                type="text" name="title" required value={form.title} onChange={handleChange} 
+                placeholder="e.g. Senior React Developer" 
+                style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+              />
+            </label>
 
-            {state.error && <div className="error-banner">{state.error}</div>}
-            {!data.configured && <div className="error-banner">The shared Jooblie API is not configured.</div>}
-            {!companiesLoading && companies.length === 0 && (
-              <div className="error-banner">Create a company from the Recruiter Dashboard before posting a job.</div>
-            )}
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <LinkIcon size={16} /> Apply Link (Optional)
+              </span>
+              <input 
+                type="url" name="external_link" value={form.external_link} onChange={handleChange} 
+                placeholder="e.g. LinkedIn URL" 
+                style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+              />
+            </label>
+          </div>
 
-            <div className="form-grid">
-              <Field label="Job title" required>
-                <input required minLength="3" value={form.title} onChange={set('title')} placeholder="e.g. Senior Full Stack Developer" />
-              </Field>
+          {/* ROW 2: Employment Details (Dropdowns) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Building2 size={16} /> Workplace Type
+              </span>
+              <select name="workplace_type" value={form.workplace_type} onChange={handleChange} style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
+                <option value="onsite">On-site</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="remote">Remote</option>
+              </select>
+            </label>
 
-              <Field label="Company" required>
-                <select required disabled={companiesLoading || companies.length === 0} value={form.companyId} onChange={set('companyId')}>
-                  <option value="">{companiesLoading ? 'Loading companies...' : 'Select company'}</option>
-                  {companies.map((company) => <option value={company.id} key={company.id}>{company.name}</option>)}
-                </select>
-              </Field>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Clock size={16} /> Employment Type
+              </span>
+              <select name="employment_type" value={form.employment_type} onChange={handleChange} style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
+                <option value="full_time">Full-time</option>
+                <option value="part_time">Part-time</option>
+                <option value="contract">Contract</option>
+                <option value="internship">Internship</option>
+              </select>
+            </label>
 
-              <Field label="Category" required>
-                <select required value={form.categoryId} onChange={set('categoryId')}>
-                  <option value="">Select category</option>
-                  {categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
-                </select>
-              </Field>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <GraduationCap size={16} /> Experience Level
+              </span>
+              <select name="experience_level" value={form.experience_level} onChange={handleChange} style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
+                <option value="entry_level">Entry Level</option>
+                <option value="mid_level">Mid Level</option>
+                <option value="senior">Senior Level</option>
+                <option value="executive">Executive / Director</option>
+              </select>
+            </label>
+          </div>
 
-              <Field label="Employment type" required>
-                <select required value={form.employmentType} onChange={set('employmentType')}>
-                  <option value="full_time">Full Time</option>
-                  <option value="part_time">Part Time</option>
-                  <option value="contract">Contract</option>
-                  <option value="temporary">Temporary</option>
-                  <option value="internship">Internship</option>
-                  <option value="seasonal">Seasonal</option>
-                </select>
-              </Field>
+          {/* ROW 3: Location (Disabled if Remote) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MapPin size={16} /> City
+              </span>
+              <input 
+                type="text" name="city" value={form.city} onChange={handleChange} 
+                placeholder={form.workplace_type === 'remote' ? "N/A (Remote)" : "e.g. Lahore"} 
+                disabled={form.workplace_type === 'remote'}
+                style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db', opacity: form.workplace_type === 'remote' ? 0.5 : 1 }}
+              />
+            </label>
 
-              <Field label="City">
-                <input value={form.city} onChange={set('city')} placeholder="e.g. Toronto" />
-              </Field>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MapPin size={16} /> Province / State
+              </span>
+              <input 
+                type="text" name="province" value={form.province} onChange={handleChange} 
+                placeholder={form.workplace_type === 'remote' ? "N/A (Remote)" : "e.g. Punjab"} 
+                disabled={form.workplace_type === 'remote'}
+                style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db', opacity: form.workplace_type === 'remote' ? 0.5 : 1 }}
+              />
+            </label>
+          </div>
 
-              <Field label="Province">
-                <input value={form.province} onChange={set('province')} placeholder="e.g. Ontario" />
-              </Field>
+          {/* ROW 4: Skills */}
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Wrench size={16} /> Required Skills
+            </span>
+            <input 
+              type="text" name="skills" value={form.skills} onChange={handleChange} 
+              placeholder="e.g. React, Node.js, TypeScript (Separate with commas)" 
+              style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+            />
+          </label>
 
-              <div className="form-grid__full audience-options">
-                <label className="check-field">
-                  <input type="checkbox" checked={form.isRemote} onChange={set('isRemote')} />
-                  <span>This role can be worked remotely</span>
-                </label>
-              </div>
+          {/* ROW 5: Description */}
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlignLeft size={16} /> Job Description *
+            </span>
+            <textarea 
+              name="description" required value={form.description} onChange={handleChange} 
+              placeholder="Describe the role, responsibilities, and requirements..." 
+              style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db', minHeight: '220px', fontFamily: 'inherit' }}
+            />
+          </label>
 
-              <Field label="Salary currency">
-                <select value={form.salaryCurrency} onChange={set('salaryCurrency')}>
-                  <option value="CAD">CAD</option>
-                  <option value="USD">USD</option>
-                </select>
-              </Field>
-
-              <Field label="Salary period">
-                <select value={form.salaryPeriod} onChange={set('salaryPeriod')}>
-                  <option value="hourly">Hourly</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
-              </Field>
-
-              <div className="field-pair">
-                <Field label="Salary min">
-                  <input type="number" min="0" value={form.salaryMin} onChange={set('salaryMin')} />
-                </Field>
-                <Field label="Salary max">
-                  <input type="number" min="0" value={form.salaryMax} onChange={set('salaryMax')} />
-                </Field>
-              </div>
-
-              <Field className="form-grid__full" label="Skills">
-                <input value={form.skills} onChange={set('skills')} placeholder="React, JavaScript, SQL" />
-              </Field>
-
-              <Field className="form-grid__full" label="Job description" required>
-                <textarea required minLength="20" rows="9" value={form.description} onChange={set('description')} placeholder="Describe the role, responsibilities, qualifications, and team." />
-              </Field>
-
-              <div className="form-grid__full audience-options">
-                <label className="check-field">
-                  <input type="checkbox" checked={form.newcomerFriendly} onChange={set('newcomerFriendly')} />
-                  <span>Also publish to the Newcomers portal</span>
-                </label>
-                <label className="check-field">
-                  <input type="checkbox" checked={form.aboriginalFriendly} onChange={set('aboriginalFriendly')} />
-                  <span>Also publish to the Aboriginal portal</span>
-                </label>
-              </div>
-            </div>
-
-            <button className="button button--primary form-submit" type="submit" disabled={state.submitting || companies.length === 0}>
-              {state.submitting ? 'Submitting...' : 'Submit Job for Review'}
-            </button>
-          </Reveal>
-
-          <Reveal as="aside" className="content-card form-side-card" direction="right" delay={80}>
-            <ShieldCheck size={28} />
-            <span className="eyebrow">Shared publishing</span>
-            <h2>One job record, correct portals.</h2>
-            <p>The current source is <strong>{SITE_SLUG}</strong>. The backend stores that as the origin site, while database triggers maintain Jooblie, category-site, and optional audience visibility without duplicating the job.</p>
-            <ul className="check-list">
-              <li>Recruiter company ownership is checked server-side.</li>
-              <li>Specialist portals can only post categories they are configured for.</li>
-              <li>Newcomers and Aboriginal visibility is stored separately as audience targeting.</li>
-              <li>Public visibility begins only after admin approval.</li>
-            </ul>
-          </Reveal>
-        </div>
-      </PageSection>
-    </>
-  );
-}
-
-function Field({ label, required = false, className = '', children }) {
-  return (
-    <label className={`form-field ${className}`.trim()}>
-      <span>{label}{required ? ' *' : ''}</span>
-      {children}
-    </label>
+          {/* Submit Button */}
+          <button 
+            type="submit" 
+            className="button button--primary" 
+            disabled={loading}
+            style={{ marginTop: '1rem', padding: '1rem', fontSize: '1.1rem', cursor: loading ? 'not-allowed' : 'pointer' }}
+          >
+            {loading ? <Loader2 className="spinner" size={20} /> : 'Publish Job'}
+          </button>
+        </form>
+      </div>
+    </DashboardLayout>
   );
 }

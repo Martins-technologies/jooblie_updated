@@ -25,6 +25,7 @@ app.use(
   pinoHttp({
     logger,
     genReqId: (req) => req.requestId,
+    autoLogging: false,
     customProps: (req) => ({
       requestId: req.requestId,
       clientIp: req.clientIp,

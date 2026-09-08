@@ -8,7 +8,7 @@ import { writeAuditLog } from '../utils/audit.js';
 
 const jobSelect = `
   id,title,description,province,city,is_remote,
-  employment_type,salary_min,salary_max,salary_currency,salary_period,
+  employment_type,workplace_type,experience_level,salary_min,salary_max,salary_currency,salary_period,
   skills,status,published_at,created_at,updated_at,expires_at,
   company_id,category_id,origin_site_id,
   companies:company_id(
@@ -187,6 +187,7 @@ function recommendationScore(job, profile, savedIds) {
       companyName,
       job?.city,
       job?.province,
+      job?.province,
     ]
       .filter(Boolean)
       .join(' '),
@@ -332,6 +333,7 @@ export const dashboard = asyncHandler(
       appCountRes,
       savedCountRes,
       interviewCountRes,
+      shortlistedCountRes,
       offerCountRes,
       profileRes,
     ] = await Promise.all([
@@ -415,6 +417,15 @@ export const dashboard = asyncHandler(
           'hired',
         ]),
 
+      /* SHORTLISTED COUNT */
+
+      serviceDb
+        .from('applications')
+        .select('id', { count: 'exact', head: true })
+        .eq('applicant_id', userId)
+        .is('deleted_at', null)
+        .eq('status', 'shortlisted'),
+
       /* OFFER COUNT */
 
       serviceDb
@@ -442,7 +453,9 @@ export const dashboard = asyncHandler(
             location_province,
             location_city,
             skills,
-            default_resume_path
+            default_resume_path,
+            experience,
+            education
           `,
         )
         .eq('id', userId)
@@ -455,6 +468,7 @@ export const dashboard = asyncHandler(
       appCountRes,
       savedCountRes,
       interviewCountRes,
+      shortlistedCountRes,
       offerCountRes,
       profileRes,
     ].find(
@@ -485,6 +499,9 @@ export const dashboard = asyncHandler(
 
         interviews:
           interviewCountRes.count || 0,
+
+        shortlisted:
+          shortlistedCountRes.count || 0,
 
         offers:
           offerCountRes.count || 0,
@@ -700,6 +717,28 @@ export const recommendedJobs = asyncHandler(
    Therefore every saved job must store the site through
    which the user saved it.
 ========================================================= */
+
+export const listResumes = asyncHandler(async (req, res) => {
+  const { data, error } = await serviceDb.from('resume_documents').select('id,storage_path,original_name,size_bytes,content_type,is_active,created_at').eq('user_id', req.user.id).is('deleted_at', null).order('created_at', { ascending: false });
+  if (error) throw new ApiError(500, 'Resumes could not be loaded.', 'RESUMES_FAILED');
+  res.json({ items: data || [] });
+});
+
+export const registerResume = asyncHandler(async (req, res) => {
+  const { path, original_name, size_bytes } = req.body;
+  if (!path.startsWith(`${req.user.id}/`)) throw new ApiError(403, 'Invalid resume path.', 'RESUME_PATH_FORBIDDEN');
+  const { data: blob, error: downloadError } = await serviceDb.storage.from('resumes').download(path);
+  if (downloadError || !blob) throw new ApiError(400, 'Uploaded resume could not be verified.', 'RESUME_VERIFY_FAILED');
+  if (blob.size > 5 * 1024 * 1024) { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Resume must be 5 MB or smaller.', 'RESUME_TOO_LARGE'); }
+  const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+  const magic = String.fromCharCode(...head);
+  if (magic !== '%PDF-') { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Only valid PDF resumes are accepted.', 'RESUME_NOT_PDF'); }
+  if (Number(size_bytes) !== blob.size) { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Resume size verification failed.', 'RESUME_SIZE_MISMATCH'); }
+  const { data, error } = await serviceDb.from('resume_documents').insert({ user_id: req.user.id, storage_path: path, original_name, size_bytes: blob.size, content_type: 'application/pdf' }).select('id,storage_path,original_name,size_bytes,content_type,created_at').single();
+  if (error) { if (error.code === '23505') throw new ApiError(409, 'This resume has already been registered.', 'RESUME_ALREADY_REGISTERED'); throw new ApiError(400, 'Resume could not be registered.', 'RESUME_REGISTER_FAILED'); }
+  await safeAudit(req, { action: 'resume.upload', entityType: 'resume', entityId: data.id, metadata: { size_bytes: blob.size } });
+  res.status(201).json({ resume: data });
+});
 
 export const saveJob = asyncHandler(
   async (req, res) => {
@@ -1009,6 +1048,28 @@ export const unsaveJob = asyncHandler(
   },
 );
 
+export const getOwnResumeUrl = asyncHandler(async (req, res) => {
+  const resumeId = req.query.id ? String(req.query.id) : null;
+  let query = serviceDb
+    .from('resume_documents')
+    .select('id,storage_path,original_name,created_at')
+    .eq('user_id', req.user.id)
+    .eq('is_active', true)
+    .is('deleted_at', null);
+
+  if (resumeId) query = query.eq('id', resumeId);
+  else query = query.order('created_at', { ascending: false }).limit(1);
+
+  const { data, error } = resumeId ? await query.maybeSingle() : await query.maybeSingle();
+  if (error || !data) throw new ApiError(404, 'Resume not found.', 'RESUME_NOT_FOUND');
+
+  const { data: signed, error: signedError } = await serviceDb.storage.from('resumes').createSignedUrl(data.storage_path, 300);
+  if (signedError || !signed?.signedUrl) throw new ApiError(404, 'Resume is not available.', 'RESUME_URL_FAILED');
+
+  await safeAudit(req, { action: 'resume.view', entityType: 'resume', entityId: data.id });
+  res.json({ url: signed.signedUrl, expiresIn: 300, resume: data });
+});
+
 /* =========================================================
    APPLY TO JOB
 ========================================================= */
@@ -1076,14 +1137,30 @@ export const applyToJob = asyncHandler(
       );
     }
 
+    // Never trust a browser-supplied storage path. The resume must belong to the
+    // authenticated applicant and be present in the registered resume table.
+    const { data: resume, error: resumeError } = await serviceDb
+      .from('resume_documents')
+      .select('id,storage_path')
+      .eq('user_id', req.user.id)
+      .eq('storage_path', resumePath)
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (resumeError || !resume) {
+      throw new ApiError(403, 'The selected resume is not owned by your account.', 'RESUME_FORBIDDEN');
+    }
+
     /* ===============================================
        CREATE APPLICATION
     ================================================ */
 
+    // 🔥 YAHAN FIX HAI: req.db ko serviceDb kar diya gaya hai
     const {
       data,
       error,
-    } = await req.db
+    } = await serviceDb
       .from('applications')
       .insert({
         job_id:

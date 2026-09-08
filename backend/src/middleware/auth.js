@@ -2,7 +2,7 @@ import { createUserDb, serviceDb } from '../config/supabase.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
 import { writeSecurityEvent } from '../utils/audit.js';
 
-const profileSelect = 'id,role,status,email,full_name,phone,headline,location_province,location_city,skills,default_resume_path,signup_site_id';
+const profileSelect = 'id,role,status,email,full_name,phone,headline,location_province,location_city,skills,default_resume_path,experience,education,signup_site_id';
 
 function bearerToken(req) {
   const header = req.get('authorization') || '';

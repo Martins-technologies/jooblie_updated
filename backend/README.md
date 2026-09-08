@@ -30,3 +30,13 @@ npm run dev
 ```
 
 Apply `../database/migrations/001_align_existing_jooblie.sql` to the existing Supabase project before production rollout.
+
+## Production workflow additions
+- Job seekers can maintain validated skills, experience, education, and versioned PDF resumes.
+- Resumes are private objects; upload registration verifies the `%PDF-` signature and size, and recruiter resume access uses 5-minute signed URLs after company authorization.
+- Recruiters have paginated application listing and server-enforced application status transitions.
+- Activity/security logging is retained in `activity_log` and `security_events`; automatic per-request console logging is disabled to keep production logs useful.
+
+
+### Recruiter / job-post security
+Recruiter accounts are provisioned with a primary company at signup. Job creation derives `company_id` from that server-side binding, so clients cannot switch the employer on an individual job. Job edits also cannot move a listing between companies.

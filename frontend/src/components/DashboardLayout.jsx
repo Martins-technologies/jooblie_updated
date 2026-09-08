@@ -33,20 +33,17 @@ import { useAuth } from '../context/AuthContext';
 
 import '../styles/dashboard.css';
 
-
 const homeByRole = {
   job_seeker: '/dashboard/job-seeker',
   recruiter: '/dashboard/recruiter',
   admin: '/dashboard/admin',
 };
 
-
 const roleLabels = {
   job_seeker: 'Job Seeker',
   recruiter: 'Recruiter',
   admin: 'Administrator',
 };
-
 
 const linksByRole = {
   job_seeker: [
@@ -86,12 +83,12 @@ const linksByRole = {
       end: true,
     },
     {
-      href: '#jobs',
+      to: '/my-jobs',
       label: 'My Jobs',
       icon: BriefcaseBusiness,
     },
     {
-      href: '#candidates',
+      to: '/candidates',
       label: 'Candidates',
       icon: Users,
     },
@@ -101,12 +98,13 @@ const linksByRole = {
       icon: FileText,
     },
     {
-      href: '#company',
+      to: '/my-company',
       label: 'Company Profile',
       icon: Building2,
     },
   ],
 
+  // YAHAN ADMIN KE LINKS UPDATE KIYE HAIN
   admin: [
     {
       to: '/dashboard/admin',
@@ -115,35 +113,29 @@ const linksByRole = {
       end: true,
     },
     {
-      href: '#moderation',
+      to: '/admin/moderation',
       label: 'Job Moderation',
       icon: BriefcaseBusiness,
     },
     {
-      href: '#users',
+      to: '/admin/users',
       label: 'Users',
       icon: Users,
     },
     {
-      href: '#portals',
-      label: 'Portals',
-      icon: Globe2,
-    },
-    {
-      href: '#activity',
-      label: 'Activity',
+      to: '/admin/activity',
+      label: 'System & Activity',
       icon: ScrollText,
     },
   ],
 };
 
-
+// YAHAN ADMIN KA SETTINGS PATH BHI UPDATE KIYA HAI
 const settingsByRole = {
   job_seeker: '/dashboard/job-seeker/settings',
-  recruiter: '/dashboard/recruiter',
-  admin: '/dashboard/admin',
+  recruiter: '/settings', 
+  admin: '/settings',
 };
-
 
 const networkPortals = [
   {
@@ -153,7 +145,6 @@ const networkPortals = [
     icon: Globe2,
     internal: true,
   },
-
   {
     key: 'office-jobs',
     label: 'Office Jobline',
@@ -161,7 +152,6 @@ const networkPortals = [
     icon: Building2,
     url: import.meta.env.VITE_OFFICE_JOBS_URL || '',
   },
-
   {
     key: 'it-jobs',
     label: 'IT Jobline',
@@ -169,7 +159,6 @@ const networkPortals = [
     icon: Laptop,
     url: import.meta.env.VITE_IT_JOBS_URL || '',
   },
-
   {
     key: 'service-care',
     label: 'ServiceCare',
@@ -177,7 +166,6 @@ const networkPortals = [
     icon: HeartHandshake,
     url: import.meta.env.VITE_SERVICE_CARE_URL || '',
   },
-
   {
     key: 'health-care',
     label: 'Health Care',
@@ -185,7 +173,6 @@ const networkPortals = [
     icon: Stethoscope,
     url: import.meta.env.VITE_HEALTH_CARE_URL || '',
   },
-
   {
     key: 'farmerfreight',
     label: 'FarmerFreight',
@@ -193,7 +180,6 @@ const networkPortals = [
     icon: Tractor,
     url: import.meta.env.VITE_FARMERFREIGHT_URL || '',
   },
-
   {
     key: 'aboriginal',
     label: 'Aboriginal Jobline',
@@ -201,7 +187,6 @@ const networkPortals = [
     icon: Users,
     url: import.meta.env.VITE_ABORIGINAL_URL || '',
   },
-
   {
     key: 'newcomers',
     label: 'Newcomer Jobline',
@@ -210,7 +195,6 @@ const networkPortals = [
     url: import.meta.env.VITE_NEWCOMERS_URL || '',
   },
 ];
-
 
 export default function DashboardLayout({
   title,
@@ -259,7 +243,6 @@ export default function DashboardLayout({
     setMobileOpen(false);
   };
 
-
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -270,7 +253,6 @@ export default function DashboardLayout({
       );
     }
   };
-
 
   const handleSectionClick = (
     event,
@@ -297,14 +279,11 @@ export default function DashboardLayout({
     });
   };
 
-
   return (
     <div className="jd-app">
 
       {/* MOBILE HEADER */}
-
       <header className="jd-mobile-header">
-
         <Link
           to={dashboardHome}
           className="jd-mobile-brand"
@@ -328,9 +307,7 @@ export default function DashboardLayout({
         >
           <Menu size={23} />
         </button>
-
       </header>
-
 
       {mobileOpen && (
         <button
@@ -340,9 +317,7 @@ export default function DashboardLayout({
         />
       )}
 
-
       {/* SIDEBAR */}
-
       <aside
         className={
           `jd-sidebar${
@@ -352,11 +327,8 @@ export default function DashboardLayout({
           }`
         }
       >
-
         {/* LOGO */}
-
         <div className="jd-sidebar-brand">
-
           <Link
             to={dashboardHome}
             className="jd-brand"
@@ -371,7 +343,6 @@ export default function DashboardLayout({
             </strong>
           </Link>
 
-
           <button
             type="button"
             className="jd-close-button"
@@ -379,45 +350,31 @@ export default function DashboardLayout({
           >
             <X size={21} />
           </button>
-
         </div>
 
-
         {/* USER */}
-
         <div className="jd-user">
-
           <span className="jd-user-avatar">
             {avatarLetter}
           </span>
-
           <div className="jd-user-copy">
-
             <strong>
               {fullName}
             </strong>
-
             <span>
               {roleLabels[role] || 'Account'}
             </span>
-
           </div>
-
         </div>
 
-
         {/* NAV */}
-
         <div className="jd-sidebar-scroll">
-
           <section className="jd-menu-section">
-
             <span className="jd-section-label">
               Workspace
             </span>
 
             <nav className="jd-nav">
-
               {links.map(
                 ({
                   to,
@@ -426,7 +383,6 @@ export default function DashboardLayout({
                   icon: Icon,
                   end = false,
                 }) => {
-
                   if (href) {
                     return (
                       <a
@@ -441,7 +397,6 @@ export default function DashboardLayout({
                         }
                       >
                         <Icon size={18} />
-
                         <span>
                           {label}
                         </span>
@@ -464,7 +419,6 @@ export default function DashboardLayout({
                       }
                     >
                       <Icon size={18} />
-
                       <span>
                         {label}
                       </span>
@@ -472,16 +426,11 @@ export default function DashboardLayout({
                   );
                 }
               )}
-
             </nav>
-
           </section>
 
-
           {/* NETWORK */}
-
           <section className="jd-menu-section">
-
             <button
               type="button"
               className="jd-network-toggle"
@@ -495,7 +444,6 @@ export default function DashboardLayout({
                 <Globe2 size={15} />
                 Jooblie Network
               </span>
-
               <ChevronDown
                 size={15}
                 className={
@@ -506,10 +454,8 @@ export default function DashboardLayout({
               />
             </button>
 
-
             {networkOpen && (
               <div className="jd-network-list">
-
                 {networkPortals.map(
                   ({
                     key,
@@ -519,7 +465,6 @@ export default function DashboardLayout({
                     url,
                     internal,
                   }) => {
-
                     if (internal) {
                       return (
                         <Link
@@ -536,7 +481,6 @@ export default function DashboardLayout({
                             <strong>
                               {label}
                             </strong>
-
                             <small>
                               {portalSubtitle}
                             </small>
@@ -565,7 +509,6 @@ export default function DashboardLayout({
                           <strong>
                             {label}
                           </strong>
-
                           <small>
                             {portalSubtitle}
                           </small>
@@ -579,38 +522,25 @@ export default function DashboardLayout({
                     );
                   }
                 )}
-
               </div>
             )}
-
           </section>
-
         </div>
 
-
         {/* SIMPLE FOOTER */}
-
         <div className="jd-sidebar-footer">
-
           <NavLink
             to={settingsPath}
             onClick={closeMobile}
             className={({ isActive }) =>
-              `jd-footer-link${
-                isActive &&
-                role === 'job_seeker'
-                  ? ' is-active'
-                  : ''
-              }`
+              `jd-footer-link${isActive ? ' is-active' : ''}`
             }
           >
             <Settings size={18} />
-
             <span>
               Settings
             </span>
           </NavLink>
-
 
           <button
             type="button"
@@ -618,65 +548,47 @@ export default function DashboardLayout({
             onClick={handleSignOut}
           >
             <LogOut size={18} />
-
             <span>
               Sign Out
             </span>
           </button>
-
         </div>
-
       </aside>
 
-
       {/* MAIN */}
-
       <main className="jd-main">
-
         <div className="jd-content">
-
           <div className="jd-page-heading">
-
             <div className="jd-page-heading-copy">
-
               <span className="jd-eyebrow">
                 Jooblie Dashboard
               </span>
-
               <h1>
                 {title}
               </h1>
-
               {subtitle && (
                 <p>
                   {subtitle}
                 </p>
               )}
-
             </div>
-
 
             {actions && (
               <div className="jd-page-actions">
                 {actions}
               </div>
             )}
-
           </div>
-
 
           <div className="jd-body">
             {children}
           </div>
-
         </div>
-
       </main>
 
     </div>
   );
 }
-
 
 export const DashboardIcons = {
   Bookmark,

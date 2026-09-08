@@ -33,6 +33,7 @@ export async function writeAuditLog(req, {
     });
 
     if (error) throw error;
+    logger.info({ requestId: req.requestId, userId: req.user?.id || null, action, entityType, entityId }, 'Audit event');
   } catch (error) {
     logger.warn({ err: error, requestId: req.requestId }, 'Activity log write failed');
   }
@@ -56,6 +57,9 @@ export async function writeSecurityEvent(req, {
     });
 
     if (error) throw error;
+    if (severity === 'high' || severity === 'critical') {
+      logger.warn({ requestId: req.requestId, userId: req.user?.id || null, eventType, severity }, 'Security event');
+    }
   } catch (error) {
     logger.warn({ err: error, requestId: req.requestId }, 'Security event write failed');
   }

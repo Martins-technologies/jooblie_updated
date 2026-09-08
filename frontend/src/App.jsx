@@ -4,249 +4,292 @@ import {
   Routes,
 } from 'react-router-dom';
 
-import SiteLayout from './components/SiteLayout';
-import ProtectedRoute from './components/ProtectedRoute';
+import SiteLayout from './shared/components/SiteLayout';
+import ProtectedRoute from './shared/components/ProtectedRoute';
 
-import HomePage from './pages/HomePage';
-import JobsPage from './pages/JobsPage';
-import JobDetailPage from './pages/JobDetailPage';
-import CategoriesPage from './pages/CategoriesPage';
-import CompaniesPage from './pages/CompaniesPage';
-import CompanyDetailPage from './pages/CompanyDetailPage';
-import ResourcesPage from './pages/ResourcesPage';
+// --- Public Pages ---
+import HomePage from './public/pages/HomePage';
+import JobsPage from './public/pages/JobsPage';
+import JobDetailPage from './public/pages/JobDetailPage';
+import CategoriesPage from './public/pages/CategoriesPage';
+import CompaniesPage from './public/pages/CompaniesPage';
+import CompanyDetailPage from './public/pages/CompanyDetailPage';
+import ResourcesPage from './public/pages/ResourcesPage';
 
-import PostJobPage from './pages/PostJobPage';
+// --- Auth Pages ---
+import SignInPage from './public/pages/SignInPage';
+import RegisterPage from './public/pages/RegisterPage';
 
-import SignInPage from './pages/SignInPage';
-import RegisterPage from './pages/RegisterPage';
+// --- General Pages ---
+import AboutPage from './public/pages/AboutPage';
+import ContactPage from './public/pages/ContactPage';
+import HelpPage from './public/pages/HelpPage';
+import PrivacyPage from './public/pages/PrivacyPage';
+import TermsPage from './public/pages/TermsPage';
 
-import AboutPage from './pages/AboutPage';
-import ContactPage from './pages/ContactPage';
-import HelpPage from './pages/HelpPage';
-import PrivacyPage from './pages/PrivacyPage';
-import TermsPage from './pages/TermsPage';
+// --- Dashboards ---
+import JobSeekerDashboardPage from './seeker/pages/JobSeekerDashboardPage';
+// Naye Job Seeker Pages ke Imports:
+import JobSeekerJobsPage from './seeker/pages/JobSeekerJobsPage';
+import JobSeekerApplicationsPage from './seeker/pages/JobSeekerApplicationsPage';
+import JobSeekerSavedJobsPage from './seeker/pages/JobSeekerSavedJobsPage';
+import JobSeekerProfilePage from './seeker/pages/JobSeekerProfilePage';
+import JobSeekerSettingsPage from './seeker/pages/JobSeekerSettingsPage';
+import JobSeekerJobDetailPage from './seeker/pages/JobSeekerJobDetailPage';
 
-import JobSeekerDashboardPage from './pages/JobSeekerDashboardPage';
-import RecruiterDashboardPage from './pages/RecruiterDashboardPage';
-import AdminDashboardPage from './pages/AdminDashboardPage';
+import RecruiterDashboardPage from './recruiter/pages/RecruiterDashboardPage';
+import AdminDashboardPage from './admin/pages/AdminDashboardPage';
 
-import NotFoundPage from './pages/NotFoundPage';
+// --- Recruiter Sub-Pages ---
+import PostJobPage from './recruiter/pages/PostJobPage';
+import MyJobsPage from './recruiter/pages/MyJobsPage';
+import CandidatesPage from './recruiter/pages/CandidatesPage';
+import CompanyProfilePage from './recruiter/pages/CompanyProfilePage';
+import SettingsPage from './recruiter/pages/SettingsPage';
 
+// --- Naye Admin Sub-Pages Imports ---
+import AdminModerationPage from './admin/pages/AdminModerationPage';
+import AdminUsersPage from './admin/pages/AdminUsersPage';
+import AdminActivityPage from './admin/pages/AdminActivityPage';
+import AdminPortalDetailPage from './admin/pages/AdminPortalDetailPage';
+
+import NotFoundPage from './public/pages/NotFoundPage';
 
 export default function App() {
   return (
     <Routes>
 
       {/* =====================================================
-          PUBLIC WEBSITE
+          AUTH PAGES (STANDALONE - NO NAVBAR)
+          🔥 YAHAN FIX HAI: Auth pages ko SiteLayout se bahar nikal diya hai!
+      ====================================================== */}
+      <Route path="sign-in" element={<SignInPage />} />
+      <Route path="register" element={<RegisterPage />} />
 
+
+      {/* =====================================================
+          PUBLIC WEBSITE
           Sirf public pages SiteLayout ke andar hain.
           Yahan Header + Footer aayega.
       ====================================================== */}
-
       <Route element={<SiteLayout />}>
-
         {/* HOME */}
-        <Route
-          index
-          element={<HomePage />}
-        />
+        <Route index element={<HomePage />} />
 
+        {/* JOBS */}
+        <Route path="jobs" element={<JobsPage />} />
+        <Route path="jobs/:jobId" element={<JobDetailPage />} />
 
-        {/* =================================================
-            JOBS
-        ================================================== */}
+        {/* CATEGORIES */}
+        <Route path="categories" element={<CategoriesPage />} />
+        <Route path="categories/:categorySlug" element={<JobsPage />} />
 
-        <Route
-          path="jobs"
-          element={<JobsPage />}
-        />
+        {/* COMPANIES */}
+        <Route path="companies" element={<CompaniesPage />} />
+        <Route path="companies/:companyId" element={<CompanyDetailPage />} />
 
-        <Route
-          path="jobs/:jobId"
-          element={<JobDetailPage />}
-        />
+        {/* RESOURCES */}
+        <Route path="resources" element={<ResourcesPage />} />
 
-
-        {/* =================================================
-            CATEGORIES
-        ================================================== */}
-
-        <Route
-          path="categories"
-          element={<CategoriesPage />}
-        />
-
-        <Route
-          path="categories/:categorySlug"
-          element={<JobsPage />}
-        />
-
-
-        {/* =================================================
-            COMPANIES
-        ================================================== */}
-
-        <Route
-          path="companies"
-          element={<CompaniesPage />}
-        />
-
-        <Route
-          path="companies/:companyId"
-          element={<CompanyDetailPage />}
-        />
-
-
-        {/* =================================================
-            RESOURCES
-        ================================================== */}
-
-        <Route
-          path="resources"
-          element={<ResourcesPage />}
-        />
-
-
-        {/* =================================================
-            AUTH
-        ================================================== */}
-
-        <Route
-          path="sign-in"
-          element={<SignInPage />}
-        />
-
-        <Route
-          path="register"
-          element={<RegisterPage />}
-        />
-
-
-        {/* =================================================
-            GENERAL PAGES
-        ================================================== */}
-
-        <Route
-          path="about"
-          element={<AboutPage />}
-        />
-
-        <Route
-          path="contact"
-          element={<ContactPage />}
-        />
-
-        <Route
-          path="help"
-          element={<HelpPage />}
-        />
-
-        <Route
-          path="privacy"
-          element={<PrivacyPage />}
-        />
-
-        <Route
-          path="terms"
-          element={<TermsPage />}
-        />
-
+        {/* GENERAL PAGES */}
+        <Route path="about" element={<AboutPage />} />
+        <Route path="contact" element={<ContactPage />} />
+        <Route path="help" element={<HelpPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
+        <Route path="terms" element={<TermsPage />} />
       </Route>
 
 
       {/* =====================================================
-          JOB SEEKER DASHBOARD
-
-          IMPORTANT:
-          SiteLayout ke BAHAR hai.
-
-          /* ka matlab:
-          /dashboard/job-seeker
-          /dashboard/job-seeker/jobs
-          /dashboard/job-seeker/applications
-          /dashboard/job-seeker/saved
-          /dashboard/job-seeker/profile
-          /dashboard/job-seeker/settings
-
-          sab isi component mein handle honge.
+          JOB SEEKER DASHBOARD & PAGES
       ====================================================== */}
-
       <Route
-        path="dashboard/job-seeker/*"
+        path="dashboard/job-seeker"
         element={
-          <ProtectedRoute
-            roles={['job_seeker']}
-          >
+          <ProtectedRoute roles={['job_seeker']}>
             <JobSeekerDashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="dashboard/job-seeker/jobs"
+        element={
+          <ProtectedRoute roles={['job_seeker']}>
+            <JobSeekerJobsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="dashboard/job-seeker/jobs/:jobId"
+        element={
+          <ProtectedRoute roles={['job_seeker']}>
+            <JobSeekerJobDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="dashboard/job-seeker/applications"
+        element={
+          <ProtectedRoute roles={['job_seeker']}>
+            <JobSeekerApplicationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="dashboard/job-seeker/saved"
+        element={
+          <ProtectedRoute roles={['job_seeker']}>
+            <JobSeekerSavedJobsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="dashboard/job-seeker/profile"
+        element={
+          <ProtectedRoute roles={['job_seeker']}>
+            <JobSeekerProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="dashboard/job-seeker/settings"
+        element={
+          <ProtectedRoute roles={['job_seeker']}>
+            <JobSeekerSettingsPage />
           </ProtectedRoute>
         }
       />
 
 
       {/* =====================================================
-          RECRUITER DASHBOARD
+          RECRUITER DASHBOARD & PAGES
       ====================================================== */}
-
+      
+      {/* Main Dashboard Overview */}
       <Route
         path="dashboard/recruiter"
         element={
-          <ProtectedRoute
-            roles={['recruiter']}
-          >
+          <ProtectedRoute roles={['recruiter']}>
             <RecruiterDashboardPage />
           </ProtectedRoute>
         }
       />
 
+      {/* My Jobs Page */}
+      <Route
+        path="my-jobs"
+        element={
+          <ProtectedRoute roles={['recruiter', 'admin']}>
+            <MyJobsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Candidates Page */}
+      <Route
+        path="candidates"
+        element={
+          <ProtectedRoute roles={['recruiter', 'admin']}>
+            <CandidatesPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Company Profile Page */}
+      <Route
+        path="my-company"
+        element={
+          <ProtectedRoute roles={['recruiter', 'admin']}>
+            <CompanyProfilePage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Post a Job Page */}
+      <Route
+        path="post-job"
+        element={
+          <ProtectedRoute roles={['recruiter', 'admin']}>
+            <PostJobPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Settings Page */}
+      <Route
+        path="settings"
+        element={
+          <ProtectedRoute roles={['recruiter', 'admin']}>
+            <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+
 
       {/* =====================================================
-          ADMIN DASHBOARD
+          ADMIN DASHBOARD & PAGES
       ====================================================== */}
-
       <Route
         path="dashboard/admin"
         element={
-          <ProtectedRoute
-            roles={['admin']}
-          >
+          <ProtectedRoute roles={['admin']}>
             <AdminDashboardPage />
           </ProtectedRoute>
         }
       />
 
-
-      {/* =====================================================
-          POST JOB
-
-          Public SiteLayout se bahar rakha hai taake
-          recruiter workspace clean rahe.
-      ====================================================== */}
-
       <Route
-        path="post-job"
+        path="admin/jobs"
         element={
-          <ProtectedRoute
-            roles={[
-              'recruiter',
-              'admin',
-            ]}
-          >
-            <PostJobPage />
+          <ProtectedRoute roles={['admin']}>
+            <AdminModerationPage />
           </ProtectedRoute>
         }
       />
 
+      <Route
+        path="admin/portals/:slug"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminPortalDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin Moderation Page */}
+      <Route
+        path="admin/moderation"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminModerationPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin Users Management Page */}
+      <Route
+        path="admin/users"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminUsersPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin System & Activity Page */}
+      <Route
+        path="admin/activity"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminActivityPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="hire-talent"
         element={
-          <ProtectedRoute
-            roles={[
-              'recruiter',
-              'admin',
-            ]}
-          >
+          <ProtectedRoute roles={['recruiter', 'admin']}>
             <PostJobPage />
           </ProtectedRoute>
         }
@@ -254,33 +297,18 @@ export default function App() {
 
 
       {/* =====================================================
-          OLD /dashboard URL
-
-          Agar koi sirf /dashboard open kare to
-          ab 404 ki jagah safe redirect.
+          OLD /dashboard URL REDIRECT
       ====================================================== */}
-
       <Route
         path="dashboard"
-        element={
-          <Navigate
-            to="/dashboard/job-seeker"
-            replace
-          />
-        }
+        element={<Navigate to="/dashboard/job-seeker" replace />}
       />
 
 
       {/* =====================================================
-          404
-
-          Sabse end mein rehna chahiye.
+          404 NOT FOUND
       ====================================================== */}
-
-      <Route
-        path="*"
-        element={<NotFoundPage />}
-      />
+      <Route path="*" element={<NotFoundPage />} />
 
     </Routes>
   );

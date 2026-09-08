@@ -1,5 +1,8 @@
 # Jooblie Full-Stack Platform — Existing DB Aligned
 
+This package has been organized into clear public, Job Seeker, Recruiter and Admin frontend areas while preserving the working React/Vite application and shared backend.
+
+
 This delivery keeps the existing folder layout and aligns the React frontend + shared Express backend with the **current Jooblie Supabase schema**.
 
 - `frontend/` — public Jooblie UI plus Job Seeker, Recruiter and Admin dashboards.
@@ -119,3 +122,26 @@ cd frontend && npm ci && npm run build
 cd ../backend && npm install && npm run check
 ```
 "# jooblie_updated" 
+
+
+## Organized frontend structure
+
+`frontend/src/public` contains public pages and authentication screens.
+`frontend/src/seeker` contains job-seeker pages/components/assets.
+`frontend/src/recruiter` contains recruiter pages/components/assets.
+`frontend/src/admin` contains admin pages/components/assets.
+`frontend/src/shared` contains reusable UI, auth, API helpers, config, shared assets and styles.
+
+This is intentionally a single Vite application with role-based routes, not four disconnected copies of the same app. That keeps the existing routing/auth/API integration functional while giving each role a dedicated source area.
+
+## Package hygiene
+
+Production secrets and generated dependency/build folders are intentionally excluded from this ZIP. Copy each `.env.example` to `.env` and supply the real environment values on the deployment server.
+
+
+## Admin network operations
+
+The administrator surface includes a production-oriented job registry and network portal monitoring. `/admin/jobs` is backed by dedicated admin job list/detail/update/delete endpoints, while `/admin/activity` loads portal records from `sites`, audit activity from `activity_log`, and security events from `security_events`. Selecting a portal opens `/admin/portals/:slug` with portal-specific metrics, jobs, and recent activity; configured `domain` values can also be opened in a new tab.
+
+## Production hiring workflow
+The seeker/recruiter workflow is connected end-to-end: profile data includes skills, experience and education; verified PDF resumes can be uploaded privately; seekers apply with their profile resume; recruiters can list/filter candidates, securely open a time-limited resume URL, and move applications through controlled hiring stages.

@@ -15,9 +15,34 @@ const editableJobFields = [
   'salary_currency',
   'salary_period',
   'employment_type',
+  'workplace_type',
+  'experience_level',
   'skills',
   'description',
 ];
+
+async function primaryRecruiterCompanyId(userId) {
+  const { data: profile, error: profileError } = await serviceDb
+    .from('profiles')
+    .select('recruiter_company_id,role')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (profileError) throw new ApiError(500, 'Recruiter company could not be loaded.', 'RECRUITER_COMPANY_FAILED');
+  if (profile?.role === 'recruiter' && profile.recruiter_company_id) return profile.recruiter_company_id;
+
+  // Legacy compatibility: if an older recruiter has exactly one company membership,
+  // bind it lazily to the profile. This keeps old accounts working without allowing
+  // the browser to choose a company for a job post.
+  const ids = await recruiterCompanyIds(userId);
+  if (ids.length === 1) {
+    const [companyId] = ids;
+    await serviceDb.from('profiles').update({ recruiter_company_id: companyId }).eq('id', userId);
+    return companyId;
+  }
+
+  throw new ApiError(409, 'Your recruiter account is not linked to a single company. Please contact an administrator.', 'RECRUITER_COMPANY_NOT_BOUND');
+}
 
 async function recruiterCompanyIds(userId) {
   const { data, error } = await serviceDb
@@ -293,7 +318,7 @@ export const dashboard = asyncHandler(async (req, res) => {
       .is('deleted_at', null),
     serviceDb
       .from('jobs')
-      .select('id,title,status,company_id,category_id,province,city,is_remote,employment_type,salary_min,salary_max,salary_currency,salary_period,created_at,published_at')
+      .select('id,title,status,company_id,category_id,province,city,is_remote,employment_type,workplace_type,experience_level,salary_min,salary_max,salary_currency,salary_period,created_at,published_at')
       .in('company_id', companyIds)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -316,12 +341,12 @@ export const dashboard = asyncHandler(async (req, res) => {
   const [recentAppsRes, applicationStats, viewRows, categoriesRes] = await Promise.all([
     jobIds.length
       ? serviceDb
-          .from('applications')
-          .select('id,job_id,applicant_id,status,created_at,updated_at', { count: 'exact' })
-          .in('job_id', jobIds)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-          .limit(30)
+        .from('applications')
+        .select('id,job_id,applicant_id,status,created_at,updated_at', { count: 'exact' })
+        .in('job_id', jobIds)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(30)
       : Promise.resolve({ data: [], error: null, count: 0 }),
     loadApplicationStats(jobIds),
     loadViewStats(jobIds),
@@ -337,9 +362,9 @@ export const dashboard = asyncHandler(async (req, res) => {
   const applicantIds = [...new Set(recentApplicationsRaw.map((item) => item.applicant_id).filter(Boolean))];
   const { data: applicants = [], error: applicantError } = applicantIds.length
     ? await serviceDb
-        .from('profiles')
-        .select('id,full_name,headline,location_city,location_province')
-        .in('id', applicantIds)
+      .from('profiles')
+      .select('id,full_name,headline,location_city,location_province')
+      .in('id', applicantIds)
     : { data: [], error: null };
 
   if (applicantError) throw new ApiError(500, 'Candidate profiles could not be loaded.', 'APPLICANTS_FAILED');
@@ -412,20 +437,32 @@ export const dashboard = asyncHandler(async (req, res) => {
 });
 
 export const createJob = asyncHandler(async (req, res) => {
-  await assertCompanyAccess(req.user.id, req.body.company_id);
+  const companyId = await primaryRecruiterCompanyId(req.user.id);
+  await assertCompanyAccess(req.user.id, companyId);
   await assertSourceSiteCompatibility(req.site, req.body.category_id);
 
   const payload = {
     ...pickJobPayload(req.body),
+    company_id: companyId,
     created_by: req.user.id,
     origin_site_id: req.site.id,
-    status: 'pending_review',
+    status: 'active',
+    published_at: new Date().toISOString(),
   };
+
+  // Derive workplace semantics server-side; never trust the browser for the remote flag.
+  if (Object.prototype.hasOwnProperty.call(req.body, 'workplace_type')) {
+    payload.is_remote = req.body.workplace_type === 'remote';
+    if (payload.is_remote) {
+      payload.city = null;
+      payload.province = null;
+    }
+  }
 
   const { data, error } = await serviceDb
     .from('jobs')
     .insert(payload)
-    .select('id,title,status,company_id,category_id,origin_site_id,created_at')
+    .select('id,title,status,company_id,category_id,origin_site_id,created_at,published_at')
     .single();
 
   if (error) {
@@ -466,25 +503,25 @@ export const updateJob = asyncHandler(async (req, res) => {
 
   await assertCompanyAccess(req.user.id, existing.company_id);
 
-  if (req.body.company_id && req.body.company_id !== existing.company_id) {
-    await assertCompanyAccess(req.user.id, req.body.company_id);
-  }
-
   const sourceSite = await siteById(existing.origin_site_id);
   const nextCategoryId = req.body.category_id ?? existing.category_id;
   await assertSourceSiteCompatibility(sourceSite, nextCategoryId);
 
   const payload = pickJobPayload(req.body);
+  if (Object.prototype.hasOwnProperty.call(req.body, 'workplace_type')) {
+    payload.is_remote = req.body.workplace_type === 'remote';
+    if (payload.is_remote) {
+      payload.city = null;
+      payload.province = null;
+    }
+  }
   const contentChanged = Object.keys(payload).length > 0;
 
   if (req.body.status) {
     payload.status = req.body.status;
-    if (req.body.status === 'pending_review') payload.published_at = null;
   } else if (contentChanged && existing.status === 'active') {
-    // Editing an approved listing sends it back to moderation rather than silently
-    // changing content that is already public.
-    payload.status = 'pending_review';
-    payload.published_at = null;
+    // Keep it active instead of hiding it on edit
+    payload.status = 'active';
   }
 
   payload.updated_at = new Date().toISOString();
@@ -513,6 +550,17 @@ export const updateJob = asyncHandler(async (req, res) => {
   res.json({ job: data });
 });
 
+const recruiterAllowedTransitions = {
+  submitted: new Set(['submitted', 'viewed', 'shortlisted', 'rejected']),
+  viewed: new Set(['viewed', 'shortlisted', 'interviewing', 'rejected']),
+  shortlisted: new Set(['shortlisted', 'interviewing', 'rejected']),
+  interviewing: new Set(['interviewing', 'offered', 'rejected']),
+  offered: new Set(['offered', 'hired', 'rejected']),
+  hired: new Set(['hired']),
+  rejected: new Set(['rejected']),
+  withdrawn: new Set(['withdrawn']),
+};
+
 export const listApplications = asyncHandler(async (req, res) => {
   const { data: job } = await serviceDb
     .from('jobs')
@@ -537,7 +585,7 @@ export const listApplications = asyncHandler(async (req, res) => {
   const { data: profiles = [] } = applicantIds.length
     ? await serviceDb
         .from('profiles')
-        .select('id,full_name,headline,location_city,location_province,skills,default_resume_path')
+        .select('id,full_name,headline,location_city,location_province,skills,default_resume_path,experience,education')
         .in('id', applicantIds)
     : { data: [] };
 
@@ -550,10 +598,80 @@ export const listApplications = asyncHandler(async (req, res) => {
   });
 });
 
+export const listAllApplications = asyncHandler(async (req, res) => {
+  const companyIds = await recruiterCompanyIds(req.user.id);
+  if (!companyIds.length) return res.json({ items: [], page: 1, pageSize: 25, total: 0 });
+
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 25));
+  const from = (page - 1) * pageSize;
+  let query = serviceDb.from('applications').select('id,status,cover_letter,resume_path,created_at,updated_at,applicant_id,job_id,jobs!inner(id,title,company_id)', { count: 'exact' })
+    .in('jobs.company_id', companyIds).is('deleted_at', null).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+  if (req.query.status && req.query.status !== 'all') query = query.eq('status', req.query.status);
+  const { data, error, count } = await query;
+  if (error) throw new ApiError(500, 'Candidates could not be loaded.', 'CANDIDATES_FAILED', error.message);
+  const applicantIds = [...new Set((data || []).map((item) => item.applicant_id))];
+  const { data: profiles = [] } = applicantIds.length ? await serviceDb.from('profiles').select('id,full_name,headline,location_city,location_province,skills,experience,education,default_resume_path').in('id', applicantIds) : { data: [] };
+  const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+  res.json({ items: (data || []).map((application) => ({ ...application, profiles: profileMap.get(application.applicant_id) || null })), page, pageSize, total: count || 0 });
+});
+
+// 🔥 YAHAN FIX HAI: getApplicationResumeUrl updated to use req.db for update
+export const getApplicationResumeUrl = asyncHandler(async (req, res) => {
+  const { data: application } = await serviceDb
+    .from('applications')
+    .select('id,resume_path,job_id,status') 
+    .eq('id', req.params.applicationId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (!application?.resume_path) throw new ApiError(404, 'Resume not found.', 'RESUME_NOT_FOUND');
+
+  const { data: job } = await serviceDb
+    .from('jobs')
+    .select('company_id')
+    .eq('id', application.job_id)
+    .maybeSingle();
+
+  if (!job) throw new ApiError(404, 'Application job not found.', 'APPLICATION_NOT_FOUND');
+  
+  await assertCompanyAccess(req.user.id, job.company_id);
+
+  const { data: signed, error } = await serviceDb.storage
+    .from('resumes')
+    .createSignedUrl(application.resume_path, 300);
+
+  if (error || !signed?.signedUrl) throw new ApiError(404, 'Resume is not available.', 'RESUME_URL_FAILED');
+
+  await writeAuditLog(req, { 
+    action: 'application.resume.view', 
+    entityType: 'application', 
+    entityId: application.id, 
+    companyId: job.company_id 
+  });
+
+  // Automatically mark as viewed if it was just submitted
+  if (application.status === 'submitted') {
+    const now = new Date().toISOString();
+    
+    // 🔥 req.db used instead of serviceDb to pass actor auth down to RLS trigger
+    await req.db
+      .from('applications')
+      .update({
+        status: 'viewed',
+        updated_at: now,
+      })
+      .eq('id', application.id);
+  }
+
+  res.json({ url: signed.signedUrl, expiresIn: 300 });
+});
+
+// 🔥 YAHAN BHI FIX HAI: updateApplication updated to use req.db
 export const updateApplication = asyncHandler(async (req, res) => {
   const { data: application } = await serviceDb
     .from('applications')
-    .select('id,job_id')
+    .select('id,job_id,status')
     .eq('id', req.params.applicationId)
     .is('deleted_at', null)
     .maybeSingle();
@@ -569,19 +687,28 @@ export const updateApplication = asyncHandler(async (req, res) => {
   if (!job) throw new ApiError(404, 'Application job not found.', 'APPLICATION_NOT_FOUND');
   await assertCompanyAccess(req.user.id, job.company_id);
 
+  const allowed = recruiterAllowedTransitions[application.status] || new Set();
+  if (!allowed.has(req.body.status)) {
+    throw new ApiError(409, `Application cannot move from ${application.status} to ${req.body.status}.`, 'INVALID_APPLICATION_TRANSITION');
+  }
+
   const now = new Date().toISOString();
-  const { data, error } = await serviceDb
+  
+  // 🔥 req.db used instead of serviceDb to pass actor auth down to RLS trigger
+  const { data, error } = await req.db
     .from('applications')
     .update({
       status: req.body.status,
-      status_updated_at: now,
       updated_at: now,
     })
     .eq('id', application.id)
-    .select('id,status,status_updated_at,updated_at')
+    .select('id,status,updated_at')
     .single();
 
-  if (error) throw new ApiError(400, 'Application status could not be updated.', 'APPLICATION_UPDATE_FAILED');
+  if (error) {
+    console.error("DB STATUS UPDATE ERROR:", error);
+    throw new ApiError(400, `DB Error: ${error.message}`, 'APPLICATION_UPDATE_FAILED');
+  }
 
   await writeAuditLog(req, {
     action: 'application.status.update',

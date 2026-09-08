@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { authLimiter, writeLimiter } from './middleware/security.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { siteContext } from './middleware/siteContext.js';
@@ -14,6 +15,7 @@ import {
   adminRoleSchema,
   authSignInSchema,
   authSignUpSchema,
+  resumeRegisterSchema,
 } from './schemas.js';
 import * as publicController from './controllers/public.controller.js';
 import * as authController from './controllers/auth.controller.js';
@@ -62,6 +64,9 @@ seeker.use(requireAuth, requireRole('job_seeker'));
 seeker.use(siteContext);
 seeker.get('/dashboard', seekerController.dashboard);
 seeker.get('/recommended-jobs', seekerController.recommendedJobs);
+seeker.get('/resumes', seekerController.listResumes);
+seeker.get('/resume-url', seekerController.getOwnResumeUrl);
+seeker.post('/resumes', writeLimiter, validate(resumeRegisterSchema), seekerController.registerResume);
 seeker.post('/jobs/:jobId/save', writeLimiter, seekerController.saveJob);
 seeker.delete('/jobs/:jobId/save', writeLimiter, seekerController.unsaveJob);
 seeker.post('/jobs/:jobId/apply', writeLimiter, validate(applicationSchema), seekerController.applyToJob);
@@ -76,12 +81,20 @@ recruiter.post('/companies', writeLimiter, validate(companySchema), recruiterCon
 recruiter.post('/jobs', writeLimiter, validate(jobCreateSchema), recruiterController.createJob);
 recruiter.patch('/jobs/:jobId', writeLimiter, validate(jobUpdateSchema), recruiterController.updateJob);
 recruiter.get('/jobs/:jobId/applications', recruiterController.listApplications);
+recruiter.get('/applications', recruiterController.listAllApplications);
+recruiter.get('/applications/:applicationId/resume-url', recruiterController.getApplicationResumeUrl);
 recruiter.patch('/applications/:applicationId', writeLimiter, validate(applicationStatusSchema), recruiterController.updateApplication);
 router.use('/recruiter', recruiter);
 
 const admin = Router();
 admin.use(requireAuth, requireRole('admin'));
 admin.get('/dashboard', adminController.dashboard);
+admin.get('/portals', adminController.listPortals);
+admin.get('/portals/:slug', adminController.getPortal);
+admin.get('/jobs', adminController.listJobs);
+admin.get('/jobs/:jobId', adminController.getJob);
+admin.patch('/jobs/:jobId', writeLimiter, validate(jobUpdateSchema.extend({ moderation_note: z.string().trim().max(5000).optional() })), adminController.updateJob);
+admin.delete('/jobs/:jobId', writeLimiter, adminController.deleteJob);
 admin.get('/users', adminController.listUsers);
 admin.patch('/users/:userId/role', writeLimiter, validate(adminRoleSchema), adminController.changeUserRole);
 admin.patch('/jobs/:jobId/status', writeLimiter, validate(adminJobStatusSchema), adminController.moderateJob);
