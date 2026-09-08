@@ -7,7 +7,7 @@ const groups = [
   {
     title: 'For Job Seekers',
     links: [
-      ['Find Jobs', '/jobs'],
+      ['Find Jobs', '/all-jobs'],
       ['Browse Categories', '/categories'],
       ['Create Profile', '/register?role=job_seeker'],
       ['Career Resources', '/resources'],
@@ -17,7 +17,7 @@ const groups = [
     title: 'For Employers',
     links: [
       ['Post a Job', '/post-job'],
-      ['Hire Talent', '/hire-talent'],
+      ['Hire Talent', '/register?role=recruiter'],
       ['Companies', '/companies'],
       ['Employer Help', '/help'],
     ],

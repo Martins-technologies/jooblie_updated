@@ -6,6 +6,8 @@ import {
 
 import SiteLayout from './shared/components/SiteLayout';
 import ProtectedRoute from './shared/components/ProtectedRoute';
+import GuestOnlyRoute from './shared/components/GuestOnlyRoute';
+import RouteErrorBoundary from './shared/components/RouteErrorBoundary';
 
 // --- Public Pages ---
 import HomePage from './public/pages/HomePage';
@@ -57,14 +59,15 @@ import NotFoundPage from './public/pages/NotFoundPage';
 
 export default function App() {
   return (
+    <RouteErrorBoundary>
     <Routes>
 
       {/* =====================================================
           AUTH PAGES (STANDALONE - NO NAVBAR)
           🔥 YAHAN FIX HAI: Auth pages ko SiteLayout se bahar nikal diya hai!
       ====================================================== */}
-      <Route path="sign-in" element={<SignInPage />} />
-      <Route path="register" element={<RegisterPage />} />
+      <Route path="sign-in" element={<GuestOnlyRoute><SignInPage /></GuestOnlyRoute>} />
+      <Route path="register" element={<GuestOnlyRoute><RegisterPage /></GuestOnlyRoute>} />
 
 
       {/* =====================================================
@@ -77,7 +80,8 @@ export default function App() {
         <Route index element={<HomePage />} />
 
         {/* JOBS */}
-        <Route path="jobs" element={<JobsPage />} />
+        <Route path="jobs" element={<JobsPage recentOnly />} />
+        <Route path="all-jobs" element={<JobsPage />} />
         <Route path="jobs/:jobId" element={<JobDetailPage />} />
 
         {/* CATEGORIES */}
@@ -311,5 +315,6 @@ export default function App() {
       <Route path="*" element={<NotFoundPage />} />
 
     </Routes>
+    </RouteErrorBoundary>
   );
 }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
-import { Users, Loader2, Search } from 'lucide-react';
+import { Users, Search } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
+import { LoadingState } from '../../shared/components/StatusMessage';
 
 export default function AdminUsersPage() {
   const [state, setState] = useState({ loading: true, error: '', users: [] });
@@ -74,10 +75,7 @@ export default function AdminUsersPage() {
 
         {/* USERS TABLE */}
         {state.loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-            <Loader2 size={40} className="spinner" color="#9ca3af" />
-            <span>Loading user directory...</span>
-          </div>
+          <LoadingState label="Loading user directory..." />
         ) : state.error ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#ef4444' }}>
             Error loading users: {state.error}

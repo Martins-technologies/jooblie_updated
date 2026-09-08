@@ -9,6 +9,7 @@ import Reveal from '../../shared/components/Reveal';
 import { useAuth } from '../../shared/context/AuthContext';
 import { apiRequest } from '../../shared/lib/api';
 import { timeAgo } from '../../shared/lib/format';
+import { LoadingState } from '../../shared/components/StatusMessage';
 
 export default function RecruiterDashboardPage() {
   const { profile } = useAuth();
@@ -57,19 +58,24 @@ export default function RecruiterDashboardPage() {
       </style>
 
       <div className="recruiter-dashboard" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        {state.loading ? (
+          <LoadingState label="Preparing your recruiter dashboard..." />
+        ) : (
+        <>
         
         {/* KPI CARDS */}
-        <Reveal 
+        <Reveal className="dashboard-metrics-grid"
           stagger 
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1.25rem', marginBottom: '2rem' }}
         >
+          <KpiCard icon={BriefcaseBusiness} label="Total Jobs" value={metrics.jobs} tone="blue" loading={false} />
           <KpiCard icon={BriefcaseBusiness} label="Active Jobs" value={metrics.activeJobs} tone="blue" loading={state.loading} />
           <KpiCard icon={Users} label="Total Applicants" value={metrics.applications} tone="violet" loading={state.loading} />
           <KpiCard icon={Eye} label="Total Job Views" value={metrics.views} tone="cyan" loading={state.loading} />
           <KpiCard icon={UserRoundCheck} label="Successful Hires" value={pipeline.hired || 0} tone="green" loading={state.loading} />
         </Reveal>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
+        <div className="dashboard-split-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
           
           {/* LEFT COLUMN */}
           <main style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -178,6 +184,8 @@ export default function RecruiterDashboardPage() {
             
           </aside>
         </div>
+        </>
+        )}
       </div>
     </DashboardLayout>
   );

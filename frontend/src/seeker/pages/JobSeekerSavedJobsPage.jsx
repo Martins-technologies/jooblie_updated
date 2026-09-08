@@ -8,6 +8,7 @@ export default function JobSeekerSavedJobsPage() {
   const [loading, setLoading] = useState(true);
   const [savedJobs, setSavedJobs] = useState([]);
   const [savingJobs, setSavingJobs] = useState(new Set());
+  const [error, setError] = useState('');
 
   const loadSavedJobs = useCallback(async () => {
     try {
@@ -23,11 +24,12 @@ export default function JobSeekerSavedJobsPage() {
     const id = String(jobId);
     if (savingJobs.has(id)) return;
     setSavingJobs(c => new Set(c).add(id));
+    setError('');
     try {
       // Kyunke yeh page hi 'Saved Jobs' ka hai, to toggle ka matlab Delete hi hoga yahan
       await apiRequest(`/job-seeker/jobs/${jobId}/save`, { method: 'DELETE', auth: true });
       await loadSavedJobs();
-    } catch (error) { alert(error.message); } 
+    } catch (requestError) { setError(requestError.message || 'Saved job could not be removed.'); }
     finally { setSavingJobs(c => { const next = new Set(c); next.delete(id); return next; }); }
   };
 
@@ -35,6 +37,7 @@ export default function JobSeekerSavedJobsPage() {
     <DashboardLayout title="Saved Jobs" subtitle="Opportunities you have bookmarked to review later.">
       <style>{premiumCSS}</style>
       <div className="dash-stack">
+        {error && <div className="error-banner">{error}</div>}
         <section className="dash-panel">
           <div className="dash-heading">
             <h2>Bookmarked Roles</h2>

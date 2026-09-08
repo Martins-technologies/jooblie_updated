@@ -35,27 +35,27 @@ export function AuthProvider({ children }) {
     let mounted = true;
 
     async function bootstrap() {
-      if (!supabase) {
-        if (mounted) setLoading(false);
-        return;
-      }
+      try {
+        if (!supabase) return;
 
-      const { data } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (!mounted) return;
 
-      if (!mounted) return;
+        setSession(data.session || null);
 
-      setSession(data.session || null);
-
-      if (data.session) {
-        try {
+        if (data.session) {
           const result = await apiRequest('/auth/me', { auth: true, accessToken: data.session.access_token });
           if (mounted) setProfile(result.profile || null);
-        } catch {
-          if (mounted) setProfile(null);
         }
+      } catch {
+        if (mounted) {
+          setSession(null);
+          setProfile(null);
+        }
+      } finally {
+        if (mounted) setLoading(false);
       }
-
-      if (mounted) setLoading(false);
     }
 
     bootstrap();

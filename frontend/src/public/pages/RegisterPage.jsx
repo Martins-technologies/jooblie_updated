@@ -134,7 +134,7 @@ export default function RegisterPage() {
             className="button button--primary"
             disabled={state.loading}
           >
-            {state.loading ? 'Creating account...' : 'Create Account'}
+            {state.loading ? <><span className="spinner spinner--light" /> Creating account...</> : 'Create Account'}
           </button>
 
           <p>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Bookmark, BriefcaseBusiness, Building2, Check, Clock, FileText, MapPin, Search, Trophy, X, CheckCircle2 } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
+import { LoadingState } from '../../shared/components/StatusMessage';
 
 const EMPTY_DASHBOARD = { metrics: { applications: 0, savedJobs: 0, shortlisted: 0, offers: 0 }, applications: [], savedJobs: [] };
 
@@ -65,6 +66,10 @@ export default function JobSeekerDashboardPage() {
       
       {dashboardState.error && <div className="banner banner-error"><X size={18}/> {dashboardState.error}</div>}
 
+      {dashboardState.loading ? (
+        <LoadingState label="Preparing your job seeker dashboard..." />
+      ) : (
+
       <div className="dash-stack">
         <div className="dash-metrics">
           <Metric icon={BriefcaseBusiness} label="Applications" value={data.metrics.applications} colorClass="blue" />
@@ -75,7 +80,7 @@ export default function JobSeekerDashboardPage() {
 
         <section className="dash-panel">
           <Heading title="Recommended Jobs" text="Curated opportunities matching your profile." />
-          {recommendedState.loading ? <Empty text="Loading recommendations..." /> : recommendationJobs.length ? (
+          {recommendedState.loading ? <LoadingState compact label="Loading recommendations..." /> : recommendationJobs.length ? (
             <div className="dash-job-grid">
               {recommendationJobs.map((job) => <DashboardJobCard key={job.id} job={job} saved={savedIds.has(String(job.id))} onSave={toggleSaveJob} />)}
             </div>
@@ -84,7 +89,7 @@ export default function JobSeekerDashboardPage() {
 
         <section className="dash-panel">
           <Heading title="Latest Openings" text="Recently published roles on Jooblie." action={<Link to="/dashboard/job-seeker/jobs" className="dash-link">View all jobs</Link>} />
-          {jobsState.loading ? <Empty text="Loading latest jobs..." /> : jobsState.jobs.length ? (
+          {jobsState.loading ? <LoadingState compact label="Loading latest jobs..." /> : jobsState.jobs.length ? (
             <div>
               {jobsState.jobs.slice(0, 5).map((job) => <JobRow key={job.id} job={job} saved={savedIds.has(String(job.id))} onSave={toggleSaveJob} />)}
             </div>
@@ -100,6 +105,7 @@ export default function JobSeekerDashboardPage() {
           ) : <Empty text="You haven't applied to any jobs yet." />}
         </section>
       </div>
+      )}
     </DashboardLayout>
   );
 }

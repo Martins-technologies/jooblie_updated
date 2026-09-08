@@ -4,6 +4,7 @@ import { Search, Plus, MapPin, Briefcase, Filter, Eye, Users, Clock3, MoreHorizo
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
 import { timeAgo } from '../../shared/lib/format';
+import { LoadingState } from '../../shared/components/StatusMessage';
 
 export default function MyJobsPage() {
   const [state, setState] = useState({ loading: true, error: '', jobs: [] });
@@ -90,7 +91,7 @@ export default function MyJobsPage() {
 
         {/* JOBS LIST */}
         {state.loading ? (
-          <div style={{ textAlign: 'center', padding: '2rem' }}>Loading jobs...</div>
+          <LoadingState label="Loading your job listings..." />
         ) : visibleJobs.length ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {visibleJobs.slice(0, jobsLimit).map((job) => (

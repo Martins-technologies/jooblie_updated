@@ -3,6 +3,7 @@ import { FileText, Search } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
 import { formatDate } from '../../shared/lib/format';
+import { LoadingState } from '../../shared/components/StatusMessage';
 
 const STATUS_OPTIONS = ['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected'];
 
@@ -66,7 +67,7 @@ export default function CandidatesPage() {
           </select>
         </div>
 
-        {loading ? <p>Loading candidates...</p> : filteredApps.length > 0 ? (
+        {loading ? <LoadingState label="Loading candidates..." /> : filteredApps.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {filteredApps.map(app => (
               <div key={app.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '8px', flexWrap: 'wrap' }}>

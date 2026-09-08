@@ -5,7 +5,7 @@ import Logo from './Logo';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
-  { to: '/jobs', label: 'Find Jobs' },
+  { to: '/all-jobs', label: 'Find Jobs' },
   { to: '/post-job', label: 'Post a Job', roles: ['recruiter', 'admin'] },
   { to: '/companies', label: 'Companies' },
   { to: '/resources', label: 'Resources' },

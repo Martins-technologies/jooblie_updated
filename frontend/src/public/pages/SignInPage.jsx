@@ -139,7 +139,7 @@ export default function SignInPage() {
 export function AuthShell({ title, text, children }) {
   return (
     <section className="auth-page">
-      <Reveal className="auth-card">
+      <Reveal className="auth-card is-visible">
         <Logo />
         <span className="eyebrow">Account access</span>
         <h1>{title}</h1>

@@ -53,6 +53,7 @@ export default function useScrollReveal(routeKey) {
     return () => {
       observer.disconnect();
       mutationObserver.disconnect();
+      document.documentElement.classList.remove('reveal-ready');
     };
   }, [routeKey]);
 }

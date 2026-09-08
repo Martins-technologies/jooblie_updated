@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, Briefcase, ExternalLink, Loader2 } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
+import { LoadingState } from '../../shared/components/StatusMessage';
 
 export default function AdminJobsPage() {
   const [state, setState] = useState({ loading: true, error: '', jobs: [] });
@@ -40,7 +41,7 @@ export default function AdminJobsPage() {
       // Update hone ke baad backend se fresh data dobara load hoga
       await load(); 
     } catch (error) {
-      alert(error.message);
+      setState((current) => ({ ...current, error: error.message || 'Job status could not be updated.' }));
     } finally {
       setWorkingId(null);
     }
@@ -103,10 +104,7 @@ export default function AdminJobsPage() {
 
         {/* JOBS TABLE */}
         {state.loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-            <Loader2 size={40} className="spinner" color="#9ca3af" />
-            <span>Fetching data from backend...</span>
-          </div>
+          <LoadingState label="Loading platform jobs..." />
         ) : state.error ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#ef4444' }}>
             Error loading jobs: {state.error}

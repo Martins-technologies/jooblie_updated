@@ -229,7 +229,7 @@ export default function JobDetailPage() {
 
       <div className="detail-page-wrapper">
         <Reveal>
-          <Link className="back-link" to="/jobs">
+          <Link className="back-link" to="/all-jobs">
             <ArrowLeft size={18} /> Back to jobs
           </Link>
         </Reveal>

@@ -12,6 +12,37 @@
   color: #17233b;
 }
 
+/* Shared dashboard polish */
+.dashboard-panel {
+  box-shadow: 0 10px 30px rgba(31, 64, 115, 0.055);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.dashboard-panel:hover {
+  border-color: #d8e2ef !important;
+  box-shadow: 0 14px 34px rgba(31, 64, 115, 0.075);
+}
+.dashboard-metrics-grid > article {
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.dashboard-metrics-grid > article:hover {
+  transform: translateY(-3px);
+  border-color: #d8e2ef !important;
+  box-shadow: 0 10px 24px rgba(31,64,115,.08) !important;
+}
+
+@media (max-width: 1180px) {
+  .dashboard-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 900px) {
+  .dashboard-split-grid,
+  .dashboard-action-grid { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 560px) {
+  .dashboard-metrics-grid { grid-template-columns: 1fr !important; }
+}
+
 /* =========================================================
    SIDEBAR
 ========================================================= */

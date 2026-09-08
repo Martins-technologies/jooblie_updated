@@ -11,7 +11,7 @@ const jobTypes = [
   ['seasonal', 'Seasonal'],
 ];
 
-export default function SearchPanel({ variant = 'hero', initial = {} }) {
+export default function SearchPanel({ variant = 'hero', initial = {}, actionPath = '/all-jobs' }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState(initial.q || '');
   const [location, setLocation] = useState(initial.location || '');
@@ -49,7 +49,17 @@ export default function SearchPanel({ variant = 'hero', initial = {} }) {
       if (value) search.set(key, value);
     });
 
-    navigate(`/jobs${search.toString() ? `?${search}` : ''}`);
+    navigate(`${actionPath}${search.toString() ? `?${search}` : ''}`);
+  };
+
+  const clearFilters = () => {
+    setQuery('');
+    setLocation('');
+    setJobType('');
+    setSalary('');
+    setWorkplace('');
+    setDate('');
+    navigate(actionPath);
   };
 
   return (
@@ -72,6 +82,9 @@ export default function SearchPanel({ variant = 'hero', initial = {} }) {
         <SelectFilter label="Remote / On-site" value={workplace} onChange={setWorkplace} options={[['Remote', 'Remote'], ['On-site', 'On-site']]} />
         <SelectFilter label="Date Posted" value={date} onChange={setDate} options={[['1', 'Past 24 hours'], ['3', 'Past 3 days'], ['7', 'Past week'], ['30', 'Past month']]} />
         <button className="filter-link" type="submit">More Filters <Filter size={15} /></button>
+        {variant === 'page' && (
+          <button className="filter-link filter-link--clear" type="button" onClick={clearFilters}>Clear</button>
+        )}
       </div>
     </form>
   );

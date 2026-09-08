@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, BriefcaseBusiness, Globe2, Users, ArrowRight, UserCog } from 'lucide-react';
+import { Building2, BriefcaseBusiness, FileText, Globe2, Users, ArrowRight, UserCog } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import Reveal from '../../shared/components/Reveal';
 import { apiRequest } from '../../shared/lib/api';
+import { LoadingState } from '../../shared/components/StatusMessage';
 
 const empty = { metrics: { users: 0, companies: 0, jobs: 0, applications: 0, sites: 0 } };
 
@@ -32,16 +33,22 @@ export default function AdminDashboardPage() {
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         {state.error && <div className="error-banner">{state.error}</div>}
 
+        {state.loading ? (
+          <LoadingState label="Loading platform metrics..." />
+        ) : (
+        <>
+
         {/* METRICS GRID - Exact 4 columns */}
-        <Reveal stagger style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
+        <Reveal className="dashboard-metrics-grid" stagger style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1.25rem', marginBottom: '2rem' }}>
           <MetricCard icon={Users} label="Total Users" value={metrics.users} tone="blue" loading={state.loading} />
           <MetricCard icon={BriefcaseBusiness} label="Total Jobs" value={metrics.jobs} tone="cyan" loading={state.loading} />
           <MetricCard icon={Building2} label="Companies" value={metrics.companies} tone="green" loading={state.loading} />
           <MetricCard icon={Globe2} label="Connected Portals" value={metrics.sites} tone="orange" loading={state.loading} />
+          <MetricCard icon={FileText} label="Applications" value={metrics.applications} tone="violet" loading={state.loading} />
         </Reveal>
 
         {/* QUICK ACTIONS PANEL */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+        <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
           
           {/* USER MANAGEMENT */}
           <Reveal className="dashboard-panel" style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '2rem', display: 'flex', flexDirection: 'column' }}>
@@ -66,6 +73,8 @@ export default function AdminDashboardPage() {
           </Reveal>
 
         </div>
+        </>
+        )}
       </div>
     </DashboardLayout>
   );
@@ -73,7 +82,7 @@ export default function AdminDashboardPage() {
 
 function MetricCard({ icon: Icon, label, value, tone, loading }) {
   if (loading) return <div className="skeleton" style={{ height: '130px', border: '1px solid #e5e7eb' }}></div>;
-  const colors = { blue: { bg: '#eff6ff', text: '#3b82f6' }, cyan: { bg: '#ecfeff', text: '#06b6d4' }, green: { bg: '#f0fdf4', text: '#22c55e' }, orange: { bg: '#fff7ed', text: '#f97316' } };
+  const colors = { blue: { bg: '#eff6ff', text: '#3b82f6' }, cyan: { bg: '#ecfeff', text: '#06b6d4' }, green: { bg: '#f0fdf4', text: '#22c55e' }, orange: { bg: '#fff7ed', text: '#f97316' }, violet: { bg: '#f5f3ff', text: '#8b5cf6' } };
   const currentColors = colors[tone] || colors.blue;
   return (
     <article style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>

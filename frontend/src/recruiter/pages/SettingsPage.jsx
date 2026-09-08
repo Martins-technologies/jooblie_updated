@@ -9,6 +9,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('account');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
   
   // Account State (Sirf editable fields yahan rakhi hain)
   const [accountForm, setAccountForm] = useState({ 
@@ -38,11 +39,12 @@ export default function SettingsPage() {
   const handleAccountSubmit = async (e) => {
     e.preventDefault(); 
     setLoading(true);
+    setError('');
     try {
       await apiRequest('/auth/profile', { method: 'PATCH', auth: true, body: accountForm });
       showSuccess('Personal details updated successfully!');
-    } catch (err) { 
-      console.error(err); 
+    } catch (err) {
+      setError(err.message || 'Personal details could not be updated.');
     } finally { 
       setLoading(false); 
     }
@@ -51,16 +53,17 @@ export default function SettingsPage() {
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) { 
-      alert("New passwords don't match!"); 
+      setError("New passwords don't match.");
       return; 
     }
     setLoading(true);
+    setError('');
     try {
       // Password update API call yahan aayegi
       showSuccess('Password updated successfully!');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (err) { 
-      console.error(err); 
+    } catch (err) {
+      setError(err.message || 'Password could not be updated.');
     } finally { 
       setLoading(false); 
     }
@@ -80,6 +83,7 @@ export default function SettingsPage() {
         {/* SETTINGS CONTENT */}
         <div style={{ padding: '2.5rem' }}>
           {success && <div className="success-banner" style={{ marginBottom: '1.5rem' }}>{success}</div>}
+          {error && <div className="error-banner" style={{ marginBottom: '1.5rem' }}>{error}</div>}
           
           {/* TAB 1: ACCOUNT */}
           {activeTab === 'account' && (

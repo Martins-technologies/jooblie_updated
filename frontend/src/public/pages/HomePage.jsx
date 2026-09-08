@@ -36,9 +36,14 @@ const steps = [
 export default function HomePage() {
   const { loading, data } = usePublicData();
   const activeJobs = data.jobs.filter((job) => job.isActive);
+  const last24Hours = Date.now() - (24 * 60 * 60 * 1000);
   const seen = new Set();
 
   const latestJobs = activeJobs
+    .filter((job) => {
+      const published = new Date(job.createdAt || 0).getTime();
+      return Number.isFinite(published) && published >= last24Hours;
+    })
     .filter((job) => {
       const id = String(job.id);
       if (seen.has(id)) return false;
@@ -71,7 +76,7 @@ export default function HomePage() {
                 Connect with top employers and build your future.
               </p>
               <div className="jooblie-home-actions">
-                <Link className="button button--primary" to="/jobs">
+                <Link className="button button--primary" to="/all-jobs">
                   <Search size={18} /> Find Jobs
                 </Link>
                 <Link className="button button--secondary" to="/post-job">
@@ -116,9 +121,9 @@ export default function HomePage() {
       <section className="section section--soft jooblie-jobs-section">
         <div className="container">
           <SectionHeading
-            title="Latest Jobs"
+            title="Jobs posted in the last 24 hours"
             action={(
-              <Link to="/jobs" className="inline-link">
+              <Link to="/all-jobs" className="inline-link">
                 View all jobs <ArrowRight size={16} />
               </Link>
             )}
@@ -134,15 +139,15 @@ export default function HomePage() {
             <Reveal>
               <EmptyState
                 backendMissing={!data.configured}
-                title={data.configured ? 'No active jobs yet' : 'Connect the backend'}
-                text="Active openings from the backend will appear here automatically."
+                title={data.configured ? 'No new jobs in the last 24 hours' : 'Connect the backend'}
+                text="New active openings will appear here automatically. Browse all jobs to see earlier listings."
               />
             </Reveal>
           )}
 
           {latestJobs.length > 0 && (
             <Reveal className="centered-action" delay={120}>
-              <Link to="/jobs" className="button button--secondary">View All Jobs</Link>
+              <Link to="/all-jobs" className="button button--secondary">View All Jobs</Link>
             </Reveal>
           )}
         </div>

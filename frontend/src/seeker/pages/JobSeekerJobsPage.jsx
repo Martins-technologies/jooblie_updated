@@ -118,7 +118,9 @@ export default function JobSeekerJobsPage() {
         await apiRequest(`/job-seeker/jobs/${jobId}/save`, { method: 'POST', auth: true }); 
       }
       await loadSavedAndAppliedJobs();
-    } catch (error) { alert(error.message); } 
+    } catch (error) {
+      setJobsState((current) => ({ ...current, error: error.message || 'Saved jobs could not be updated.' }));
+    }
     finally { setSavingJobs((current) => { const next = new Set(current); next.delete(id); return next; }); }
   };
 

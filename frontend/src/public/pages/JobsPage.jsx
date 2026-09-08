@@ -4,9 +4,10 @@ import PageHero from '../../shared/components/PageHero';
 import PageSection from '../../shared/components/PageSection';
 import Reveal from '../../shared/components/Reveal';
 import SearchPanel from '../../shared/components/SearchPanel';
-import { EmptyState } from '../../shared/components/StatusMessage';
+import { EmptyState, LoadingState } from '../../shared/components/StatusMessage';
 import { searchJobs } from '../../shared/lib/data';
 import { focusCategories } from '../../shared/config/site';
+import { formatSalary, timeAgo } from '../../shared/lib/format';
 
 const PAGE_SIZE = 10;
 
@@ -19,11 +20,11 @@ const JobCard = ({ job }) => {
     title, 
     company, 
     location, 
-    type, 
-    salary, 
     description, 
-    postedAt = "Recently" 
   } = job;
+  const type = job.jobType || job.employmentType;
+  const salary = formatSalary(job);
+  const postedAt = timeAgo(job.createdAt) || 'Recently';
 
   // Extract company details safely
   const companyName = typeof company === 'object' && company !== null ? company.name : (company || "Hiring Company");
@@ -80,7 +81,7 @@ const JobCard = ({ job }) => {
         <div className="job-snippet">
           <p>
             {description 
-              ? `${description.substring(0, 100)}...` 
+              ? `${description.substring(0, 100)}${description.length > 100 ? '…' : ''}`
               : 'Click here to view the full job description and apply.'}
           </p>
         </div>
@@ -117,7 +118,7 @@ const JobCardSkeleton = () => (
 /* =========================================
    3. MAIN JOBS PAGE COMPONENT
 ========================================= */
-export default function JobsPage() {
+export default function JobsPage({ recentOnly = false }) {
   const { categorySlug } = useParams();
   const [params] = useSearchParams();
   const [page, setPage] = useState(1);
@@ -151,7 +152,7 @@ export default function JobsPage() {
         type: params.get('type') || '',
         workplace: params.get('workplace') || '',
         salary: params.get('salary') || '',
-        date: params.get('date') || '',
+        date: recentOnly ? '1' : (params.get('date') || ''),
         category: categorySlug || '',
       },
     }).then((result) => {
@@ -168,7 +169,7 @@ export default function JobsPage() {
     return () => {
       active = false;
     };
-  }, [page, paramsKey, categorySlug]);
+  }, [page, paramsKey, categorySlug, recentOnly]);
 
   const totalPages = Math.max(1, state.pagination.pages || 1);
   const safePage = Math.min(page, totalPages);
@@ -401,17 +402,20 @@ export default function JobsPage() {
       `}</style>
 
       <PageHero
-        eyebrow={category ? 'Specialist category' : 'Current openings'}
-        title={category ? `${category.label} Jobs` : 'Find your next opportunity'}
+        eyebrow={category ? 'Specialist category' : recentOnly ? 'New in the last 24 hours' : 'All current openings'}
+        title={category ? `${category.label} Jobs` : recentOnly ? 'Fresh jobs posted today' : 'Find your next opportunity'}
         text={category
           ? `Browse active ${category.label.toLowerCase()} openings from the shared Jooblie backend.`
-          : 'Search current jobs by title, location, job type, salary, and work arrangement.'}
+          : recentOnly
+            ? 'Browse active openings published during the last 24 hours, or open the complete jobs directory.'
+            : 'Search all current jobs by title, location, job type, salary, work arrangement, and date.'}
       />
 
       <PageSection className="jobs-search-section" reveal={false}>
         <Reveal>
           <SearchPanel
             variant="page"
+            actionPath={categorySlug ? `/categories/${categorySlug}` : '/all-jobs'}
             initial={{
               q: params.get('q') || '',
               location: params.get('location') || '',
@@ -436,18 +440,19 @@ export default function JobsPage() {
                   : `${state.pagination.total || 0} ${(state.pagination.total || 0) === 1 ? 'job' : 'jobs'} found`}
               </h2>
               <p style={{ color: '#6b7280', fontSize: '0.9rem', margin: 0 }}>
-                Only active, approved openings for this site are shown.
+                {recentOnly
+                  ? 'Only active, approved openings published within the last 24 hours are shown.'
+                  : 'Only active, approved openings for this site are shown.'}
               </p>
             </div>
+            {recentOnly && (
+              <Link className="button button--secondary" to="/all-jobs">Browse all jobs</Link>
+            )}
           </div>
         </Reveal>
 
         {state.loading ? (
-          <div className="job-list">
-            {[...Array(6)].map((_, i) => (
-              <JobCardSkeleton key={`skeleton-${i}`} />
-            ))}
-          </div>
+          <LoadingState label={recentOnly ? 'Loading jobs from the last 24 hours...' : 'Searching all jobs...'} />
         ) : state.jobs.length ? (
           <>
             <Reveal className="job-list" stagger>

@@ -1,7 +1,12 @@
 import { Database, SearchX } from 'lucide-react';
 
-export function LoadingState({ label = 'Loading...' }) {
-  return <div className="loading-state"><span className="spinner" /> {label}</div>;
+export function LoadingState({ label = 'Loading...', compact = false }) {
+  return (
+    <div className={`loading-state${compact ? ' loading-state--compact' : ''}`} role="status" aria-live="polite">
+      <span className="loading-state__spinner" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
 }
 
 export function EmptyState({ title = 'Nothing to show yet', text = 'New content will appear here when it is available.', backendMissing = false }) {
