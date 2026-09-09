@@ -4,6 +4,7 @@ import { signIn } from '../../shared/lib/data';
 import Logo from '../../shared/components/Logo';
 import Reveal from '../../shared/components/Reveal';
 import { useAuth, dashboardPathForRole } from '../../shared/context/AuthContext';
+import { ArrowLeft } from 'lucide-react'; // Icon for the back link
 
 export default function SignInPage() {
   const [email, setEmail] = useState('');
@@ -33,7 +34,8 @@ export default function SignInPage() {
     const fallback = dashboardPathForRole(profile?.role);
     const target = location.state?.from || fallback;
 
-    // Loading ko false nahi kar rahe taake spinner chalta rahe jab tak naya page load na ho jaye
+    // We intentionally leave 'loading' as true here so the circular spinner 
+    // continues to show until the dashboard route is fully rendered.
     navigate(target, { replace: true });
   };
 
@@ -42,7 +44,7 @@ export default function SignInPage() {
       title="Welcome back"
       text="Sign in to continue with your Jooblie account."
     >
-      {/* Inline CSS for the circular spinner and overlay */}
+      {/* Inline CSS for the circular spinner, overlay, and navigation links */}
       <style>{`
         .auth-form-wrapper {
           position: relative;
@@ -84,9 +86,24 @@ export default function SignInPage() {
           opacity: 0.4;
           pointer-events: none;
         }
+        /* Home Link Hover Effect */
+        .back-to-home-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: #6b7280;
+          text-decoration: none;
+          font-size: 0.9rem;
+          font-weight: 500;
+          transition: color 0.2s ease;
+        }
+        .back-to-home-link:hover {
+          color: #2557a7;
+        }
       `}</style>
 
       <div className="auth-form-wrapper">
+        {/* Loading Overlay */}
         {loading && (
           <div className="spinner-overlay">
             <div className="circular-spinner"></div>
@@ -140,10 +157,37 @@ export function AuthShell({ title, text, children }) {
   return (
     <section className="auth-page">
       <Reveal className="auth-card is-visible">
-        <Logo />
-        <span className="eyebrow">Account access</span>
-        <h1>{title}</h1>
-        <p>{text}</p>
+        
+        {/* Back to Home Navigation Link */}
+        <div style={{ marginBottom: '24px', textAlign: 'left' }}>
+          <Link to="/" className="back-to-home-link">
+            <ArrowLeft size={16} /> Back to Home
+          </Link>
+        </div>
+
+        {/* 🔥 FIX: Wrapped Logo in a div to push it to its own line with proper spacing */}
+        <div style={{ marginBottom: '28px' }}>
+          <Logo />
+        </div>
+        
+        {/* 🔥 FIX: Changed span to div and added styling so it sits cleanly above the title */}
+        <div 
+          className="eyebrow" 
+          style={{ 
+            color: '#6b7280', 
+            fontSize: '0.85rem', 
+            fontWeight: '600', 
+            textTransform: 'uppercase', 
+            letterSpacing: '1px', 
+            marginBottom: '8px' 
+          }}
+        >
+          Account access
+        </div>
+        
+        <h1 style={{ marginTop: 0, marginBottom: '8px' }}>{title}</h1>
+        <p style={{ color: '#4b5563', marginBottom: '24px' }}>{text}</p>
+        
         {children}
       </Reveal>
     </section>

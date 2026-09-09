@@ -4,12 +4,11 @@ import PageHero from '../../shared/components/PageHero';
 import PageSection from '../../shared/components/PageSection';
 import Reveal from '../../shared/components/Reveal';
 import SearchPanel from '../../shared/components/SearchPanel';
-import { EmptyState, LoadingState } from '../../shared/components/StatusMessage';
+import { EmptyState } from '../../shared/components/StatusMessage';
 import { searchJobs } from '../../shared/lib/data';
 import { focusCategories } from '../../shared/config/site';
-import { formatSalary, timeAgo } from '../../shared/lib/format';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 8; // Initial number of job cards
 
 /* =========================================
    1. PREMIUM GRID JOB CARD COMPONENT
@@ -20,21 +19,18 @@ const JobCard = ({ job }) => {
     title, 
     company, 
     location, 
+    type, 
+    salary, 
     description, 
+    postedAt = "Recently" 
   } = job;
-  const type = job.jobType || job.employmentType;
-  const salary = formatSalary(job);
-  const postedAt = timeAgo(job.createdAt) || 'Recently';
 
-  // Extract company details safely
   const companyName = typeof company === 'object' && company !== null ? company.name : (company || "Hiring Company");
   const companyLogo = typeof company === 'object' && company !== null ? company.logoUrl : null;
 
   return (
     <Link to={`/jobs/${id}`} className="premium-card-wrapper">
       <div className="premium-job-card">
-        
-        {/* Header: Logo, Title, Company, Location */}
         <div className="card-header">
           <div className="company-logo-container">
             {companyLogo ? (
@@ -45,7 +41,6 @@ const JobCard = ({ job }) => {
               </div>
             )}
           </div>
-          
           <div className="header-text">
             <h2 className="job-title">{title}</h2>
             <div className="company-info">
@@ -56,7 +51,6 @@ const JobCard = ({ job }) => {
           </div>
         </div>
 
-        {/* Badges: Salary, Type, Urgency */}
         <div className="job-badges">
           {salary && (
             <span className="badge salary-badge">
@@ -77,16 +71,14 @@ const JobCard = ({ job }) => {
           </span>
         </div>
 
-        {/* Description Snippet */}
         <div className="job-snippet">
           <p>
             {description 
-              ? `${description.substring(0, 100)}${description.length > 100 ? '…' : ''}`
+              ? `${description.substring(0, 100)}...` 
               : 'Click here to view the full job description and apply.'}
           </p>
         </div>
 
-        {/* Footer: Timestamp */}
         <div className="card-footer">
           <span className="posted-time">Posted {postedAt}</span>
         </div>
@@ -118,10 +110,11 @@ const JobCardSkeleton = () => (
 /* =========================================
    3. MAIN JOBS PAGE COMPONENT
 ========================================= */
-export default function JobsPage({ recentOnly = false }) {
+export default function JobsPage() {
   const { categorySlug } = useParams();
   const [params] = useSearchParams();
   const [page, setPage] = useState(1);
+  const [viewAll, setViewAll] = useState(false);
   const resultsTopRef = useRef(null);
 
   const [state, setState] = useState({
@@ -140,19 +133,25 @@ export default function JobsPage({ recentOnly = false }) {
   }, [paramsKey, categorySlug]);
 
   useEffect(() => {
+    setPage(1);
+  }, [viewAll]);
+
+  useEffect(() => {
     let active = true;
     setState((current) => ({ ...current, loading: true, error: null }));
 
+    const limit = viewAll ? 1000 : PAGE_SIZE;
+
     searchJobs({
       page,
-      limit: PAGE_SIZE,
+      limit,
       filters: {
         q: params.get('q') || '',
         location: params.get('location') || '',
         type: params.get('type') || '',
         workplace: params.get('workplace') || '',
         salary: params.get('salary') || '',
-        date: recentOnly ? '1' : (params.get('date') || ''),
+        date: params.get('date') || '',
         category: categorySlug || '',
       },
     }).then((result) => {
@@ -169,7 +168,7 @@ export default function JobsPage({ recentOnly = false }) {
     return () => {
       active = false;
     };
-  }, [page, paramsKey, categorySlug, recentOnly]);
+  }, [page, paramsKey, categorySlug, viewAll]);
 
   const totalPages = Math.max(1, state.pagination.pages || 1);
   const safePage = Math.min(page, totalPages);
@@ -183,9 +182,6 @@ export default function JobsPage({ recentOnly = false }) {
 
   return (
     <div className="jobs-page-wrapper">
-      {/* =========================================
-          4. COLUMN/GRID CSS STYLES
-      ========================================= */}
       <style>{`
         .jobs-page-wrapper {
           background-color: #f8f9fa;
@@ -193,24 +189,45 @@ export default function JobsPage({ recentOnly = false }) {
           padding-bottom: 60px;
         }
 
-        /* Grid Layout for Job List */
         .job-list {
-          max-width: 1200px; /* Widened for multiple columns */
+          max-width: 1200px;
           margin: 0 auto;
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-          gap: 20px; /* Spacing between columns and rows */
+          gap: 20px;
         }
 
         .results-heading {
           max-width: 1200px;
           margin: 0 auto 20px auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .results-heading-left {
+          /* left side content */
+        }
+
+        .results-heading h2 {
+          font-size: 1.4rem;
+          font-weight: bold;
+          color: #111827;
+          margin: 0 0 4px 0;
+        }
+
+        .results-heading p {
+          color: #6b7280;
+          font-size: 0.9rem;
+          margin: 0;
         }
 
         .premium-card-wrapper {
           text-decoration: none !important;
           color: inherit !important;
-          display: flex; /* Helps card fill the grid cell height */
+          display: flex;
           height: 100%;
         }
 
@@ -226,7 +243,7 @@ export default function JobsPage({ recentOnly = false }) {
           gap: 12px;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
           width: 100%;
-          height: 100%; /* Stretches card to match row height */
+          height: 100%;
         }
 
         .premium-job-card:hover {
@@ -339,7 +356,7 @@ export default function JobsPage({ recentOnly = false }) {
           font-size: 0.9rem;
           color: #595959;
           line-height: 1.5;
-          flex-grow: 1; /* Pushes footer to the bottom */
+          flex-grow: 1;
         }
 
         .job-snippet p {
@@ -356,7 +373,7 @@ export default function JobsPage({ recentOnly = false }) {
         }
 
         .card-footer {
-          margin-top: auto; /* Aligns to bottom */
+          margin-top: auto;
           padding-top: 12px;
           font-size: 0.8rem;
           color: #6b7280;
@@ -364,7 +381,6 @@ export default function JobsPage({ recentOnly = false }) {
           border-top: 1px solid #f0f0f0;
         }
 
-        /* --- Skeleton Animations --- */
         .skeleton-card { pointer-events: none; }
         .shimmer {
           background: #f6f7f8;
@@ -385,37 +401,52 @@ export default function JobsPage({ recentOnly = false }) {
         .skeleton-tag { height: 24px; border-radius: 4px; }
         .skeleton-desc { height: 36px; width: 100%; margin-top: auto; }
 
-        /* --- Pagination --- */
         .pagination { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 40px; max-width: 1200px; margin-left: auto; margin-right: auto; }
         .pagination-btn { padding: 8px 16px; background: #fff; border: 1px solid #d1d5db; color: #374151; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .pagination-btn:hover:not(:disabled) { background: #f9fafb; border-color: #9ca3af; }
         .pagination-btn:disabled { border-color: #e5e7eb; color: #9ca3af; background: #f9fafb; cursor: not-allowed; box-shadow: none; }
         .pagination-info { font-size: 0.95rem; color: #4b5563; }
         
-        /* Mobile Responsiveness */
+        .view-all-btn {
+          display: inline-block;
+          padding: 8px 16px;
+          background: #2557a7;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.2s;
+          text-decoration: none;
+        }
+        .view-all-btn:hover {
+          background: #1a3f7a;
+        }
+
         @media (max-width: 600px) {
           .job-list {
-            grid-template-columns: 1fr; /* 1 column on mobile */
+            grid-template-columns: 1fr;
           }
           .premium-job-card { padding: 14px; }
+          .results-heading {
+            flex-direction: column;
+            align-items: flex-start;
+          }
         }
       `}</style>
 
       <PageHero
-        eyebrow={category ? 'Specialist category' : recentOnly ? 'New in the last 24 hours' : 'All current openings'}
-        title={category ? `${category.label} Jobs` : recentOnly ? 'Fresh jobs posted today' : 'Find your next opportunity'}
+        eyebrow={category ? 'Specialist category' : 'Current openings'}
+        title={category ? `${category.label} Jobs` : 'Find your next opportunity'}
         text={category
           ? `Browse active ${category.label.toLowerCase()} openings from the shared Jooblie backend.`
-          : recentOnly
-            ? 'Browse active openings published during the last 24 hours, or open the complete jobs directory.'
-            : 'Search all current jobs by title, location, job type, salary, work arrangement, and date.'}
+          : 'Search current jobs by title, location, job type, salary, and work arrangement.'}
       />
 
       <PageSection className="jobs-search-section" reveal={false}>
         <Reveal>
           <SearchPanel
             variant="page"
-            actionPath={categorySlug ? `/categories/${categorySlug}` : '/all-jobs'}
             initial={{
               q: params.get('q') || '',
               location: params.get('location') || '',
@@ -432,27 +463,28 @@ export default function JobsPage({ recentOnly = false }) {
         <div ref={resultsTopRef} style={{ scrollMarginTop: '100px' }} />
 
         <Reveal className="results-heading">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#111827', margin: '0 0 4px 0' }}>
-                {state.loading
-                  ? 'Fetching latest jobs...'
-                  : `${state.pagination.total || 0} ${(state.pagination.total || 0) === 1 ? 'job' : 'jobs'} found`}
-              </h2>
-              <p style={{ color: '#6b7280', fontSize: '0.9rem', margin: 0 }}>
-                {recentOnly
-                  ? 'Only active, approved openings published within the last 24 hours are shown.'
-                  : 'Only active, approved openings for this site are shown.'}
-              </p>
-            </div>
-            {recentOnly && (
-              <Link className="button button--secondary" to="/all-jobs">Browse all jobs</Link>
-            )}
+          <div>
+            <h2>{state.loading ? 'Fetching latest jobs...' : 'Available Jobs'}</h2>
+            <p>Only active, approved openings for this site are shown.</p>
           </div>
+
+          {!state.loading && state.pagination.total > PAGE_SIZE && (
+            <button
+              type="button"
+              className="view-all-btn"
+              onClick={() => setViewAll(!viewAll)}
+            >
+              {viewAll ? 'Show Less' : 'View All'}
+            </button>
+          )}
         </Reveal>
 
         {state.loading ? (
-          <LoadingState label={recentOnly ? 'Loading jobs from the last 24 hours...' : 'Searching all jobs...'} />
+          <div className="job-list">
+            {[...Array(6)].map((_, i) => (
+              <JobCardSkeleton key={`skeleton-${i}`} />
+            ))}
+          </div>
         ) : state.jobs.length ? (
           <>
             <Reveal className="job-list" stagger>
@@ -461,7 +493,7 @@ export default function JobsPage({ recentOnly = false }) {
               ))}
             </Reveal>
 
-            {totalPages > 1 && (
+            {!viewAll && totalPages > 1 && (
               <Reveal className="pagination" delay={100}>
                 <button
                   type="button"
