@@ -175,6 +175,37 @@ function pickJobPayload(body) {
   );
 }
 
+const companySelectFields = 'id,name,website,registration_number,verification_document_path,logo_path,description,verification_status,status,created_at';
+
+const editableCompanyFields = [
+  'name',
+  'website',
+  'registration_number',
+  'verification_document_path',
+  'logo_path',
+  'description',
+];
+
+function pickCompanyPayload(body) {
+  return Object.fromEntries(
+    editableCompanyFields
+      .filter((key) => Object.prototype.hasOwnProperty.call(body, key))
+      .map((key) => [key, body[key] === '' ? null : body[key]]),
+  );
+}
+
+function mapCompanyUpdateError(error) {
+  if (error?.code === '23505' || String(error?.message || '').includes('companies_lower_name_live_idx')) {
+    throw new ApiError(
+      409,
+      'That company name is already registered. Please use the existing company or choose a different name.',
+      'COMPANY_NAME_TAKEN',
+    );
+  }
+
+  throw new ApiError(400, 'The company could not be updated.', 'COMPANY_UPDATE_FAILED', error?.message);
+}
+
 
 async function loadApplicationStats(jobIds) {
   if (!jobIds.length) return [];
@@ -286,6 +317,55 @@ export const createCompany = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({ company });
+});
+
+export const updateCompany = asyncHandler(async (req, res) => {
+  const { companyId } = req.params;
+
+  const { data: existing, error: existingError } = await serviceDb
+    .from('companies')
+    .select('id')
+    .eq('id', companyId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (existingError || !existing) {
+    throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
+  }
+
+  await assertCompanyAccess(req.user.id, companyId);
+
+  const payload = pickCompanyPayload(req.body);
+
+  if (!Object.keys(payload).length) {
+    const { data: company, error } = await serviceDb
+      .from('companies')
+      .select(companySelectFields)
+      .eq('id', companyId)
+      .single();
+
+    if (error) mapCompanyUpdateError(error);
+    return res.json({ company });
+  }
+
+  const { data: company, error } = await serviceDb
+    .from('companies')
+    .update(payload)
+    .eq('id', companyId)
+    .select(companySelectFields)
+    .single();
+
+  if (error) mapCompanyUpdateError(error);
+
+  await writeAuditLog(req, {
+    action: 'company.update',
+    entityType: 'company',
+    entityId: company.id,
+    companyId: company.id,
+    metadata: { fields: Object.keys(payload) },
+  });
+
+  res.json({ company });
 });
 
 export const dashboard = asyncHandler(async (req, res) => {
@@ -469,6 +549,21 @@ export const createJob = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'The job could not be submitted.', 'JOB_CREATE_FAILED', error.message);
   }
 
+  if (data.status !== 'active') {
+    const { data: activated, error: activateError } = await serviceDb
+      .from('jobs')
+      .update({
+        status: 'active',
+        published_at: data.published_at || new Date().toISOString(),
+      })
+      .eq('id', data.id)
+      .select('id,title,status,company_id,category_id,origin_site_id,created_at,published_at')
+      .single();
+    if (!activateError && activated) {
+      Object.assign(data, activated);
+    }
+  }
+
   try {
     await replaceAudienceMappings(data.id, req.body.audience_sites || [], req.site);
   } catch (error) {
@@ -519,6 +614,12 @@ export const updateJob = asyncHandler(async (req, res) => {
 
   if (req.body.status) {
     payload.status = req.body.status;
+    if (req.body.status === 'active') {
+      payload.published_at = new Date().toISOString();
+    }
+    if (req.body.status === 'closed') {
+      payload.published_at = existing.published_at ?? null;
+    }
   } else if (contentChanged && existing.status === 'active') {
     // Keep it active instead of hiding it on edit
     payload.status = 'active';
@@ -530,7 +631,7 @@ export const updateJob = asyncHandler(async (req, res) => {
     .from('jobs')
     .update(payload)
     .eq('id', existing.id)
-    .select('id,title,status,company_id,category_id,origin_site_id,updated_at')
+    .select('id,title,status,company_id,category_id,origin_site_id,updated_at,published_at')
     .single();
 
   if (error) throw new ApiError(400, 'The job could not be updated.', 'JOB_UPDATE_FAILED', error.message);

@@ -1,6 +1,34 @@
 import { createAnonDb, serviceDb } from '../config/supabase.js';
+import { logger } from '../config/logger.js';
 import { asyncHandler, ApiError } from '../utils/http.js';
 import { writeAuditLog, writeSecurityEvent } from '../utils/audit.js';
+
+function signUpFailure(error) {
+  const raw = String(error?.message || error?.code || '').toLowerCase();
+  const details = {
+    supabaseCode: error?.code || null,
+    supabaseMessage: error?.message || null,
+    supabaseStatus: error?.status || null,
+  };
+
+  if (raw.includes('already registered') || raw.includes('already been registered') || raw.includes('user already exists')) {
+    return new ApiError(409, 'An account with this email already exists. Please sign in.', 'EMAIL_ALREADY_REGISTERED', details);
+  }
+  if (raw.includes('signups not allowed') || raw.includes('signup is disabled')) {
+    return new ApiError(403, 'New account registration is disabled in Supabase Auth.', 'SIGN_UP_DISABLED', details);
+  }
+  if (raw.includes('rate limit') || raw.includes('email rate')) {
+    return new ApiError(429, 'Too many signup attempts. Please wait and try again.', 'SIGN_UP_RATE_LIMITED', details);
+  }
+  if (raw.includes('database error saving new user')) {
+    return new ApiError(500, 'Supabase Auth created the login but a database trigger failed while saving the user. Check Auth logs and the profiles insert trigger.', 'SIGN_UP_DB_TRIGGER_FAILED', details);
+  }
+  if (raw.includes('error sending confirmation email') || raw.includes('error sending recovery email')) {
+    return new ApiError(502, 'The account was started but the confirmation email could not be sent. Check Supabase SMTP settings.', 'SIGN_UP_EMAIL_FAILED', details);
+  }
+
+  return new ApiError(400, 'The account could not be created.', 'SIGN_UP_FAILED', details);
+}
 
 // 🔥 CHANGE: experience aur education is list mein add kar diye hain
 const profileSelect = 'id,role,status,email,full_name,phone,headline,location_province,location_city,skills,experience,education,default_resume_path,signup_site_id,recruiter_company_id';
@@ -107,12 +135,25 @@ export const signUp = asyncHandler(async (req, res) => {
   });
 
   if (error || !data?.user) {
+    logger.warn(
+      {
+        requestId: req.requestId,
+        supabaseCode: error?.code || null,
+        supabaseMessage: error?.message || 'missing_user',
+        supabaseStatus: error?.status || null,
+      },
+      'Supabase sign-up failed',
+    );
     await writeSecurityEvent(req, {
       eventType: 'sign_up_failed',
       severity: 'low',
-      metadata: { email: req.body.email },
+      metadata: {
+        email: req.body.email,
+        supabaseCode: error?.code || null,
+        supabaseMessage: error?.message || 'missing_user',
+      },
     });
-    throw new ApiError(400, 'The account could not be created.', 'SIGN_UP_FAILED');
+    throw signUpFailure(error || { message: 'Supabase did not return a user.' });
   }
 
   const userId = data.user.id;
