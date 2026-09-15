@@ -81,7 +81,7 @@ export const jobUpdateSchema = z.object({
   skills: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
   description: z.string().trim().min(20).max(30_000).optional(),
   audience_sites: z.array(audienceSite).max(2).optional(),
-  status: z.enum(['pending_review', 'closed']).optional(),
+  status: z.enum(['pending_review', 'active', 'closed']).optional(),
 });
 
 export const applicationSchema = z.object({
@@ -155,6 +155,8 @@ export const companySchema = z.object({
   logo_path: optionalText(1000),
   description: optionalText(10_000),
 });
+
+export const companyUpdateSchema = companySchema.partial();
 
 export const adminJobStatusSchema = z.object({
   status: z.enum(['pending_review', 'active', 'closed', 'expired', 'removed']),

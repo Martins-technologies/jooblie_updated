@@ -9,6 +9,7 @@ import {
   applicationStatusSchema,
   profileSchema,
   companySchema,
+  companyUpdateSchema,
   jobCreateSchema,
   jobUpdateSchema,
   adminJobStatusSchema,
@@ -78,6 +79,7 @@ recruiter.use(siteContext);
 recruiter.get('/dashboard', recruiterController.dashboard);
 recruiter.get('/companies', recruiterController.listCompanies);
 recruiter.post('/companies', writeLimiter, validate(companySchema), recruiterController.createCompany);
+recruiter.patch('/companies/:companyId', writeLimiter, validate(companyUpdateSchema), recruiterController.updateCompany);
 recruiter.post('/jobs', writeLimiter, validate(jobCreateSchema), recruiterController.createJob);
 recruiter.patch('/jobs/:jobId', writeLimiter, validate(jobUpdateSchema), recruiterController.updateJob);
 recruiter.get('/jobs/:jobId/applications', recruiterController.listApplications);
