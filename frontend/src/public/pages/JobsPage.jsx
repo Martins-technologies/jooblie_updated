@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import PageHero from '../../shared/components/PageHero';
 import PageSection from '../../shared/components/PageSection';
@@ -7,103 +7,247 @@ import SearchPanel from '../../shared/components/SearchPanel';
 import { EmptyState } from '../../shared/components/StatusMessage';
 import { searchJobs } from '../../shared/lib/data';
 import { focusCategories } from '../../shared/config/site';
+import { timeAgo, formatSalary, stripHtml } from '../../shared/lib/format';
+import { 
+  MapPin, 
+  Briefcase, 
+  Building2, 
+  Zap, 
+  Clock, 
+  ArrowRight, 
+  ArrowUpRight, 
+  DollarSign,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  Bookmark
+} from 'lucide-react';
 
-const PAGE_SIZE = 8; // Initial number of job cards
+const PAGE_SIZE = 9; // 3x3 clean grid
+
+// Deterministic brand gradients for company avatars
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', // Royal Blue
+  'linear-gradient(135deg, #059669 0%, #047857 100%)', // Emerald
+  'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', // Violet
+  'linear-gradient(135deg, #d97706 0%, #b45309 100%)', // Amber
+  'linear-gradient(135deg, #db2777 0%, #be185d 100%)', // Pink
+  'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', // Sky
+  'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)', // Indigo
+  'linear-gradient(135deg, #e11d48 0%, #be123c 100%)', // Rose
+];
+
+function getCompanyAvatarGradient(name = '') {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const index = Math.abs(hash) % AVATAR_GRADIENTS.length;
+  return AVATAR_GRADIENTS[index];
+}
 
 /* =========================================
-   1. PREMIUM GRID JOB CARD COMPONENT
+   1. PREMIUM RESPONSIVE JOB CARD
 ========================================= */
 const JobCard = ({ job }) => {
   const { 
     id, 
     title, 
     company, 
+    companyName: rawCompanyName,
     location, 
-    type, 
-    salary, 
-    description, 
-    postedAt = "Recently" 
+    jobType,
+    employmentType,
+    type,
+    workplaceType,
+    isRemote,
+    description,
+    createdAt 
   } = job;
 
-  const companyName = typeof company === 'object' && company !== null ? company.name : (company || "Hiring Company");
+  const companyName = typeof company === 'object' && company !== null 
+    ? (company.name || rawCompanyName || "Hiring Company") 
+    : (rawCompanyName || company || "Hiring Company");
+
   const companyLogo = typeof company === 'object' && company !== null ? company.logoUrl : null;
+  const avatarGradient = useMemo(() => getCompanyAvatarGradient(companyName), [companyName]);
+
+  const displayType = jobType || employmentType || type || null;
+  
+  // Clean salary filtering: hide any zero ranges ($0 - $0, CA$0 - CA$0, etc.)
+  const displaySalary = useMemo(() => {
+    const s = formatSalary(job);
+    if (!s) return null;
+    if (/^(\$|ca\$|usd)?\s*0(\s*-\s*(\$|ca\$|usd)?\s*0)?$/i.test(s.trim())) return null;
+    if (/^(from|up to)\s*(\$|ca\$|usd)?\s*0$/i.test(s.trim())) return null;
+    return s;
+  }, [job]);
+
+  const displayWorkplace = isRemote ? 'Remote' : (workplaceType || null);
+  const postedTime = createdAt ? timeAgo(createdAt) : (job.postedAt || "Recently");
+
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    try {
+      const values = JSON.parse(localStorage.getItem('jooblie:saved-jobs') || '[]');
+      setSaved(values.map(String).includes(String(id)));
+    } catch {
+      setSaved(false);
+    }
+  }, [id]);
+
+  const handleToggleSaved = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const values = JSON.parse(localStorage.getItem('jooblie:saved-jobs') || '[]');
+      const strId = String(id);
+      const next = values.includes(strId)
+        ? values.filter((v) => v !== strId)
+        : [...values, strId];
+      localStorage.setItem('jooblie:saved-jobs', JSON.stringify(next));
+      setSaved(next.includes(strId));
+    } catch {
+      setSaved((prev) => !prev);
+    }
+  };
+
+  // Clean description snippet
+  const cleanSnippet = useMemo(() => {
+    if (!description) return '';
+    const text = stripHtml(description).replace(/^[•\s\-_*]+/, '').trim();
+    return text.length > 125 ? `${text.substring(0, 125)}...` : text;
+  }, [description]);
 
   return (
-    <Link to={`/jobs/${id}`} className="premium-card-wrapper">
-      <div className="premium-job-card">
-        <div className="card-header">
-          <div className="company-logo-container">
+    <Link to={`/jobs/${id}`} className="jb-card-anchor" aria-label={`View ${title} at ${companyName}`}>
+      <article className="jb-job-card">
+        {/* Card Header: Avatar, Titles & Action Icon */}
+        <div className="jb-card-top">
+          <div className="jb-company-avatar-wrap">
             {companyLogo ? (
-              <img src={companyLogo} alt={companyName} className="company-logo" />
+              <img src={companyLogo} alt={companyName} className="jb-company-logo" />
             ) : (
-              <div className="company-logo-fallback">
+              <div 
+                className="jb-company-avatar" 
+                style={{ background: avatarGradient }}
+              >
                 {companyName.charAt(0).toUpperCase()}
               </div>
             )}
           </div>
-          <div className="header-text">
-            <h2 className="job-title">{title}</h2>
-            <div className="company-info">
-              <span className="company-name">{companyName}</span>
-              {location && <span className="location-dot">•</span>}
-              {location && <span className="job-location">{location}</span>}
+
+          <div className="jb-card-meta">
+            <h3 className="jb-job-title" title={title}>
+              {title}
+            </h3>
+            <div className="jb-company-location-row">
+              <span className="jb-company-name">{companyName}</span>
+              {location && (
+                <>
+                  <span className="jb-meta-sep">•</span>
+                  <span className="jb-location-text">
+                    <MapPin size={12} strokeWidth={2.2} className="jb-meta-pin" />
+                    {location}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="jb-card-actions">
+            <button
+              type="button"
+              className={`jb-card-bookmark-btn ${saved ? 'is-saved' : ''}`}
+              onClick={handleToggleSaved}
+              title={saved ? "Remove from saved jobs" : "Save this job"}
+              aria-label={saved ? "Remove from saved jobs" : "Save this job"}
+            >
+              <Bookmark size={14} fill={saved ? "#0066f5" : "none"} color={saved ? "#0066f5" : "#94a3b8"} strokeWidth={2.2} />
+            </button>
+            <div className="jb-card-hover-arrow" aria-hidden="true">
+              <ArrowUpRight size={17} strokeWidth={2.2} />
             </div>
           </div>
         </div>
 
-        <div className="job-badges">
-          {salary && (
-            <span className="badge salary-badge">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2557a7" strokeWidth="2.5" style={{ marginRight: '4px' }}>
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-              </svg>
-              {salary}
-            </span>
-          )}
-          {type && (
-            <span className="badge type-badge">{type}</span>
-          )}
-          <span className="badge easy-apply">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ marginRight: '4px' }}>
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-            </svg>
+        {/* Feature & Metadata Badges */}
+        <div className="jb-card-badges">
+          <span className="jb-badge jb-badge--hiring">
+            <Zap size={11} fill="#ef4444" strokeWidth={0} />
             Actively Hiring
           </span>
+
+          {displayType && (
+            <span className="jb-badge jb-badge--type">
+              <Briefcase size={11} strokeWidth={2.2} />
+              {displayType}
+            </span>
+          )}
+
+          {displayWorkplace && (
+            <span className="jb-badge jb-badge--workplace">
+              <Building2 size={11} strokeWidth={2.2} />
+              {displayWorkplace}
+            </span>
+          )}
+
+          {displaySalary && (
+            <span className="jb-badge jb-badge--salary">
+              <DollarSign size={11} strokeWidth={2.4} />
+              {displaySalary}
+            </span>
+          )}
         </div>
 
-        <div className="job-snippet">
+        {/* Snippet / Excerpt */}
+        <div className="jb-card-snippet">
           <p>
-            {description 
-              ? `${description.substring(0, 100)}...` 
-              : 'Click here to view the full job description and apply.'}
+            {cleanSnippet || 'View full role overview, responsibilities, compensation, and qualifications.'}
           </p>
         </div>
 
-        <div className="card-footer">
-          <span className="posted-time">Posted {postedAt}</span>
+        {/* Footer */}
+        <div className="jb-card-footer">
+          <span className="jb-posted-info">
+            <Clock size={12} strokeWidth={2} />
+            Posted {postedTime}
+          </span>
+
+          <span className="jb-apply-cta">
+            View details
+            <ArrowRight size={13} strokeWidth={2.4} className="jb-cta-arrow" />
+          </span>
         </div>
-      </div>
+      </article>
     </Link>
   );
 };
 
 /* =========================================
-   2. GRID SKELETON LOADER
+   2. SHIMMER SKELETON LOADER
 ========================================= */
 const JobCardSkeleton = () => (
-  <div className="premium-job-card skeleton-card">
-    <div className="card-header">
-      <div className="skeleton-logo shimmer"></div>
-      <div className="header-text" style={{ width: '100%' }}>
-        <div className="skeleton-title shimmer"></div>
-        <div className="skeleton-subtitle shimmer"></div>
+  <div className="jb-job-card jb-skeleton-card">
+    <div className="jb-card-top">
+      <div className="jb-skeleton-avatar jb-shimmer" />
+      <div className="jb-card-meta" style={{ width: '100%' }}>
+        <div className="jb-skeleton-bar jb-shimmer" style={{ width: '72%', height: '18px' }} />
+        <div className="jb-skeleton-bar jb-shimmer" style={{ width: '48%', height: '13px', marginTop: '7px' }} />
       </div>
     </div>
-    <div className="skeleton-tags">
-      <div className="skeleton-tag shimmer" style={{ width: '70px' }}></div>
-      <div className="skeleton-tag shimmer" style={{ width: '90px' }}></div>
+    <div className="jb-card-badges">
+      <div className="jb-skeleton-pill jb-shimmer" style={{ width: '92px' }} />
+      <div className="jb-skeleton-pill jb-shimmer" style={{ width: '68px' }} />
+      <div className="jb-skeleton-pill jb-shimmer" style={{ width: '58px' }} />
     </div>
-    <div className="skeleton-desc shimmer"></div>
+    <div className="jb-card-snippet">
+      <div className="jb-skeleton-bar jb-shimmer" style={{ width: '100%', height: '14px', marginBottom: '6px' }} />
+      <div className="jb-skeleton-bar jb-shimmer" style={{ width: '75%', height: '14px' }} />
+    </div>
+    <div className="jb-card-footer">
+      <div className="jb-skeleton-bar jb-shimmer" style={{ width: '95px', height: '12px' }} />
+      <div className="jb-skeleton-bar jb-shimmer" style={{ width: '75px', height: '12px' }} />
+    </div>
   </div>
 );
 
@@ -158,8 +302,8 @@ export default function JobsPage() {
       if (!active) return;
       setState({
         loading: false,
-        jobs: result.jobs,
-        pagination: result.pagination,
+        jobs: result.jobs || [],
+        pagination: result.pagination || { page: 1, limit: PAGE_SIZE, total: 0, pages: 0 },
         configured: result.configured,
         error: result.error,
       });
@@ -172,6 +316,7 @@ export default function JobsPage() {
 
   const totalPages = Math.max(1, state.pagination.pages || 1);
   const safePage = Math.min(page, totalPages);
+  const totalCount = state.pagination.total || state.jobs.length;
 
   const handlePageChange = (newPage) => {
     setPage(newPage);
@@ -181,260 +326,476 @@ export default function JobsPage() {
   };
 
   return (
-    <div className="jobs-page-wrapper">
+    <div className="jb-jobs-page-root">
+      {/* Scoped CSS Styles */}
       <style>{`
-        .jobs-page-wrapper {
-          background-color: #f8f9fa;
+        .jb-jobs-page-root {
+          background-color: #f8fbff;
           min-height: 100vh;
-          padding-bottom: 60px;
+          padding-bottom: 70px;
+          font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
-        .job-list {
-          max-width: 1200px;
-          margin: 0 auto;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-          gap: 20px;
-        }
-
-        .results-heading {
-          max-width: 1200px;
-          margin: 0 auto 20px auto;
+        /* Results Header - Flush with .container */
+        .jb-results-header {
+          width: 100%;
+          margin: 0 0 22px 0;
+          padding: 0;
           display: flex;
           justify-content: space-between;
-          align-items: center;
+          align-items: flex-end;
           flex-wrap: wrap;
+          gap: 16px;
+        }
+
+        .jb-results-heading-main {
+          display: flex;
+          align-items: center;
           gap: 10px;
+          flex-wrap: wrap;
         }
 
-        .results-heading-left {
-          /* left side content */
-        }
-
-        .results-heading h2 {
-          font-size: 1.4rem;
-          font-weight: bold;
-          color: #111827;
-          margin: 0 0 4px 0;
-        }
-
-        .results-heading p {
-          color: #6b7280;
-          font-size: 0.9rem;
+        .jb-results-title {
+          font-size: 1.55rem;
+          font-weight: 800;
+          color: #0f172a;
           margin: 0;
+          letter-spacing: -0.025em;
         }
 
-        .premium-card-wrapper {
+        .jb-count-badge {
+          display: inline-flex;
+          align-items: center;
+          background: #e0f0fe;
+          color: #0066f5;
+          font-size: 12px;
+          font-weight: 700;
+          padding: 4px 10px;
+          border-radius: 20px;
+          letter-spacing: -0.01em;
+        }
+
+        .jb-results-subtext {
+          color: #64748b;
+          font-size: 0.92rem;
+          margin: 4px 0 0;
+        }
+
+        .jb-view-all-toggle-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 16px;
+          background: #ffffff;
+          color: #0066f5;
+          border: 1.5px solid #dbeafe;
+          border-radius: 10px;
+          font-weight: 600;
+          font-size: 13.5px;
+          cursor: pointer;
+          transition: all 0.18s ease;
+          box-shadow: 0 1px 3px rgba(0, 102, 245, 0.05);
+        }
+
+        .jb-view-all-toggle-btn:hover {
+          background: #0066f5;
+          color: #ffffff;
+          border-color: #0066f5;
+          box-shadow: 0 4px 12px rgba(0, 102, 245, 0.2);
+        }
+
+        /* 100% RESPONSIVE GRID - Matches Container Exactly */
+        .jb-jobs-grid {
+          width: 100%;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 22px;
+        }
+
+        @media (max-width: 1080px) {
+          .jb-jobs-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+          }
+        }
+
+        @media (max-width: 680px) {
+          .jb-jobs-grid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+          }
+          .jb-results-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+          }
+        }
+
+        /* CARD ARCHITECTURE */
+        .jb-card-anchor {
           text-decoration: none !important;
           color: inherit !important;
           display: flex;
           height: 100%;
         }
 
-        .premium-job-card {
+        .jb-job-card {
+          width: 100%;
           background: #ffffff;
-          border: 1px solid #e8e8e8;
-          border-radius: 12px;
-          padding: 16px 20px;
-          transition: all 0.3s ease;
-          cursor: pointer;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 20px 20px 16px;
           display: flex;
           flex-direction: column;
-          gap: 12px;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-          width: 100%;
-          height: 100%;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 10px -2px rgba(15, 23, 42, 0.02);
+          transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+          position: relative;
+          cursor: pointer;
         }
 
-        .premium-job-card:hover {
-          border-color: #2557a7;
-          box-shadow: 0 6px 16px -4px rgba(37, 87, 167, 0.1);
-          transform: translateY(-2px);
+        .jb-job-card:hover {
+          border-color: #93c5fd;
+          transform: translateY(-3px);
+          box-shadow: 0 14px 28px -6px rgba(0, 102, 245, 0.12), 0 4px 10px rgba(15, 23, 42, 0.03);
         }
 
-        .card-header {
+        /* Top Bar */
+        .jb-card-top {
           display: flex;
-          gap: 12px;
           align-items: flex-start;
+          gap: 12px;
+          position: relative;
         }
 
-        .company-logo-container {
+        .jb-company-avatar-wrap {
           flex-shrink: 0;
         }
 
-        .company-logo {
-          width: 44px;
-          height: 44px;
-          border-radius: 8px;
+        .jb-company-logo {
+          width: 46px;
+          height: 46px;
+          border-radius: 12px;
           object-fit: contain;
-          border: 1px solid #f0f0f0;
-          padding: 4px;
-          background: #fff;
+          border: 1px solid #e2e8f0;
+          padding: 3px;
+          background: #ffffff;
         }
 
-        .company-logo-fallback {
-          width: 44px;
-          height: 44px;
-          border-radius: 8px;
-          background: #eef2f9;
-          color: #2557a7;
+        .jb-company-avatar {
+          width: 46px;
+          height: 46px;
+          border-radius: 12px;
+          color: #ffffff;
           display: flex;
           align-items: center;
           justify-content: center;
           font-size: 1.25rem;
-          font-weight: bold;
-          border: 1px solid #dce5f2;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         }
 
-        .header-text {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
+        .jb-card-meta {
+          flex: 1;
+          min-width: 0; /* truncate helper */
         }
 
-        .job-title {
-          font-size: 1.15rem;
+        .jb-job-title {
+          font-size: 1.08rem;
           font-weight: 700;
-          color: #2d2d2d;
-          margin: 0;
-          line-height: 1.3;
-          transition: color 0.2s;
+          color: #0f172a;
+          margin: 0 0 4px;
+          line-height: 1.35;
+          letter-spacing: -0.015em;
+          text-transform: capitalize;
+          display: -webkit-box;
+          -webkit-line-clamp: 1;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          transition: color 0.18s ease;
         }
 
-        .premium-job-card:hover .job-title {
-          color: #2557a7;
+        .jb-job-card:hover .jb-job-title {
+          color: #0066f5;
         }
 
-        .company-info {
-          font-size: 0.9rem;
-          color: #595959;
+        .jb-company-location-row {
           display: flex;
           align-items: center;
-          flex-wrap: wrap;
+          font-size: 13px;
+          color: #475569;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
           gap: 6px;
         }
 
-        .company-name {
-          color: #2d2d2d;
-          font-weight: 500;
+        .jb-company-name {
+          font-weight: 600;
+          color: #334155;
+          text-transform: capitalize;
         }
 
-        .location-dot {
-          color: #999;
-          font-size: 0.8rem;
+        .jb-meta-sep {
+          color: #cbd5e1;
+          font-size: 11px;
         }
 
-        .job-badges {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 4px;
+        .jb-location-text {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          color: #64748b;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          text-transform: capitalize;
         }
 
-        .badge {
+        .jb-meta-pin {
+          color: #94a3b8;
+          flex-shrink: 0;
+        }
+
+        .jb-card-actions {
           display: flex;
           align-items: center;
-          background: #f3f4f6;
-          color: #4b5563;
-          padding: 4px 10px;
-          border-radius: 6px;
-          font-size: 0.8rem;
+          gap: 6px;
+          flex-shrink: 0;
+          margin-top: 1px;
+        }
+
+        .jb-card-bookmark-btn {
+          width: 32px;
+          height: 32px;
+          border-radius: 9px;
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.18s ease;
+          padding: 0;
+        }
+
+        .jb-card-bookmark-btn:hover {
+          background: #eff6ff;
+          border-color: #bfdbfe;
+        }
+
+        .jb-card-bookmark-btn.is-saved {
+          background: #eff6ff;
+          border-color: #93c5fd;
+        }
+
+        .jb-card-hover-arrow {
+          color: #cbd5e1;
+          transition: all 0.18s ease;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .jb-job-card:hover .jb-card-hover-arrow {
+          color: #0066f5;
+          transform: translate(2px, -2px);
+        }
+
+        /* Badges Row */
+        .jb-card-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 12px;
+        }
+
+        .jb-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4.5px;
+          font-size: 11.5px;
           font-weight: 600;
+          padding: 3.5px 8.5px;
+          border-radius: 6px;
+          line-height: 1.25;
+          letter-spacing: -0.01em;
+          white-space: nowrap;
         }
 
-        .salary-badge {
-          background: #eef2f9;
-          color: #1e3a8a;
-        }
-
-        .easy-apply {
-          color: #9f1239;
+        .jb-badge--hiring {
           background: #fff1f2;
+          color: #e11d48;
+          border: 1px solid #ffe4e6;
         }
 
-        .job-snippet {
-          font-size: 0.9rem;
-          color: #595959;
-          line-height: 1.5;
-          flex-grow: 1;
+        .jb-badge--type {
+          background: #eff6ff;
+          color: #1d4ed8;
+          border: 1px solid #dbeafe;
         }
 
-        .job-snippet p {
+        .jb-badge--workplace {
+          background: #f0fdf4;
+          color: #15803d;
+          border: 1px solid #dcfce7;
+        }
+
+        .jb-badge--salary {
+          background: #fefce8;
+          color: #b45309;
+          border: 1px solid #fef08a;
+        }
+
+        /* Description Snippet */
+        .jb-card-snippet {
+          margin-top: 12px;
+          margin-bottom: 14px;
+          flex: 1;
+        }
+
+        .jb-card-snippet p {
           margin: 0;
-          position: relative;
-          padding-left: 12px;
+          font-size: 13px;
+          line-height: 1.55;
+          color: #64748b;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          word-break: break-word;
+          overflow-wrap: anywhere;
         }
 
-        .job-snippet p::before {
-          content: '•';
-          position: absolute;
-          left: 0;
-          color: #9ca3af;
-        }
-
-        .card-footer {
+        /* Footer */
+        .jb-card-footer {
           margin-top: auto;
           padding-top: 12px;
-          font-size: 0.8rem;
-          color: #6b7280;
-          font-weight: 500;
-          border-top: 1px solid #f0f0f0;
+          border-top: 1px solid #f1f5f9;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 12.5px;
         }
 
-        .skeleton-card { pointer-events: none; }
-        .shimmer {
-          background: #f6f7f8;
-          background-image: linear-gradient(90deg, #f6f7f8 0px, #edeef1 40px, #f6f7f8 80px);
-          background-size: 600px;
-          animation: shimmer 1.5s infinite linear;
+        .jb-posted-info {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          color: #94a3b8;
+          font-weight: 500;
+        }
+
+        .jb-apply-cta {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          color: #0066f5;
+          font-weight: 600;
+          font-size: 12.5px;
+          transition: gap 0.18s ease;
+        }
+
+        .jb-job-card:hover .jb-apply-cta {
+          gap: 7px;
+        }
+
+        .jb-cta-arrow {
+          transition: transform 0.18s ease;
+        }
+
+        .jb-job-card:hover .jb-cta-arrow {
+          transform: translateX(2px);
+        }
+
+        /* SKELETON LOADER */
+        .jb-skeleton-card {
+          pointer-events: none;
+        }
+
+        .jb-shimmer {
+          background: #f1f5f9;
+          background-image: linear-gradient(90deg, #f1f5f9 0px, #e2e8f0 40px, #f1f5f9 80px);
+          background-size: 400px;
+          animation: jb-shimmer-anim 1.5s infinite linear;
           border-radius: 6px;
         }
-        @keyframes shimmer {
-          0% { background-position: -300px 0; }
-          100% { background-position: 300px 0; }
-        }
-        
-        .skeleton-logo { width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0; }
-        .skeleton-title { height: 20px; width: 80%; margin-bottom: 8px; margin-top: 4px; }
-        .skeleton-subtitle { height: 14px; width: 50%; }
-        .skeleton-tags { display: flex; gap: 8px; margin-top: 4px; }
-        .skeleton-tag { height: 24px; border-radius: 4px; }
-        .skeleton-desc { height: 36px; width: 100%; margin-top: auto; }
 
-        .pagination { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 40px; max-width: 1200px; margin-left: auto; margin-right: auto; }
-        .pagination-btn { padding: 8px 16px; background: #fff; border: 1px solid #d1d5db; color: #374151; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        .pagination-btn:hover:not(:disabled) { background: #f9fafb; border-color: #9ca3af; }
-        .pagination-btn:disabled { border-color: #e5e7eb; color: #9ca3af; background: #f9fafb; cursor: not-allowed; box-shadow: none; }
-        .pagination-info { font-size: 0.95rem; color: #4b5563; }
-        
-        .view-all-btn {
-          display: inline-block;
-          padding: 8px 16px;
-          background: #2557a7;
-          color: white;
-          border: none;
-          border-radius: 8px;
+        @keyframes jb-shimmer-anim {
+          0% { background-position: -200px 0; }
+          100% { background-position: 200px 0; }
+        }
+
+        .jb-skeleton-avatar {
+          width: 46px;
+          height: 46px;
+          border-radius: 12px;
+          flex-shrink: 0;
+        }
+
+        .jb-skeleton-pill {
+          height: 22px;
+          border-radius: 6px;
+        }
+
+        .jb-skeleton-bar {
+          border-radius: 4px;
+        }
+
+        /* PAGINATION - Flush with Container */
+        .jb-pagination-wrap {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 16px;
+          margin-top: 36px;
+          width: 100%;
+          padding: 0;
+        }
+
+        .jb-page-nav-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 9px 16px;
+          background: #ffffff;
+          border: 1.5px solid #e2e8f0;
+          color: #1e293b;
+          border-radius: 10px;
+          font-size: 13.5px;
           font-weight: 600;
           cursor: pointer;
-          transition: background 0.2s;
-          text-decoration: none;
-        }
-        .view-all-btn:hover {
-          background: #1a3f7a;
+          transition: all 0.18s ease;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
         }
 
-        @media (max-width: 600px) {
-          .job-list {
-            grid-template-columns: 1fr;
-          }
-          .premium-job-card { padding: 14px; }
-          .results-heading {
-            flex-direction: column;
-            align-items: flex-start;
-          }
+        .jb-page-nav-btn:hover:not(:disabled) {
+          background: #f8fafc;
+          border-color: #0066f5;
+          color: #0066f5;
+        }
+
+        .jb-page-nav-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+
+        .jb-page-indicator {
+          font-size: 13.5px;
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .jb-page-indicator strong {
+          color: #0f172a;
+          font-weight: 700;
         }
       `}</style>
 
+      {/* Hero Presentation */}
       <PageHero
         eyebrow={category ? 'Specialist category' : 'Current openings'}
         title={category ? `${category.label} Jobs` : 'Find your next opportunity'}
@@ -443,6 +804,7 @@ export default function JobsPage() {
           : 'Search current jobs by title, location, job type, salary, and work arrangement.'}
       />
 
+      {/* Filter / Search Bar */}
       <PageSection className="jobs-search-section" reveal={false}>
         <Reveal>
           <SearchPanel
@@ -459,62 +821,79 @@ export default function JobsPage() {
         </Reveal>
       </PageSection>
 
+      {/* Jobs Results & Cards */}
       <PageSection className="jobs-results-section" soft reveal={false}>
         <div ref={resultsTopRef} style={{ scrollMarginTop: '100px' }} />
 
-        <Reveal className="results-heading">
+        <Reveal className="jb-results-header">
           <div>
-            <h2>{state.loading ? 'Fetching latest jobs...' : 'Available Jobs'}</h2>
-            <p>Only active, approved openings for this site are shown.</p>
+            <div className="jb-results-heading-main">
+              <h2 className="jb-results-title">
+                {state.loading ? 'Fetching latest jobs...' : 'Available Jobs'}
+              </h2>
+              {!state.loading && totalCount > 0 && (
+                <span className="jb-count-badge">
+                  {totalCount} {totalCount === 1 ? 'position' : 'positions'}
+                </span>
+              )}
+            </div>
+            <p className="jb-results-subtext">
+              Only active, verified openings for this portal are displayed.
+            </p>
           </div>
 
           {!state.loading && state.pagination.total > PAGE_SIZE && (
             <button
               type="button"
-              className="view-all-btn"
+              className="jb-view-all-toggle-btn"
               onClick={() => setViewAll(!viewAll)}
             >
-              {viewAll ? 'Show Less' : 'View All'}
+              <Sparkles size={14} />
+              <span>{viewAll ? 'Show Paginated' : 'View All Openings'}</span>
             </button>
           )}
         </Reveal>
 
         {state.loading ? (
-          <div className="job-list">
+          <div className="jb-jobs-grid">
             {[...Array(6)].map((_, i) => (
               <JobCardSkeleton key={`skeleton-${i}`} />
             ))}
           </div>
         ) : state.jobs.length ? (
           <>
-            <Reveal className="job-list" stagger>
+            <Reveal className="jb-jobs-grid" stagger>
               {state.jobs.map((job) => (
                 <JobCard key={job.id} job={job} />
               ))}
             </Reveal>
 
             {!viewAll && totalPages > 1 && (
-              <Reveal className="pagination" delay={100}>
+              <Reveal className="jb-pagination-wrap" delay={100}>
                 <button
                   type="button"
                   disabled={safePage <= 1}
                   onClick={() => handlePageChange(Math.max(1, safePage - 1))}
-                  className="pagination-btn"
+                  className="jb-page-nav-btn"
+                  aria-label="Previous page"
                 >
-                  Previous
+                  <ChevronLeft size={16} />
+                  <span>Previous</span>
                 </button>
 
-                <span className="pagination-info">
-                  Page <strong style={{color: '#111827'}}>{safePage}</strong> of {totalPages}
+                <span className="jb-page-indicator">
+                  Page <strong>{safePage}</strong> of <strong>{totalPages}</strong>
                 </span>
 
                 <button
                   type="button"
                   disabled={safePage >= totalPages}
                   onClick={() => handlePageChange(Math.min(totalPages, safePage + 1))}
-                  className="pagination-btn"
+                  className="jb-page-nav-btn"
+                  aria-label="Next page"
                 >
-                  Next
+                  <span>Next</span>
+                  <ChevronRight size={16} />
                 </button>
               </Reveal>
             )}
@@ -523,8 +902,8 @@ export default function JobsPage() {
           <Reveal>
             <EmptyState
               backendMissing={!state.configured}
-              title="No matching jobs"
-              text={state.error?.message || 'Try different search terms or filters. New openings will appear here automatically.'}
+              title="No matching jobs found"
+              text={state.error?.message || 'Try adjusting your search criteria, removing filters, or searching for related keywords.'}
             />
           </Reveal>
         )}
@@ -532,3 +911,6 @@ export default function JobsPage() {
     </div>
   );
 }
+
+// Re-export JobCard for use in other pages
+export { JobCard };

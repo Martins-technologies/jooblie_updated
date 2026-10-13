@@ -600,6 +600,18 @@ export default function SignInPage() {
           padding: 0 8px 0 10px;
         }
 
+        .jb-control-input:-webkit-autofill,
+        .jb-control-input:-webkit-autofill:hover, 
+        .jb-control-input:-webkit-autofill:focus, 
+        .jb-control-input:-webkit-autofill:active,
+        .jb-control-input:autofill {
+          -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+          box-shadow: 0 0 0 1000px #ffffff inset !important;
+          -webkit-text-fill-color: #0f172a !important;
+          caret-color: #0f172a !important;
+          transition: background-color 50000s ease-in-out 0s;
+        }
+
         .jb-control-input::placeholder {
           color: #94a3b8;
           font-size: 13.5px;

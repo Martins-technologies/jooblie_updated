@@ -38,6 +38,7 @@ export function timeAgo(value) {
 }
 
 export function formatSalary(job) {
+  if (!job) return '';
   const min = Number(job.salaryMin);
   const max = Number(job.salaryMax);
   const currency = job.currency || '';
@@ -46,10 +47,16 @@ export function formatSalary(job) {
     : new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
 
   const period = job.salaryPeriod ? ` / ${String(job.salaryPeriod).replaceAll('_', ' ')}` : '';
-  if (Number.isFinite(min) && Number.isFinite(max)) return `${formatter.format(min)} - ${formatter.format(max)}${period}`;
-  if (Number.isFinite(min)) return `From ${formatter.format(min)}${period}`;
-  if (Number.isFinite(max)) return `Up to ${formatter.format(max)}${period}`;
-  return cleanText(job.salaryText || job.pay || '', '');
+  const hasMin = Number.isFinite(min) && min > 0;
+  const hasMax = Number.isFinite(max) && max > 0;
+
+  if (hasMin && hasMax) return `${formatter.format(min)} - ${formatter.format(max)}${period}`;
+  if (hasMin) return `From ${formatter.format(min)}${period}`;
+  if (hasMax) return `Up to ${formatter.format(max)}${period}`;
+
+  const text = cleanText(job.salaryText || job.pay || '', '');
+  if (/^(\$|ca\$|usd\s*)?0(\s*-\s*(\$|ca\$|usd\s*)?0)?$/i.test(text.trim())) return '';
+  return text;
 }
 
 export function stripHtml(html = '') {
