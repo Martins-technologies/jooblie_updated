@@ -21,6 +21,8 @@ import ResourcesPage from './public/pages/ResourcesPage';
 // --- Auth Pages ---
 import SignInPage from './public/pages/SignInPage';
 import RegisterPage from './public/pages/RegisterPage';
+import ForgotPasswordPage from './public/pages/ForgotPasswordPage';
+import ResetPasswordPage from './public/pages/ResetPasswordPage';
 
 // --- General Pages ---
 import AboutPage from './public/pages/AboutPage';
@@ -67,7 +69,10 @@ export default function App() {
           🔥 YAHAN FIX HAI: Auth pages ko SiteLayout se bahar nikal diya hai!
       ====================================================== */}
       <Route path="sign-in" element={<GuestOnlyRoute><SignInPage /></GuestOnlyRoute>} />
+      <Route path="login" element={<GuestOnlyRoute><SignInPage /></GuestOnlyRoute>} />
       <Route path="register" element={<GuestOnlyRoute><RegisterPage /></GuestOnlyRoute>} />
+      <Route path="forgot-password" element={<GuestOnlyRoute><ForgotPasswordPage /></GuestOnlyRoute>} />
+      <Route path="reset-password" element={<ResetPasswordPage />} />
 
 
       {/* =====================================================
