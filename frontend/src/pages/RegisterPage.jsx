@@ -39,7 +39,7 @@ export default function RegisterPage() {
       error
         ? {
             loading: false,
-            error: 'Account creation failed. Please review the details and try again.',
+            error: error.message || 'Account creation failed. Please review the details and try again.',
             success: false,
           }
         : {

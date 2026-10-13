@@ -173,6 +173,9 @@ export async function signUp(email, password, metadata = {}) {
         password,
         name: metadata.name || '',
         role: metadata.role === 'recruiter' ? 'recruiter' : 'job_seeker',
+        company_name: metadata.company_name || undefined,
+        company_website: metadata.company_website || undefined,
+        company_registration_number: metadata.company_registration_number || undefined,
       },
     });
 
