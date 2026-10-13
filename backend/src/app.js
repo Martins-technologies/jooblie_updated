@@ -51,6 +51,9 @@ app.use(
     origin(origin, callback) {
       if (!origin) return callback(null, true);
       if (env.CORS_ORIGINS.includes(origin)) return callback(null, true);
+      if (env.NODE_ENV === 'development' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
       return callback(new ApiError(403, 'Origin is not allowed by CORS.', 'CORS_FORBIDDEN'));
     },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
