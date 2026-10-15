@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { signUp } from '../../shared/lib/data';
+import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
 import { 
   ArrowLeft, 
   ArrowRight,
@@ -36,30 +37,28 @@ export default function RegisterPage() {
   
   const [state, setState] = useState({
     loading: false,
-    error: '',
     success: false,
   });
 
   const handleRoleChange = (newRole) => {
     setRole(newRole);
     setStep(1);
-    setState((prev) => ({ ...prev, error: '' }));
   };
 
   const handleNextStep = (e) => {
     e.preventDefault();
-    setState((prev) => ({ ...prev, error: '' }));
 
     if (!name.trim()) {
-      setState((prev) => ({ ...prev, error: 'Please enter your full name.' }));
+      showErrorToast('Please enter your full name.');
       return;
     }
-    if (!email.trim() || !email.includes('@')) {
-      setState((prev) => ({ ...prev, error: 'Please enter a valid work email.' }));
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !emailRegex.test(email.trim())) {
+      showErrorToast('Please enter a valid email address.');
       return;
     }
     if (!password || password.length < 8) {
-      setState((prev) => ({ ...prev, error: 'Password must be at least 8 characters.' }));
+      showErrorToast('Password must be at least 8 characters.');
       return;
     }
 
@@ -69,34 +68,60 @@ export default function RegisterPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    if (!name.trim()) {
+      showErrorToast('Please enter your full name.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !emailRegex.test(email.trim())) {
+      showErrorToast('Please enter a valid email address.');
+      return;
+    }
+    if (!password || password.length < 8) {
+      showErrorToast('Password must be at least 8 characters.');
+      return;
+    }
+    if (role === 'recruiter' && step === 2 && !companyName.trim()) {
+      showErrorToast('Please enter your company name.');
+      return;
+    }
+
     setState({
       loading: true,
-      error: '',
       success: false,
     });
 
-    const { error } = await signUp(email, password, {
-      name,
-      role,
-      company_name: role === 'recruiter' ? companyName : undefined,
-      company_website: role === 'recruiter' ? companyWebsite : undefined,
-      company_registration_number: role === 'recruiter' ? companyRegistrationNumber : undefined,
-    });
+    try {
+      const { error } = await signUp(email.trim(), password, {
+        name: name.trim(),
+        role,
+        company_name: role === 'recruiter' ? companyName.trim() : undefined,
+        company_website: role === 'recruiter' ? companyWebsite.trim() : undefined,
+        company_registration_number: role === 'recruiter' ? companyRegistrationNumber.trim() : undefined,
+      });
 
-    setState(
-      error
-        ? {
-            loading: false,
-            error: error.message || 'Account creation failed. Please review your details and try again.',
-            success: false,
-          }
-        : {
-            loading: false,
-            error: '',
-            success: true,
-          },
-    );
+      if (error) {
+        showErrorToast(error, 'Account creation failed. Please check your details and try again.');
+        setState({
+          loading: false,
+          success: false,
+        });
+      } else {
+        showSuccessToast('Account created successfully! Please check your email to verify.');
+        setState({
+          loading: false,
+          success: true,
+        });
+      }
+    } catch (err) {
+      showErrorToast(err, 'An unexpected network error occurred.');
+      setState({
+        loading: false,
+        success: false,
+      });
+    }
   };
+
 
   return (
     <div className="jb-app-auth">
@@ -197,12 +222,6 @@ export default function RegisterPage() {
                     : 'Select your account type and start in seconds.'}
                 </p>
               </div>
-
-              {state.error && (
-                <div className="jb-alert-banner">
-                  <span>{state.error}</span>
-                </div>
-              )}
 
               {state.success ? (
                 <div className="jb-success-box">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../shared/lib/supabase';
+import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
 import { 
   ArrowLeft, 
   Briefcase, 
@@ -19,27 +20,25 @@ export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+      showErrorToast('Password must be at least 8 characters long.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match. Please re-enter.');
+      showErrorToast('Passwords do not match. Please re-enter.');
       return;
     }
 
     if (!supabase) {
-      setError('Supabase authentication is not configured.');
+      showErrorToast('Supabase authentication is not configured.');
       return;
     }
 
@@ -51,12 +50,13 @@ export default function ResetPasswordPage() {
       });
 
       if (updateError) {
-        setError(updateError.message || 'Failed to update password. Your reset link may have expired.');
+        showErrorToast(updateError, 'Failed to update password. Your reset link may have expired.');
       } else {
+        showSuccessToast('Password updated successfully! You can now sign in.');
         setSuccess(true);
       }
     } catch (err) {
-      setError(err?.message || 'An unexpected error occurred. Please try again.');
+      showErrorToast(err, 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -155,12 +155,6 @@ export default function ResetPasswordPage() {
                   Enter your new password below. It must be at least 8 characters long.
                 </p>
               </div>
-
-              {error && (
-                <div className="jb-alert-banner">
-                  <span>{error}</span>
-                </div>
-              )}
 
               {success ? (
                 <div className="jb-success-box">

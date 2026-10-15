@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../shared/lib/supabase';
+import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
 import { 
   ArrowLeft, 
   Briefcase, 
@@ -15,32 +16,36 @@ import forgotHeroImg from '../../assets/images/forgot-hero.jpg';
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
 
-    if (!supabase) {
-      setError('Supabase authentication is not configured.');
-      setLoading(false);
+    if (!email.trim() || !email.includes('@')) {
+      showErrorToast('Please enter a valid email address.');
       return;
     }
 
+    if (!supabase) {
+      showErrorToast('Supabase authentication is not configured.');
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset-password`,
       });
 
       if (resetError) {
-        setError(resetError.message || 'Could not send reset link. Please check the email and try again.');
+        showErrorToast(resetError, 'Could not send reset link. Please verify your email and try again.');
       } else {
+        showSuccessToast('Password reset link sent! Please check your inbox.');
         setSuccess(true);
       }
     } catch (err) {
-      setError(err?.message || 'An unexpected error occurred. Please try again.');
+      showErrorToast(err, 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -139,12 +144,6 @@ export default function ForgotPasswordPage() {
                   Enter your registered email address and we'll send you a secure link to reset it.
                 </p>
               </div>
-
-              {error && (
-                <div className="jb-alert-banner">
-                  <span>{error}</span>
-                </div>
-              )}
 
               {success ? (
                 <div className="jb-success-box">

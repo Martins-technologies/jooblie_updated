@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
+import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
 
 const emptyForm = {
   title: '', category_id: '', workplace_type: 'onsite', employment_type: 'full_time',
@@ -57,8 +58,12 @@ export default function PostJobPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!company) return setError('Your recruiter account is not linked to a company.');
-    setLoading(true); setError('');
+    if (!company) {
+      showErrorToast('Your recruiter account is not linked to a company.');
+      return;
+    }
+    setLoading(true);
+    setError('');
     try {
       const salaryMin = form.salary_min === '' ? null : Number(form.salary_min);
       const salaryMax = form.salary_max === '' ? null : Number(form.salary_max);
@@ -82,8 +87,10 @@ export default function PostJobPage() {
         description: form.description.trim(),
       };
       await apiRequest('/recruiter/jobs', { method: 'POST', auth: true, body: payload });
+      showSuccessToast('Job listing submitted for review!');
       navigate('/my-jobs', { state: { successMsg: 'Job submitted for review.' } });
     } catch (err) {
+      showErrorToast(err, 'Failed to submit the job.');
       setError(err.message || 'Failed to submit the job.');
     } finally {
       setLoading(false);

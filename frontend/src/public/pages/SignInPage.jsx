@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signIn } from '../../shared/lib/data';
 import { useAuth, dashboardPathForRole } from '../../shared/context/AuthContext';
+import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
 import { 
   ArrowLeft, 
   Briefcase, 
@@ -18,7 +19,6 @@ export default function SignInPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
@@ -27,22 +27,37 @@ export default function SignInPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setLoading(true);
-    setError('');
 
-    const { data, error: authError } = await signIn(email, password);
-
-    if (authError || !data?.session) {
-      setError(authError?.message || 'Invalid email or password. Please try again.');
-      setLoading(false);
+    if (!email.trim()) {
+      showErrorToast('Please enter your email address.');
+      return;
+    }
+    if (!password) {
+      showErrorToast('Please enter your password.');
       return;
     }
 
-    const profile = await auth.refreshProfile(data.session);
-    const fallback = dashboardPathForRole(profile?.role);
-    const target = location.state?.from || fallback;
+    setLoading(true);
 
-    navigate(target, { replace: true });
+    try {
+      const { data, error: authError } = await signIn(email.trim(), password);
+
+      if (authError || !data?.session) {
+        showErrorToast(authError, 'Invalid email or password. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      showSuccessToast('Signed in successfully! Welcome back.');
+      const profile = await auth.refreshProfile(data.session);
+      const fallback = dashboardPathForRole(profile?.role);
+      const target = location.state?.from || fallback;
+
+      navigate(target, { replace: true });
+    } catch (err) {
+      showErrorToast(err, 'Could not complete sign in. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -136,12 +151,6 @@ export default function SignInPage() {
                 <h2 className="jb-card-heading">Sign in to Jooblie</h2>
                 <p className="jb-card-subtext">Enter your credentials to access your account.</p>
               </div>
-
-              {error && (
-                <div className="jb-alert-banner">
-                  <span>{error}</span>
-                </div>
-              )}
 
               <form onSubmit={handleSubmit} className="jb-card-form">
                 <div className="jb-field-block">
