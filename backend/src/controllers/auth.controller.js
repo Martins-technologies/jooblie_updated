@@ -305,7 +305,8 @@ export const me = asyncHandler(async (req, res) => {
 });
 
 export const updateProfile = asyncHandler(async (req, res) => {
-  const updates = { ...req.body };
+  // Prevent any privilege escalation or immutable field modification
+  const { role, status, id, email, recruiter_company_id, ...updates } = req.body;
 
   const { data, error } = await req.db
     .from('profiles')

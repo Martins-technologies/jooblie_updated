@@ -20,6 +20,8 @@ const schema = z.object({
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   WRITE_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   WRITE_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
+
+  INITIAL_ADMIN_EMAIL: z.string().trim().email().optional().or(z.literal('')).transform((value) => value || undefined),
 });
 
 const result = schema.safeParse(process.env);

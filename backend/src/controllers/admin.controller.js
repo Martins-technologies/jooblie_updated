@@ -196,6 +196,38 @@ export const changeUserRole = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'You cannot remove your own admin access.', 'SELF_ROLE_CHANGE_BLOCKED');
   }
 
+  // Fetch the target user to verify existence and check their current role
+  const { data: targetProfile, error: targetError } = await serviceDb
+    .from('profiles')
+    .select('id,role,status,email,full_name')
+    .eq('id', req.params.userId)
+    .maybeSingle();
+
+  if (targetError || !targetProfile) {
+    throw new ApiError(404, 'User not found.', 'USER_NOT_FOUND');
+  }
+
+  // Prevent demotion of the last active administrator
+  if (targetProfile.role === 'admin' && req.body.role !== 'admin') {
+    const { count, error: countError } = await serviceDb
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'admin')
+      .eq('status', 'active');
+
+    if (countError) {
+      throw new ApiError(500, 'Could not verify administrator count.', 'ADMIN_COUNT_FAILED');
+    }
+
+    if ((count || 0) <= 1) {
+      throw new ApiError(
+        400,
+        'Cannot demote the last active administrator. Another active administrator must exist first.',
+        'LAST_ADMIN_DEMOTION_BLOCKED',
+      );
+    }
+  }
+
   const { data, error } = await serviceDb
     .from('profiles')
     .update({ role: req.body.role })
@@ -209,7 +241,11 @@ export const changeUserRole = asyncHandler(async (req, res) => {
     action: 'admin.user.role.update',
     entityType: 'profile',
     entityId: data.id,
-    metadata: { role: data.role },
+    metadata: {
+      previousRole: targetProfile.role,
+      newRole: data.role,
+      email: data.email,
+    },
   });
 
   res.json({ profile: data });
