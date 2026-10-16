@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { authLimiter, writeLimiter } from './middleware/security.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { siteContext } from './middleware/siteContext.js';
@@ -12,6 +11,8 @@ import {
   companyUpdateSchema,
   jobCreateSchema,
   jobUpdateSchema,
+  adminJobUpdateSchema,
+  notificationPreferencesSchema,
   adminJobStatusSchema,
   adminRoleSchema,
   authSignInSchema,
@@ -59,11 +60,16 @@ router.post('/auth/sign-in', authLimiter, siteContext, validate(authSignInSchema
 router.post('/auth/sign-up', authLimiter, siteContext, validate(authSignUpSchema), authController.signUp);
 router.get('/auth/me', requireAuth, authController.me);
 router.patch('/auth/profile', requireAuth, writeLimiter, validate(profileSchema), authController.updateProfile);
+router.get('/auth/notification-preferences', requireAuth, authController.notificationPreferences);
+router.patch('/auth/notification-preferences', requireAuth, writeLimiter, validate(notificationPreferencesSchema), authController.updateNotificationPreferences);
 
 const seeker = Router();
 seeker.use(requireAuth, requireRole('job_seeker'));
 seeker.use(siteContext);
 seeker.get('/dashboard', seekerController.dashboard);
+seeker.get('/applications', seekerController.listApplications);
+seeker.get('/saved-jobs/status', seekerController.savedJobStatus);
+seeker.get('/saved-jobs', seekerController.listSavedJobs);
 seeker.get('/recommended-jobs', seekerController.recommendedJobs);
 seeker.get('/resumes', seekerController.listResumes);
 seeker.get('/resume-url', seekerController.getOwnResumeUrl);
@@ -95,7 +101,7 @@ admin.get('/portals', adminController.listPortals);
 admin.get('/portals/:slug', adminController.getPortal);
 admin.get('/jobs', adminController.listJobs);
 admin.get('/jobs/:jobId', adminController.getJob);
-admin.patch('/jobs/:jobId', writeLimiter, validate(jobUpdateSchema.extend({ moderation_note: z.string().trim().max(5000).optional() })), adminController.updateJob);
+admin.patch('/jobs/:jobId', writeLimiter, validate(adminJobUpdateSchema), adminController.updateJob);
 admin.delete('/jobs/:jobId', writeLimiter, adminController.deleteJob);
 admin.get('/users', adminController.listUsers);
 admin.patch('/users/:userId/role', writeLimiter, validate(adminRoleSchema), adminController.changeUserRole);

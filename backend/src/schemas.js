@@ -84,6 +84,17 @@ export const jobUpdateSchema = z.object({
   status: z.enum(['pending_review', 'active', 'closed']).optional(),
 });
 
+export const adminJobUpdateSchema = jobUpdateSchema.extend({
+  status: z.enum(['pending_review', 'active', 'closed', 'expired', 'removed']).optional(),
+  moderation_note: z.string().trim().max(5000).optional(),
+});
+
+export const notificationPreferencesSchema = z.object({
+  email_new_applicant: z.boolean(),
+  email_daily_summary: z.boolean(),
+  email_marketing: z.boolean(),
+}).strict();
+
 export const applicationSchema = z.object({
   cover_letter: optionalText(10_000),
   resume_path: optionalText(1000),

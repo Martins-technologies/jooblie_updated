@@ -18,7 +18,7 @@ import TrustedEmployers from '../../shared/components/TrustedEmployers';
 import Reveal from '../../shared/components/Reveal';
 import { EmptyState, LoadingState } from '../../shared/components/StatusMessage';
 import usePublicData from '../../shared/hooks/usePublicData';
-import { focusCategories } from '../../shared/config/site';
+import { focusCategories, SITE_NAME } from '../../shared/config/site';
 
 import heroPeopleImage from '../../shared/assets/images/hero/01_hero_people.webp';
 import jobSeekerImage from '../../shared/assets/images/cta/05_for_job_seekers.webp';
@@ -68,7 +68,7 @@ export default function HomePage() {
               <h1>
                 Find the right job.
                 <br />
-                Faster with <span>Jooblie.</span>
+                Faster with <span>{SITE_NAME}.</span>
               </h1>
               <p>
                 Explore thousands of jobs across multiple industries.

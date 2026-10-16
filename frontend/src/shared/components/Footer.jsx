@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Linkedin, Facebook, Instagram, Mail } from 'lucide-react';
 import Logo from './Logo';
 import Reveal from './Reveal';
+import { SITE_NAME } from '../config/site';
 
 const groups = [
   {
@@ -28,7 +29,7 @@ const groups = [
       ['About Us', '/about'],
       ['Contact Us', '/contact'],
       ['Resources', '/resources'],
-      ['Jooblie Categories', '/categories'],
+      ['Job Categories', '/categories'],
     ],
   },
   {
@@ -50,12 +51,12 @@ export default function Footer() {
       <Reveal className="container footer__grid" stagger>
         <div className="footer__brand">
           <Logo />
-          <p>Jooblie connects job seekers and employers across specialist hiring categories through one central platform.</p>
+          <p>{SITE_NAME} connects job seekers and employers across specialist hiring categories through one central platform.</p>
           <div className="footer__socials" aria-label="Social links">
             <span aria-hidden="true"><Facebook size={17} /></span>
             <span aria-hidden="true"><Linkedin size={17} /></span>
             <span aria-hidden="true"><Instagram size={17} /></span>
-            {supportEmail && <a href={`mailto:${supportEmail}`} aria-label="Email Jooblie"><Mail size={17} /></a>}
+            {supportEmail && <a href={`mailto:${supportEmail}`} aria-label={`Email ${SITE_NAME}`}><Mail size={17} /></a>}
           </div>
         </div>
 
@@ -68,7 +69,7 @@ export default function Footer() {
       </Reveal>
 
       <div className="container footer__bottom">
-        <span>© {new Date().getFullYear()} Jooblie. All rights reserved.</span>
+        <span>© {new Date().getFullYear()} {SITE_NAME}. All rights reserved.</span>
         <span>One platform. Specialist hiring journeys.</span>
       </div>
     </footer>

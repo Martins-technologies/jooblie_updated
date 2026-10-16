@@ -7,6 +7,7 @@ import SearchPanel from '../../shared/components/SearchPanel';
 import { EmptyState } from '../../shared/components/StatusMessage';
 import { searchJobs } from '../../shared/lib/data';
 import { focusCategories } from '../../shared/config/site';
+import useJobBookmark from '../../shared/hooks/useJobBookmark';
 import { timeAgo, formatSalary, stripHtml } from '../../shared/lib/format';
 import { 
   MapPin, 
@@ -84,32 +85,7 @@ const JobCard = ({ job }) => {
   const displayWorkplace = isRemote ? 'Remote' : (workplaceType || null);
   const postedTime = createdAt ? timeAgo(createdAt) : (job.postedAt || "Recently");
 
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    try {
-      const values = JSON.parse(localStorage.getItem('jooblie:saved-jobs') || '[]');
-      setSaved(values.map(String).includes(String(id)));
-    } catch {
-      setSaved(false);
-    }
-  }, [id]);
-
-  const handleToggleSaved = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      const values = JSON.parse(localStorage.getItem('jooblie:saved-jobs') || '[]');
-      const strId = String(id);
-      const next = values.includes(strId)
-        ? values.filter((v) => v !== strId)
-        : [...values, strId];
-      localStorage.setItem('jooblie:saved-jobs', JSON.stringify(next));
-      setSaved(next.includes(strId));
-    } catch {
-      setSaved((prev) => !prev);
-    }
-  };
+  const { saved, loading: saving, error: saveError, toggleSaved: handleToggleSaved } = useJobBookmark(id);
 
   // Clean description snippet
   const cleanSnippet = useMemo(() => {
@@ -159,8 +135,10 @@ const JobCard = ({ job }) => {
               type="button"
               className={`jb-card-bookmark-btn ${saved ? 'is-saved' : ''}`}
               onClick={handleToggleSaved}
-              title={saved ? "Remove from saved jobs" : "Save this job"}
+              title={saveError ? 'Saved jobs could not be loaded. Reload to try again.' : (saved ? 'Remove from saved jobs' : 'Save this job')}
               aria-label={saved ? "Remove from saved jobs" : "Save this job"}
+              aria-pressed={saved}
+              disabled={saving || Boolean(saveError)}
             >
               <Bookmark size={14} fill={saved ? "#0066f5" : "none"} color={saved ? "#0066f5" : "#94a3b8"} strokeWidth={2.2} />
             </button>

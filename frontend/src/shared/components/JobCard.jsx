@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import {
   Bookmark,
   Briefcase,
@@ -13,8 +12,7 @@ import {
 import { Link } from 'react-router-dom';
 import { categoryFallbackImages, jobIllustrations } from '../config/site';
 import { formatSalary } from '../lib/format';
-import { apiRequest } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
+import useJobBookmark from '../hooks/useJobBookmark';
 import CompanyLogo from './CompanyLogo';
 
 const categoryIcons = {
@@ -26,56 +24,7 @@ const categoryIcons = {
 };
 
 export default function JobCard({ job, variant = 'row' }) {
-  const auth = useAuth();
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (auth.role === 'job_seeker') return;
-
-    try {
-      const values = JSON.parse(localStorage.getItem('jooblie:saved-jobs') || '[]');
-      setSaved(values.map(String).includes(String(job.id)));
-    } catch {
-      setSaved(false);
-    }
-  }, [job.id, auth.role]);
-
-  const toggleSaved = async () => {
-    if (saving) return;
-
-    if (auth.role === 'job_seeker') {
-      setSaving(true);
-      const next = !saved;
-      setSaved(next);
-
-      try {
-        await apiRequest(`/job-seeker/jobs/${job.id}/save`, {
-          method: next ? 'POST' : 'DELETE',
-          auth: true,
-        });
-      } catch {
-        setSaved(!next);
-      } finally {
-        setSaving(false);
-      }
-
-      return;
-    }
-
-    try {
-      const values = JSON.parse(localStorage.getItem('jooblie:saved-jobs') || '[]').map(String);
-      const id = String(job.id);
-      const next = values.includes(id)
-        ? values.filter((value) => value !== id)
-        : [...values, id];
-
-      localStorage.setItem('jooblie:saved-jobs', JSON.stringify(next));
-      setSaved(next.includes(id));
-    } catch {
-      setSaved((value) => !value);
-    }
-  };
+  const { saved, loading: saving, error: saveError, toggleSaved } = useJobBookmark(job.id);
 
   const image = jobIllustrations[job.categorySlug] || categoryFallbackImages[job.categorySlug];
   const salary = formatSalary(job);
@@ -169,12 +118,8 @@ export default function JobCard({ job, variant = 'row' }) {
         type="button"
         aria-label={saved ? 'Remove saved job' : 'Save job'}
         aria-pressed={saved}
-        title={
-          auth.role === 'job_seeker'
-            ? (saved ? 'Remove saved job' : 'Save job')
-            : 'Sign in as a job seeker to sync saved jobs'
-        }
-        disabled={saving}
+        title={saveError ? 'Saved jobs could not be loaded. Reload to try again.' : (saved ? 'Remove saved job' : 'Save job')}
+        disabled={saving || Boolean(saveError)}
         onClick={toggleSaved}
       >
         <Bookmark

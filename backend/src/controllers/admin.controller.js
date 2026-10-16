@@ -1,6 +1,7 @@
 import { serviceDb } from '../config/supabase.js';
 import { ApiError, asyncHandler, parsePagination } from '../utils/http.js';
 import { writeAuditLog } from '../utils/audit.js';
+import { savePortalJob } from '../utils/portalJobs.js';
 
 
 const adminJobSelect = `
@@ -121,7 +122,7 @@ export const getJob = asyncHandler(async (req, res) => {
   if (error) throw new ApiError(500, 'Admin job could not be loaded.', 'ADMIN_JOB_FAILED', error.message);
   if (!job) throw new ApiError(404, 'Job not found.', 'JOB_NOT_FOUND');
   const [applicationsRes, viewsRes, sitesRes] = await Promise.all([
-    serviceDb.from('applications').select('id,status,created_at,profile_id', { count: 'exact' }).eq('job_id', job.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(25),
+    serviceDb.from('applications').select('id,status,created_at,applicant_id', { count: 'exact' }).eq('job_id', job.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(25),
     serviceDb.from('job_views').select('id,viewed_on,site_id', { count: 'exact' }).eq('job_id', job.id).order('viewed_on', { ascending: false }).limit(30),
     serviceDb.from('job_sites').select('site_id,sites:site_id(id,slug,name,domain,site_type,is_active)').eq('job_id', job.id),
   ]);
@@ -130,17 +131,22 @@ export const getJob = asyncHandler(async (req, res) => {
 });
 
 export const updateJob = asyncHandler(async (req, res) => {
-  const { status, moderation_note, ...fields } = req.body;
-  const update = { ...fields, updated_at: new Date().toISOString() };
-  if (status) update.status = status;
-  if (status === 'active') { update.published_at = new Date().toISOString(); update.removed_reason = null; }
-  if (status === 'removed') update.removed_reason = moderation_note || 'Removed by administrator';
-  if (status === 'pending_review') { update.published_at = null; update.removed_reason = null; }
-  const { data, error } = await serviceDb.from('jobs').update(update).eq('id', req.params.jobId).is('deleted_at', null).select(adminJobSelect).single();
-  if (error) throw new ApiError(400, 'Job could not be updated.', 'ADMIN_JOB_UPDATE_FAILED', error.message);
-  await writeAuditLog(req, { action: 'admin.job.update', entityType: 'job', entityId: data.id, companyId: data.company_id, metadata: { status: data.status, fields: Object.keys(update).filter((key) => key !== 'updated_at') } });
+  const data = await savePortalJob(serviceDb, {
+    actorId: req.user.id,
+    jobId: req.params.jobId,
+    body: adminJobBody(req.body),
+    admin: true,
+  });
+  await writeAuditLog(req, { action: 'admin.job.update', entityType: 'job', entityId: data.id, companyId: data.company_id, metadata: { status: data.status, fields: Object.keys(req.body) } });
   res.json({ job: data });
 });
+
+function adminJobBody(body) {
+  const next = { ...body };
+  if (body.status === 'removed') next.removed_reason = body.moderation_note || 'Removed by administrator';
+  if (body.status === 'active' || body.status === 'pending_review') next.removed_reason = null;
+  return next;
+}
 
 export const deleteJob = asyncHandler(async (req, res) => {
   const now = new Date().toISOString();
@@ -252,31 +258,12 @@ export const changeUserRole = asyncHandler(async (req, res) => {
 });
 
 export const moderateJob = asyncHandler(async (req, res) => {
-  const now = new Date().toISOString();
-  const update = {
-    status: req.body.status,
-    updated_at: now,
-  };
-
-  if (req.body.status === 'active') {
-    update.published_at = now;
-    update.removed_reason = null;
-  } else if (req.body.status === 'removed') {
-    update.removed_reason = req.body.moderation_note || 'Removed by administrator';
-  } else if (req.body.status === 'pending_review') {
-    update.published_at = null;
-    update.removed_reason = null;
-  }
-
-  const { data, error } = await serviceDb
-    .from('jobs')
-    .update(update)
-    .eq('id', req.params.jobId)
-    .is('deleted_at', null)
-    .select('id,title,status,company_id,published_at,removed_reason')
-    .single();
-
-  if (error) throw new ApiError(400, 'Job moderation failed.', 'JOB_MODERATION_FAILED');
+  const data = await savePortalJob(serviceDb, {
+    actorId: req.user.id,
+    jobId: req.params.jobId,
+    body: adminJobBody(req.body),
+    admin: true,
+  });
 
   await writeAuditLog(req, {
     action: 'admin.job.moderate',

@@ -12,6 +12,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "provision-admin": "node scripts/provision-admin.js",
+    "test": "node --test",
     "check": "node --check server.js && node --check src/app.js"
   },
   "dependencies": {

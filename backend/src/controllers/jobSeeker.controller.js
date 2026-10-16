@@ -1,6 +1,7 @@
 import { serviceDb } from '../config/supabase.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
 import { writeAuditLog } from '../utils/audit.js';
+import { loadSeekerHistory, loadSavedJobStatus } from '../utils/seekerHistory.js';
 
 /* =========================================================
    COMMON JOB SELECT
@@ -26,6 +27,18 @@ const jobSelect = `
     sector_id
   )
 `;
+
+export const listApplications = asyncHandler(async (req, res) => {
+  res.json(await loadSeekerHistory(serviceDb, { userId: req.user.id, query: req.query, kind: 'applications', jobSelect }));
+});
+
+export const listSavedJobs = asyncHandler(async (req, res) => {
+  res.json(await loadSeekerHistory(serviceDb, { userId: req.user.id, query: req.query, kind: 'saved', jobSelect }));
+});
+
+export const savedJobStatus = asyncHandler(async (req, res) => {
+  res.json(await loadSavedJobStatus(serviceDb, req.user.id, req.query.jobIds));
+});
 
 /* =========================================================
    CHECK JOB VISIBILITY

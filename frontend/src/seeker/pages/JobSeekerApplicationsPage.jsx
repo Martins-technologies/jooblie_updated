@@ -1,27 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, FileText, Search } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
-import { apiRequest } from '../../shared/lib/api';
+import useAccountHistory from '../../shared/hooks/useAccountHistory';
+import HistoryPagination from '../../shared/components/HistoryPagination';
 
 export default function JobSeekerApplicationsPage() {
-  const [loading, setLoading] = useState(true);
-  const [applications, setApplications] = useState([]);
-
-  const loadApplications = useCallback(async () => {
-    try {
-      const result = await apiRequest('/job-seeker/dashboard', { auth: true });
-      setApplications(result?.applications || []);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { loadApplications(); }, [loadApplications]);
+  const { items: applications, loading, error, page, pageSize, total, setPage, reload } = useAccountHistory('/job-seeker/applications');
 
   return (
     <DashboardLayout title="My Applications" subtitle="Track the status of roles you have applied for.">
       <style>{premiumCSS}</style>
       <div className="dash-stack">
+        {error && <div className="error-banner" role="alert">{error} <button onClick={reload}>Try again</button></div>}
         <section className="dash-panel">
           <div className="dash-heading">
             <h2>Application History</h2>
@@ -32,7 +22,8 @@ export default function JobSeekerApplicationsPage() {
             <div className="applications-list">
               {applications.map((app) => <ApplicationRow key={app.id} application={app} />)}
             </div>
-          ) : <Empty text="You haven't submitted any applications yet." icon={<FileText size={32} />} />}
+          ) : !error && <Empty text="You haven't submitted any applications yet." icon={<FileText size={32} />} />}
+          <HistoryPagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={setPage} />
         </section>
       </div>
     </DashboardLayout>

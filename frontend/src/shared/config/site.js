@@ -6,8 +6,12 @@ import truckingImage from '../assets/images/categories/05_trucking.webp';
 import fullStackImage from '../assets/images/jobs/01_full_stack_developer.webp';
 import restaurantJobImage from '../assets/images/jobs/02_restaurant_shift_manager.webp';
 import farmJobImage from '../assets/images/jobs/03_farm_equipment_operator.webp';
+import { resolvePortalConfig } from './portalConfig';
 
-export const SITE_SLUG = import.meta.env.VITE_SITE_SLUG || 'jooblie';
+const portal = resolvePortalConfig(import.meta.env);
+export const SITE_SLUG = portal.slug;
+export const SITE_NAME = portal.name;
+export const SITE_DESCRIPTION = portal.description;
 
 export const focusCategories = [
   {

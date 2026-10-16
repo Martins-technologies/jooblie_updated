@@ -1,24 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bookmark, BriefcaseBusiness, Building2, Check, MapPin, Search } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
+import useAccountHistory from '../../shared/hooks/useAccountHistory';
+import HistoryPagination from '../../shared/components/HistoryPagination';
 
 export default function JobSeekerSavedJobsPage() {
-  const [loading, setLoading] = useState(true);
-  const [savedJobs, setSavedJobs] = useState([]);
+  const { items: savedJobs, loading, error: loadError, page, pageSize, total, setPage, reload } = useAccountHistory('/job-seeker/saved-jobs');
   const [savingJobs, setSavingJobs] = useState(new Set());
   const [error, setError] = useState('');
-
-  const loadSavedJobs = useCallback(async () => {
-    try {
-      const result = await apiRequest('/job-seeker/dashboard', { auth: true });
-      setSavedJobs(result?.savedJobs || result?.saved_jobs || []);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { loadSavedJobs(); }, [loadSavedJobs]);
 
   const toggleSaveJob = async (jobId) => {
     const id = String(jobId);
@@ -28,7 +19,7 @@ export default function JobSeekerSavedJobsPage() {
     try {
       // Kyunke yeh page hi 'Saved Jobs' ka hai, to toggle ka matlab Delete hi hoga yahan
       await apiRequest(`/job-seeker/jobs/${jobId}/save`, { method: 'DELETE', auth: true });
-      await loadSavedJobs();
+      reload();
     } catch (requestError) { setError(requestError.message || 'Saved job could not be removed.'); }
     finally { setSavingJobs(c => { const next = new Set(c); next.delete(id); return next; }); }
   };
@@ -38,6 +29,7 @@ export default function JobSeekerSavedJobsPage() {
       <style>{premiumCSS}</style>
       <div className="dash-stack">
         {error && <div className="error-banner">{error}</div>}
+        {loadError && <div className="error-banner" role="alert">{loadError} <button onClick={reload}>Try again</button></div>}
         <section className="dash-panel">
           <div className="dash-heading">
             <h2>Bookmarked Roles</h2>
@@ -53,7 +45,8 @@ export default function JobSeekerSavedJobsPage() {
                 return <DashboardJobCard key={saved.job_id || job.id} job={job} saved={true} onSave={toggleSaveJob} />;
               })}
             </div>
-          ) : <Empty text="You haven't saved any jobs yet." icon={<Bookmark size={32} />} />}
+          ) : !loadError && <Empty text="You haven't saved any jobs yet." icon={<Bookmark size={32} />} />}
+          <HistoryPagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={setPage} />
         </section>
       </div>
     </DashboardLayout>

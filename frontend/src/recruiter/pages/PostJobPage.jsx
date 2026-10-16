@@ -8,12 +8,18 @@ import {
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
+import { SITE_SLUG } from '../../shared/config/site';
+
+const audiencePortals = [
+  { slug: 'aboriginal', label: 'Aboriginal Jobline' },
+  { slug: 'newcomers', label: 'Newcomer Jobline' },
+];
 
 const emptyForm = {
   title: '', category_id: '', workplace_type: 'onsite', employment_type: 'full_time',
   experience_level: 'mid_level', city: '', province: '', skills: '',
   salary_min: '', salary_max: '', salary_currency: 'CAD', salary_period: 'yearly',
-  description: '',
+  description: '', audience_sites: [],
 };
 
 export default function PostJobPage() {
@@ -85,10 +91,11 @@ export default function PostJobPage() {
         salary_period: form.salary_period,
         skills: form.skills.split(',').map((skill) => skill.trim()).filter(Boolean).slice(0, 50),
         description: form.description.trim(),
+        audience_sites: form.audience_sites,
       };
       await apiRequest('/recruiter/jobs', { method: 'POST', auth: true, body: payload });
-      showSuccessToast('Job listing submitted for review!');
-      navigate('/my-jobs', { state: { successMsg: 'Job submitted for review.' } });
+      showSuccessToast('Job listing published successfully.');
+      navigate('/my-jobs', { state: { successMsg: 'Job published successfully.' } });
     } catch (err) {
       showErrorToast(err, 'Failed to submit the job.');
       setError(err.message || 'Failed to submit the job.');
@@ -100,7 +107,7 @@ export default function PostJobPage() {
   return (
     <DashboardLayout
       title="Post a Job"
-      subtitle="Create a complete, professional job listing. New jobs enter moderation before they become public."
+      subtitle="Create a job listing and publish it to the relevant hiring portals."
       actions={<Link to="/dashboard/recruiter" className="button button--secondary"><ArrowLeft size={16} /> Back to Dashboard</Link>}
     >
       <div className="dashboard-panel" style={{ maxWidth: 900, margin: '0 auto', padding: '2rem' }}>
@@ -136,9 +143,24 @@ export default function PostJobPage() {
             </div>
 
             <Field label="Required skills" icon={<Wrench size={16} />} hint="Separate skills with commas"><input name="skills" value={form.skills} onChange={handleChange} placeholder="React, Node.js, TypeScript, PostgreSQL" /></Field>
+            <fieldset style={{ border: '1px solid #dbe4ef', borderRadius: 10, padding: '1rem' }}>
+              <legend style={{ fontWeight: 700 }}>Additional audience portals</legend>
+              <p style={{ margin: '0 0 12px', color: '#6b7280' }}>Your job also appears on its origin portal, Jooblie, and matching category portals.</p>
+              {audiencePortals.map(({ slug, label }) => (
+                <label key={slug} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                  <input type="checkbox" checked={slug === SITE_SLUG || form.audience_sites.includes(slug)} disabled={slug === SITE_SLUG} onChange={(event) => {
+                    const checked = event.target.checked;
+                    setForm((current) => ({ ...current, audience_sites: checked
+                      ? [...current.audience_sites, slug]
+                      : current.audience_sites.filter((value) => value !== slug) }));
+                  }} />
+                  {label}{slug === SITE_SLUG ? ' (origin portal)' : ''}
+                </label>
+              ))}
+            </fieldset>
             <Field label="Job description" icon={<AlignLeft size={16} />}><textarea required minLength={20} maxLength={30000} name="description" value={form.description} onChange={handleChange} placeholder="Responsibilities, qualifications, benefits, working hours, and anything candidates need to know..." rows={12} /></Field>
 
-            <button className="button button--primary" type="submit" disabled={loading || !company} style={{ padding: '1rem', fontSize: '1rem' }}>{loading ? <><Loader2 className="spinner" size={18} /> Submitting for review...</> : 'Submit Job for Review'}</button>
+            <button className="button button--primary" type="submit" disabled={loading || !company} style={{ padding: '1rem', fontSize: '1rem' }}>{loading ? <><Loader2 className="spinner" size={18} /> Publishing job...</> : 'Publish Job'}</button>
           </form>
         )}
       </div>

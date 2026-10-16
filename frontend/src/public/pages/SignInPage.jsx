@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SITE_NAME } from '../../shared/config/site';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signIn } from '../../shared/lib/data';
 import { useAuth, dashboardPathForRole } from '../../shared/context/AuthContext';
@@ -64,11 +65,11 @@ export default function SignInPage() {
     <div className="jb-app-auth">
       {/* Top Application Header */}
       <header className="jb-app-nav">
-        <Link to="/" className="jb-app-brand" aria-label="Jooblie Home">
+        <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
           <div className="jb-brand-mark">
             <Briefcase size={18} strokeWidth={2.4} color="#ffffff" />
           </div>
-          <span className="jb-brand-title">Jooblie</span>
+          <span className="jb-brand-title">{SITE_NAME}</span>
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -96,7 +97,7 @@ export default function SignInPage() {
                 starts here.
               </h1>
               <p className="jb-hero-desc">
-                Sign in to your Jooblie workspace to manage applications and access matched roles.
+                Sign in to your {SITE_NAME} workspace to manage applications and access matched roles.
               </p>
             </div>
 
@@ -148,7 +149,7 @@ export default function SignInPage() {
             <div className="jb-auth-card">
               <div className="jb-card-head">
                 <span className="jb-eyebrow-tag">WORKSPACE LOGIN</span>
-                <h2 className="jb-card-heading">Sign in to Jooblie</h2>
+                <h2 className="jb-card-heading">Sign in to {SITE_NAME}</h2>
                 <p className="jb-card-subtext">Enter your credentials to access your account.</p>
               </div>
 
@@ -213,7 +214,7 @@ export default function SignInPage() {
               </form>
 
               <div className="jb-card-foot">
-                <span className="jb-foot-muted">New to Jooblie? </span>
+                <span className="jb-foot-muted">New to {SITE_NAME}? </span>
                 <Link to="/register" className="jb-foot-link">
                   Create an account
                 </Link>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SITE_NAME } from '../../shared/config/site';
 import { Link, useSearchParams } from 'react-router-dom';
 import { signUp } from '../../shared/lib/data';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
@@ -127,11 +128,11 @@ export default function RegisterPage() {
     <div className="jb-app-auth">
       {/* Top Application Header */}
       <header className="jb-app-nav">
-        <Link to="/" className="jb-app-brand" aria-label="Jooblie Home">
+        <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
           <div className="jb-brand-mark">
             <Briefcase size={18} strokeWidth={2.4} color="#ffffff" />
           </div>
-          <span className="jb-brand-title">Jooblie</span>
+          <span className="jb-brand-title">{SITE_NAME}</span>
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -156,7 +157,7 @@ export default function RegisterPage() {
               <h1 className="jb-hero-title">
                 Start your<br />
                 <span className="jb-hero-accent">dream career</span><br />
-                with Jooblie.
+                with {SITE_NAME}.
               </h1>
               <p className="jb-hero-desc">
                 Join our modern talent ecosystem where top candidates connect with innovative employers.
@@ -230,7 +231,7 @@ export default function RegisterPage() {
                   </div>
                   <h3 className="jb-success-title">Account Created Successfully</h3>
                   <p className="jb-success-text">
-                    We've initialized your Jooblie account. Please check your inbox to confirm your email, then sign in to your workspace.
+                    We've initialized your {SITE_NAME} account. Please check your inbox to confirm your email, then sign in to your workspace.
                   </p>
                   <Link to="/sign-in" className="jb-primary-action-btn" style={{ textDecoration: 'none', display: 'flex', marginTop: '20px' }}>
                     Proceed to Sign In

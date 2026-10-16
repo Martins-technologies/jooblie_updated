@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SITE_NAME } from '../../shared/config/site';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../shared/lib/supabase';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
@@ -55,11 +56,11 @@ export default function ForgotPasswordPage() {
     <div className="jb-app-auth">
       {/* Top Application Header */}
       <header className="jb-app-nav">
-        <Link to="/" className="jb-app-brand" aria-label="Jooblie Home">
+        <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
           <div className="jb-brand-mark">
             <Briefcase size={18} strokeWidth={2.4} color="#ffffff" />
           </div>
-          <span className="jb-brand-title">Jooblie</span>
+          <span className="jb-brand-title">{SITE_NAME}</span>
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -87,7 +88,7 @@ export default function ForgotPasswordPage() {
                 seamlessly.
               </h1>
               <p className="jb-hero-desc">
-                Reset your password safely and get back to managing your Jooblie workspace.
+                Reset your password safely and get back to managing your {SITE_NAME} workspace.
               </p>
             </div>
 

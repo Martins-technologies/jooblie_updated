@@ -1,48 +1,8 @@
 import { serviceDb } from '../config/supabase.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
 import { writeAuditLog } from '../utils/audit.js';
-
-const audienceSlugs = new Set(['aboriginal', 'newcomers']);
-const editableJobFields = [
-  'title',
-  'company_id',
-  'category_id',
-  'province',
-  'city',
-  'is_remote',
-  'salary_min',
-  'salary_max',
-  'salary_currency',
-  'salary_period',
-  'employment_type',
-  'workplace_type',
-  'experience_level',
-  'skills',
-  'description',
-];
-
-async function primaryRecruiterCompanyId(userId) {
-  const { data: profile, error: profileError } = await serviceDb
-    .from('profiles')
-    .select('recruiter_company_id,role')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (profileError) throw new ApiError(500, 'Recruiter company could not be loaded.', 'RECRUITER_COMPANY_FAILED');
-  if (profile?.role === 'recruiter' && profile.recruiter_company_id) return profile.recruiter_company_id;
-
-  // Legacy compatibility: if an older recruiter has exactly one company membership,
-  // bind it lazily to the profile. This keeps old accounts working without allowing
-  // the browser to choose a company for a job post.
-  const ids = await recruiterCompanyIds(userId);
-  if (ids.length === 1) {
-    const [companyId] = ids;
-    await serviceDb.from('profiles').update({ recruiter_company_id: companyId }).eq('id', userId);
-    return companyId;
-  }
-
-  throw new ApiError(409, 'Your recruiter account is not linked to a single company. Please contact an administrator.', 'RECRUITER_COMPANY_NOT_BOUND');
-}
+import { savePortalJob } from '../utils/portalJobs.js';
+import { changeApplicationStatus } from '../utils/applicationStatus.js';
 
 async function recruiterCompanyIds(userId) {
   const { data, error } = await serviceDb
@@ -62,117 +22,6 @@ async function assertCompanyAccess(userId, companyId) {
   if (!ids.includes(companyId)) {
     throw new ApiError(403, 'You cannot manage jobs for this company.', 'COMPANY_FORBIDDEN');
   }
-}
-
-async function siteById(siteId) {
-  const { data, error } = await serviceDb
-    .from('sites')
-    .select('id,slug,name,site_type,sector_id,is_active')
-    .eq('id', siteId)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (error || !data) {
-    throw new ApiError(400, 'The job source site is not configured.', 'SOURCE_SITE_INVALID');
-  }
-
-  return data;
-}
-
-async function assertSourceSiteCompatibility(site, categoryId) {
-  if (!site || site.site_type === 'aggregator' || site.site_type === 'audience') return;
-
-  const { data: mappings, error: mappingError } = await serviceDb
-    .from('category_sites')
-    .select('category_id')
-    .eq('site_id', site.id);
-
-  if (mappingError) {
-    throw new ApiError(500, 'Portal category configuration could not be checked.', 'SITE_CATEGORY_CHECK_FAILED');
-  }
-
-  if ((mappings || []).length > 0) {
-    const allowed = mappings.some((row) => Number(row.category_id) === Number(categoryId));
-    if (!allowed) {
-      throw new ApiError(
-        400,
-        'The selected category does not belong to this specialist portal.',
-        'SITE_CATEGORY_MISMATCH',
-      );
-    }
-    return;
-  }
-
-  if (site.sector_id != null) {
-    const { data: category } = await serviceDb
-      .from('categories')
-      .select('id,sector_id')
-      .eq('id', categoryId)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (!category || Number(category.sector_id) !== Number(site.sector_id)) {
-      throw new ApiError(
-        400,
-        'The selected category does not belong to this specialist portal.',
-        'SITE_CATEGORY_MISMATCH',
-      );
-    }
-  }
-}
-
-async function resolveAudienceSiteIds(slugs = [], sourceSite = null) {
-  const requested = new Set((slugs || []).filter((slug) => audienceSlugs.has(slug)));
-  if (sourceSite && audienceSlugs.has(sourceSite.slug)) requested.add(sourceSite.slug);
-
-  if (!requested.size) return [];
-
-  const { data, error } = await serviceDb
-    .from('sites')
-    .select('id,slug')
-    .in('slug', [...requested])
-    .eq('is_active', true);
-
-  if (error) throw new ApiError(500, 'Audience portals could not be resolved.', 'AUDIENCE_SITE_FAILED');
-
-  const found = new Set((data || []).map((row) => row.slug));
-  const missing = [...requested].filter((slug) => !found.has(slug));
-  if (missing.length) {
-    throw new ApiError(400, `Audience portal is not configured: ${missing.join(', ')}`, 'AUDIENCE_SITE_INVALID');
-  }
-
-  return (data || []).map((row) => row.id);
-}
-
-async function replaceAudienceMappings(jobId, slugs, sourceSite) {
-  const ids = await resolveAudienceSiteIds(slugs, sourceSite);
-
-  const { error: deleteError } = await serviceDb
-    .from('job_audience_sites')
-    .delete()
-    .eq('job_id', jobId);
-
-  if (deleteError) {
-    throw new ApiError(500, 'Job audience settings could not be updated.', 'AUDIENCE_UPDATE_FAILED');
-  }
-
-  if (ids.length) {
-    const { error: insertError } = await serviceDb
-      .from('job_audience_sites')
-      .insert(ids.map((siteId) => ({ job_id: jobId, site_id: siteId })));
-
-    if (insertError) {
-      throw new ApiError(500, 'Job audience settings could not be updated.', 'AUDIENCE_UPDATE_FAILED');
-    }
-  }
-}
-
-function pickJobPayload(body) {
-  return Object.fromEntries(
-    editableJobFields
-      .filter((key) => Object.prototype.hasOwnProperty.call(body, key))
-      .map((key) => [key, body[key] === '' ? null : body[key]]),
-  );
 }
 
 const companySelectFields = 'id,name,website,registration_number,verification_document_path,logo_path,description,verification_status,status,created_at';
@@ -517,59 +366,11 @@ export const dashboard = asyncHandler(async (req, res) => {
 });
 
 export const createJob = asyncHandler(async (req, res) => {
-  const companyId = await primaryRecruiterCompanyId(req.user.id);
-  await assertCompanyAccess(req.user.id, companyId);
-  await assertSourceSiteCompatibility(req.site, req.body.category_id);
-
-  const payload = {
-    ...pickJobPayload(req.body),
-    company_id: companyId,
-    created_by: req.user.id,
-    origin_site_id: req.site.id,
-    status: 'active',
-    published_at: new Date().toISOString(),
-  };
-
-  // Derive workplace semantics server-side; never trust the browser for the remote flag.
-  if (Object.prototype.hasOwnProperty.call(req.body, 'workplace_type')) {
-    payload.is_remote = req.body.workplace_type === 'remote';
-    if (payload.is_remote) {
-      payload.city = null;
-      payload.province = null;
-    }
-  }
-
-  const { data, error } = await serviceDb
-    .from('jobs')
-    .insert(payload)
-    .select('id,title,status,company_id,category_id,origin_site_id,created_at,published_at')
-    .single();
-
-  if (error) {
-    throw new ApiError(400, 'The job could not be submitted.', 'JOB_CREATE_FAILED', error.message);
-  }
-
-  if (data.status !== 'active') {
-    const { data: activated, error: activateError } = await serviceDb
-      .from('jobs')
-      .update({
-        status: 'active',
-        published_at: data.published_at || new Date().toISOString(),
-      })
-      .eq('id', data.id)
-      .select('id,title,status,company_id,category_id,origin_site_id,created_at,published_at')
-      .single();
-    if (!activateError && activated) {
-      Object.assign(data, activated);
-    }
-  }
-
-  try {
-    await replaceAudienceMappings(data.id, req.body.audience_sites || [], req.site);
-  } catch (error) {
-    await serviceDb.from('jobs').delete().eq('id', data.id);
-    throw error;
-  }
+  const data = await savePortalJob(serviceDb, {
+    actorId: req.user.id,
+    siteId: req.site.id,
+    body: req.body,
+  });
 
   await writeAuditLog(req, {
     action: 'job.create',
@@ -587,58 +388,12 @@ export const createJob = asyncHandler(async (req, res) => {
 });
 
 export const updateJob = asyncHandler(async (req, res) => {
-  const { data: existing, error: existingError } = await serviceDb
-    .from('jobs')
-    .select('id,company_id,category_id,origin_site_id,status')
-    .eq('id', req.params.jobId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (existingError || !existing) throw new ApiError(404, 'Job not found.', 'JOB_NOT_FOUND');
-
-  await assertCompanyAccess(req.user.id, existing.company_id);
-
-  const sourceSite = await siteById(existing.origin_site_id);
-  const nextCategoryId = req.body.category_id ?? existing.category_id;
-  await assertSourceSiteCompatibility(sourceSite, nextCategoryId);
-
-  const payload = pickJobPayload(req.body);
-  if (Object.prototype.hasOwnProperty.call(req.body, 'workplace_type')) {
-    payload.is_remote = req.body.workplace_type === 'remote';
-    if (payload.is_remote) {
-      payload.city = null;
-      payload.province = null;
-    }
-  }
-  const contentChanged = Object.keys(payload).length > 0;
-
-  if (req.body.status) {
-    payload.status = req.body.status;
-    if (req.body.status === 'active') {
-      payload.published_at = new Date().toISOString();
-    }
-    if (req.body.status === 'closed') {
-      payload.published_at = existing.published_at ?? null;
-    }
-  } else if (contentChanged && existing.status === 'active') {
-    // Keep it active instead of hiding it on edit
-    payload.status = 'active';
-  }
-
-  payload.updated_at = new Date().toISOString();
-
-  const { data, error } = await serviceDb
-    .from('jobs')
-    .update(payload)
-    .eq('id', existing.id)
-    .select('id,title,status,company_id,category_id,origin_site_id,updated_at,published_at')
-    .single();
-
-  if (error) throw new ApiError(400, 'The job could not be updated.', 'JOB_UPDATE_FAILED', error.message);
-
-  if (Object.prototype.hasOwnProperty.call(req.body, 'audience_sites')) {
-    await replaceAudienceMappings(existing.id, req.body.audience_sites || [], sourceSite);
-  }
+  const data = await savePortalJob(serviceDb, {
+    actorId: req.user.id,
+    jobId: req.params.jobId,
+    siteId: req.site.id,
+    body: req.body,
+  });
 
   await writeAuditLog(req, {
     action: 'job.update',
@@ -753,16 +508,12 @@ export const getApplicationResumeUrl = asyncHandler(async (req, res) => {
 
   // Automatically mark as viewed if it was just submitted
   if (application.status === 'submitted') {
-    const now = new Date().toISOString();
-    
-    // 🔥 req.db used instead of serviceDb to pass actor auth down to RLS trigger
-    await req.db
-      .from('applications')
-      .update({
-        status: 'viewed',
-        updated_at: now,
-      })
-      .eq('id', application.id);
+    await changeApplicationStatus(req.db, {
+      applicationId: application.id,
+      expectedStatus: 'submitted',
+      status: 'viewed',
+      allowConflict: true,
+    });
   }
 
   res.json({ url: signed.signedUrl, expiresIn: 300 });
@@ -793,23 +544,11 @@ export const updateApplication = asyncHandler(async (req, res) => {
     throw new ApiError(409, `Application cannot move from ${application.status} to ${req.body.status}.`, 'INVALID_APPLICATION_TRANSITION');
   }
 
-  const now = new Date().toISOString();
-  
-  // 🔥 req.db used instead of serviceDb to pass actor auth down to RLS trigger
-  const { data, error } = await req.db
-    .from('applications')
-    .update({
-      status: req.body.status,
-      updated_at: now,
-    })
-    .eq('id', application.id)
-    .select('id,status,updated_at')
-    .single();
-
-  if (error) {
-    console.error("DB STATUS UPDATE ERROR:", error);
-    throw new ApiError(400, `DB Error: ${error.message}`, 'APPLICATION_UPDATE_FAILED');
-  }
+  const data = await changeApplicationStatus(req.db, {
+    applicationId: application.id,
+    expectedStatus: application.status,
+    status: req.body.status,
+  });
 
   await writeAuditLog(req, {
     action: 'application.status.update',

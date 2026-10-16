@@ -1,15 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User, Shield, Bell, Loader2, Save } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { useAuth } from '../../shared/context/AuthContext';
 import { apiRequest } from '../../shared/lib/api';
+import { supabase, createPasswordVerificationClient } from '../../shared/lib/supabase';
+import { changeAccountPassword } from '../../shared/lib/password';
+import { notificationPreferencesPayload } from '../../shared/lib/notificationPreferences';
+import { SITE_NAME } from '../../shared/config/site';
 
 export default function SettingsPage() {
-  const { profile } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
   const [activeTab, setActiveTab] = useState('account');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   
   // Account State (Sirf editable fields yahan rakhi hain)
   const [accountForm, setAccountForm] = useState({ 
@@ -31,6 +37,20 @@ export default function SettingsPage() {
     email_marketing: false 
   });
 
+  useEffect(() => {
+    let active = true;
+    apiRequest('/auth/notification-preferences', { auth: true })
+      .then(({ preferences }) => {
+        if (active) {
+          setNotifications(notificationPreferencesPayload(preferences));
+          setPreferencesLoaded(true);
+        }
+      })
+      .catch((err) => { if (active) setError(err.message || 'Email preferences could not be loaded.'); })
+      .finally(() => { if (active) setPreferencesLoading(false); });
+    return () => { active = false; };
+  }, []);
+
   const showSuccess = (msg) => { 
     setSuccess(msg); 
     setTimeout(() => setSuccess(''), 3000); 
@@ -42,6 +62,7 @@ export default function SettingsPage() {
     setError('');
     try {
       await apiRequest('/auth/profile', { method: 'PATCH', auth: true, body: accountForm });
+      await refreshProfile();
       showSuccess('Personal details updated successfully!');
     } catch (err) {
       setError(err.message || 'Personal details could not be updated.');
@@ -58,14 +79,38 @@ export default function SettingsPage() {
     }
     setLoading(true);
     setError('');
+    setSuccess('');
     try {
-      // Password update API call yahan aayegi
+      await changeAccountPassword({
+        authClient: supabase,
+        verificationClient: createPasswordVerificationClient(),
+        email: user?.email,
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
       showSuccess('Password updated successfully!');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (err) {
       setError(err.message || 'Password could not be updated.');
     } finally { 
       setLoading(false); 
+    }
+  };
+
+  const handlePreferencesSubmit = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const result = await apiRequest('/auth/notification-preferences', {
+        method: 'PATCH', auth: true, body: notificationPreferencesPayload(notifications),
+      });
+      setNotifications(notificationPreferencesPayload(result.preferences));
+      showSuccess('Email preferences saved.');
+    } catch (err) {
+      setError(err.message || 'Email preferences could not be saved.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -158,17 +203,18 @@ export default function SettingsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
                 <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: '#111827' }}>Email Preferences</h2>
-                <p style={{ color: '#6b7280', fontSize: '0.9rem', margin: 0 }}>Choose what kind of emails you want to receive from Jooblie.</p>
+                <p style={{ color: '#6b7280', fontSize: '0.9rem', margin: 0 }}>Choose what kind of emails you want to receive from {SITE_NAME}.</p>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <ToggleSwitch label="New Applicant Alerts" description="Get an email instantly when someone applies to your active jobs." checked={notifications.email_new_applicant} onChange={() => setNotifications(p => ({ ...p, email_new_applicant: !p.email_new_applicant }))} />
-                <ToggleSwitch label="Daily Summary Digest" description="Receive a daily summary of all your active jobs and new candidates." checked={notifications.email_daily_summary} onChange={() => setNotifications(p => ({ ...p, email_daily_summary: !p.email_daily_summary }))} />
-                <ToggleSwitch label="Platform Updates & Tips" description="Receive emails about new features and hiring tips from Jooblie." checked={notifications.email_marketing} onChange={() => setNotifications(p => ({ ...p, email_marketing: !p.email_marketing }))} />
-              </div>
+              <fieldset disabled={preferencesLoading || !preferencesLoaded || loading} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', border: 0, padding: 0, margin: 0 }}>
+                {preferencesLoading && <p role="status">Loading email preferences...</p>}
+                <ToggleSwitch label="New Applicant Alerts" description="Email me about new applications to my jobs." checked={notifications.email_new_applicant} onChange={() => setNotifications(p => ({ ...p, email_new_applicant: !p.email_new_applicant }))} />
+                <ToggleSwitch label="Daily Summary Digest" description="Include me in daily hiring summaries." checked={notifications.email_daily_summary} onChange={() => setNotifications(p => ({ ...p, email_daily_summary: !p.email_daily_summary }))} />
+                <ToggleSwitch label="Platform Updates & Tips" description={`Receive emails about new features and hiring tips from ${SITE_NAME}.`} checked={notifications.email_marketing} onChange={() => setNotifications(p => ({ ...p, email_marketing: !p.email_marketing }))} />
+              </fieldset>
 
-              <button className="button button--primary" style={{ width: 'fit-content', marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => showSuccess('Preferences saved!')}>
-                <Save size={18} /> Save Preferences
+              <button disabled={preferencesLoading || !preferencesLoaded || loading} className="button button--primary" style={{ width: 'fit-content', marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={handlePreferencesSubmit}>
+                {loading ? <Loader2 className="spinner" size={18} /> : <Save size={18} />} Save Preferences
               </button>
             </div>
           )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SITE_NAME } from '../../shared/config/site';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../shared/lib/supabase';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
@@ -66,11 +67,11 @@ export default function ResetPasswordPage() {
     <div className="jb-app-auth">
       {/* Top Application Header */}
       <header className="jb-app-nav">
-        <Link to="/" className="jb-app-brand" aria-label="Jooblie Home">
+        <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
           <div className="jb-brand-mark">
             <Briefcase size={18} strokeWidth={2.4} color="#ffffff" />
           </div>
-          <span className="jb-brand-title">Jooblie</span>
+          <span className="jb-brand-title">{SITE_NAME}</span>
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -98,7 +99,7 @@ export default function ResetPasswordPage() {
                 securely.
               </h1>
               <p className="jb-hero-desc">
-                Choose a strong password to protect your Jooblie account and candidate profile.
+                Choose a strong password to protect your {SITE_NAME} account and candidate profile.
               </p>
             </div>
 
@@ -163,7 +164,7 @@ export default function ResetPasswordPage() {
                   </div>
                   <h3 className="jb-success-title">Password Updated</h3>
                   <p className="jb-success-text">
-                    Your password has been changed successfully. You can now access your Jooblie workspace with your new credentials.
+                    Your password has been changed successfully. You can now access your {SITE_NAME} workspace with your new credentials.
                   </p>
                   <Link to="/sign-in" className="jb-primary-action-btn" style={{ textDecoration: 'none', display: 'flex', marginTop: '22px' }}>
                     Proceed to Sign In

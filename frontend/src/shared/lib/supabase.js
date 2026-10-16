@@ -14,3 +14,15 @@ export const supabase = isBackendConfigured
       },
     })
   : null;
+
+export function createPasswordVerificationClient() {
+  if (!isBackendConfigured) return null;
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: `password-verification-${crypto.randomUUID()}`,
+    },
+  });
+}

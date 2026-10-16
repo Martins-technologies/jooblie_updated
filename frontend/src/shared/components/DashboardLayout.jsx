@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
+import { SITE_NAME } from '../config/site';
 
 import '../styles/dashboard.css';
 
@@ -237,7 +238,7 @@ export default function DashboardLayout({
   const fullName =
     profile?.full_name?.trim() ||
     profile?.email?.split('@')?.[0] ||
-    'Jooblie User';
+    `${SITE_NAME} User`;
 
   const avatarLetter =
     fullName
@@ -299,7 +300,7 @@ export default function DashboardLayout({
           </span>
 
           <strong>
-            Jooblie
+            {SITE_NAME}
           </strong>
         </Link>
 
@@ -344,7 +345,7 @@ export default function DashboardLayout({
             </span>
 
             <strong>
-              Jooblie
+              {SITE_NAME}
             </strong>
           </Link>
 
@@ -566,7 +567,7 @@ export default function DashboardLayout({
           <div className="jd-page-heading">
             <div className="jd-page-heading-copy">
               <span className="jd-eyebrow">
-                Jooblie Dashboard
+                {SITE_NAME} Dashboard
               </span>
               <h1>
                 {title}

@@ -1,4 +1,5 @@
 import { createAnonDb, serviceDb } from '../config/supabase.js';
+import { getNotificationPreferences, setNotificationPreferences } from '../utils/notificationPreferences.js';
 import { logger } from '../config/logger.js';
 import { asyncHandler, ApiError } from '../utils/http.js';
 import { writeAuditLog, writeSecurityEvent } from '../utils/audit.js';
@@ -283,6 +284,14 @@ export const signUp = asyncHandler(async (req, res) => {
       : null,
     confirmationRequired: !data.session,
   });
+});
+
+export const notificationPreferences = asyncHandler(async (req, res) => {
+  res.json(await getNotificationPreferences(serviceDb, req.user.id));
+});
+
+export const updateNotificationPreferences = asyncHandler(async (req, res) => {
+  res.json(await setNotificationPreferences(serviceDb, req.user.id, req.body));
 });
 
 export const me = asyncHandler(async (req, res) => {
