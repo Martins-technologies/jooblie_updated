@@ -1,0 +1,27 @@
+/* Brand palette derived from the supplied blue-and-black Jooblie wordmark. */
+:root{--brand-blue:#0967ff;--brand-blue-hover:#0056df;--brand-ink:#111827;--brand-muted:#738096;--brand-tint:#edf4ff;--brand-canvas:#f7f9fc;--blue:var(--brand-blue);--blue-dark:var(--brand-blue-hover);--navy:var(--brand-ink);--soft-blue:var(--brand-tint);--text-title:#111827}
+body .jd-app,body .jd-main,body .jd-content{background:var(--brand-canvas)}
+body .jd-sidebar{background:#f1f5fb;border-color:#e4eaf3}
+body .workspace-topbar{background:#fff;border-bottom-color:#e5eaf2}
+body .jd-nav-link{color:#526176}body .jd-nav-link svg{color:#728198}body .jd-nav-link:hover{background:#e6efff;color:var(--brand-blue)}body .jd-nav-link.is-active{background:#e3edff;color:var(--brand-blue);box-shadow:inset 3px 0 var(--brand-blue)}body .jd-nav-link.is-active svg{color:var(--brand-blue)}
+body .button--primary{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff}body .button--primary:hover:not(:disabled){background:var(--brand-blue-hover);border-color:var(--brand-blue-hover)}
+body .admin-summary-footer{color:var(--brand-blue)}body .admin-summary-card .workspace-metric strong{color:var(--brand-ink)!important}
+body .workspace-text-link,body .jd-account-footer .jd-signout{color:var(--brand-blue)}
+body .workspace .admin-table th,body .workspace .dashboard-data-table th{background:#f4f7fc;color:#53647b}
+body .table-status-tabs>button.is-active{color:var(--brand-blue);border-bottom-color:var(--brand-blue)}body .dashboard-pagination button.is-current{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff}
+body .workspace-topbar .dashboard-search{background:#f8faff}
+body .hero h1 span,body .hero-title span{color:var(--brand-blue)}
+
+/* Distinct navigation canvas, coordinated with the blue-and-black wordmark. */
+body .jd-sidebar{background:linear-gradient(180deg,#edf2fa 0%,#e7edf7 100%);border-right:1px solid #dbe4f1;box-shadow:3px 0 14px rgba(20,43,78,.025)}
+body .jd-sidebar-brand{background:rgba(255,255,255,.42);border-bottom:1px solid #dde5f1}
+body .jd-nav-link{color:#425570;font-weight:500}
+body .jd-nav-link svg{color:#637a99}
+body .jd-nav-link:hover{background:#dde8fa;color:#075be8}
+body .jd-nav-link.is-active{background:#0967ff;color:#fff;box-shadow:0 4px 10px rgba(9,103,255,.15)}
+body .jd-nav-link.is-active svg{color:#fff}
+body .jd-section-label{color:#77869c}
+body .jd-account-footer{border-top:1px solid #dbe4f1;background:rgba(255,255,255,.16)}
+body .jd-account-footer .jd-footer-link{color:#354b69}
+body .jd-account-footer .jd-footer-link:hover,body .jd-account-footer .jd-account-link:hover,body .jd-account-footer .jd-signout:hover{background:#dce7f8}
+body .jd-account-footer .jd-user-avatar{background:#fff;border-color:#cddbf1;color:#0967ff}

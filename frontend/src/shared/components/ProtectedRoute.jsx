@@ -1,17 +1,14 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import SkeletonContent from './Skeleton';
+import DashboardLoading from './DashboardLoading';
 
 export default function ProtectedRoute({ roles, children }) {
   const auth = useAuth();
   const location = useLocation();
 
   if (auth.loading) {
-    return (
-      <div className="route-loader" role="status">
-        <span className="route-loader__spinner" />
-        <span>Loading your account...</span>
-      </div>
-    );
+    return <DashboardLoading pathname={location.pathname} role={auth.role || (roles?.length===1?roles[0]:undefined)}/>;
   }
 
   if (!auth.session) {

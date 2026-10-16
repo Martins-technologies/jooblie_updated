@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/config/site';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signIn } from '../../shared/lib/data';
 import { useAuth, dashboardPathForRole } from '../../shared/context/AuthContext';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
+import { validateForm } from '../../shared/lib/formValidation';
 import { 
   ArrowLeft, 
   Briefcase, 
@@ -21,6 +22,7 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const pending = useRef(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,15 +30,8 @@ export default function SignInPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    if (!email.trim()) {
-      showErrorToast('Please enter your email address.');
-      return;
-    }
-    if (!password) {
-      showErrorToast('Please enter your password.');
-      return;
-    }
+    if (pending.current || !validateForm(event.currentTarget)) return;
+    pending.current = true;
 
     setLoading(true);
 
@@ -58,7 +53,7 @@ export default function SignInPage() {
     } catch (err) {
       showErrorToast(err, 'Could not complete sign in. Please try again.');
       setLoading(false);
-    }
+    } finally { pending.current = false; }
   };
 
   return (
@@ -66,10 +61,7 @@ export default function SignInPage() {
       {/* Top Application Header */}
       <header className="jb-app-nav">
         <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
-          <div className="jb-brand-mark">
-            <Briefcase size={18} strokeWidth={2.4} color="#ffffff" />
-          </div>
-          <span className="jb-brand-title">{SITE_NAME}</span>
+          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -160,6 +152,8 @@ export default function SignInPage() {
                     <Mail size={16} strokeWidth={2} className="jb-control-icon" />
                     <input
                       id="signin-email"
+                      name="email"
+                      maxLength={320}
                       type="email"
                       required
                       placeholder="name@company.com"
@@ -177,6 +171,9 @@ export default function SignInPage() {
                     <Lock size={16} strokeWidth={2} className="jb-control-icon" />
                     <input
                       id="signin-password"
+                      name="password"
+                      minLength={8}
+                      maxLength={200}
                       type={showPassword ? 'text' : 'password'}
                       required
                       placeholder="••••••••"

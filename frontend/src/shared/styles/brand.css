@@ -1,0 +1,11 @@
+body .jooblie-brand-image{display:block;width:158px;height:auto;max-width:100%;object-fit:contain;flex-shrink:0}body .brand:has(.jooblie-brand-image),body .jd-brand:has(.jooblie-brand-image),body .jb-app-brand:has(.jooblie-brand-image){display:inline-flex;align-items:center;gap:0;background:transparent;box-shadow:none}body .jd-sidebar-brand .jooblie-brand-image{width:160px}body .site-footer .jooblie-brand-image{background:#fff;border-radius:6px;padding:5px}body .jb-app-nav .jooblie-brand-image{width:145px}@media(max-width:599px){body .jooblie-brand-image{width:138px}body .jd-mobile-brand .jooblie-brand-image{width:130px}}
+
+body .jooblie-brand-image{position:relative;display:block;width:158px;height:auto;aspect-ratio:2565 / 857;overflow:hidden;flex:0 0 auto;max-width:none;padding:0!important;background:transparent!important}
+body .jooblie-brand-image>img{position:absolute;display:block;width:175.4386%!important;max-width:none!important;height:auto!important;left:-37.6608%;top:-206.5344%;opacity:1!important;visibility:visible!important;object-fit:fill}
+body .jd-brand{flex-shrink:0}body .jd-sidebar-brand .jooblie-brand-image{width:160px}
+
+/* Compact wordmark with consistent clear space. */
+body .jooblie-brand-image,body .jd-sidebar-brand .jooblie-brand-image{width:126px}
+body .jb-app-nav .jooblie-brand-image{width:126px}
+body .jd-sidebar-brand{height:72px;flex-basis:72px}
+@media(max-width:599px){body .jooblie-brand-image,body .jd-sidebar-brand .jooblie-brand-image,body .jd-mobile-brand .jooblie-brand-image{width:116px}}

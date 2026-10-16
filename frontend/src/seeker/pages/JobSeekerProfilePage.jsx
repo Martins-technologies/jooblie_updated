@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import SkeletonContent from '../../shared/components/Skeleton';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Award, BriefcaseBusiness, CheckCircle2, FileText, Plus, Trash2, UploadCloud, UserRound, X, GraduationCap, Save, Edit2, Eye } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
 import { supabase } from '../../shared/lib/supabase';
 import { useAuth } from '../../shared/context/AuthContext';
+import { showErrorToast, showSuccessToast, extractErrorMessage } from '../../shared/lib/toast';
+import { samePayload, seekerProfileForm, seekerProfilePayload, validateSeekerProfile } from '../../shared/lib/editableProfile';
+import { getFieldErrors } from '../../shared/lib/errors';
 
 const EMPTY_PROFILE = { full_name: '', phone: '', headline: '', location_city: '', location_province: '', skills: [], default_resume_path: '', experience: [], education: [] };
 
@@ -16,37 +20,63 @@ export default function JobSeekerProfilePage() {
   const [profileForm, setProfileForm] = useState(EMPTY_PROFILE);
   const [resumeFile, setResumeFile] = useState(null);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileBaseline, setProfileBaseline] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const pending = useRef(false);
+  const uploadedResume = useRef(null);
+  const formRef = useRef(null);
+  const focusField = useRef('');
+  const profileDirty = Boolean(profileBaseline) && (Boolean(resumeFile) || !samePayload(seekerProfilePayload(profileForm), profileBaseline));
   
   // 🔥 NAYA FEATURE: Active Tab State
   const [activeTab, setActiveTab] = useState('basic');
 
-  const loadProfile = useCallback(async () => {
+  const loadProfile = useCallback(async (signal) => {
     try {
-      const result = await apiRequest('/job-seeker/dashboard', { auth: true });
+      const result = await apiRequest('/job-seeker/dashboard', { auth: true, signal });
+      if (signal?.aborted) return;
       const profile = result?.profile;
-      if (profile) {
-        let parsedExperience = [];
-        if (Array.isArray(profile.experience)) parsedExperience = profile.experience;
-        else if (typeof profile.experience === 'string') { try { parsedExperience = JSON.parse(profile.experience) || []; } catch { parsedExperience = []; } }
-
-        let parsedEducation = [];
-        if (Array.isArray(profile.education)) parsedEducation = profile.education;
-        else if (typeof profile.education === 'string') { try { parsedEducation = JSON.parse(profile.education) || []; } catch { parsedEducation = []; } }
-
-        setProfileForm({
-          full_name: profile.full_name || '', phone: profile.phone || '', headline: profile.headline || '',
-          location_city: profile.location_city || '', location_province: profile.location_province || '',
-          skills: Array.isArray(profile.skills) ? profile.skills : [], 
-          default_resume_path: profile.default_resume_path || '',
-          experience: parsedExperience.map(e => ({ ...e, isEditing: false })),
-          education: parsedEducation.map(e => ({ ...e, isEditing: false })),
-        });
-      }
+      if (!profile) throw new Error('Your profile could not be loaded. Please try again.');
+      setProfileForm(seekerProfileForm(profile));
+      setProfileBaseline(seekerProfilePayload(profile));
       setDashboardState({ loading: false, error: '', success: '', profile });
-    } catch (error) { setDashboardState(c => ({ ...c, loading: false, error: 'Could not load profile.' })); }
+    } catch (error) { if (!signal?.aborted) setDashboardState(c => ({ ...c, loading: false, error: 'Could not load profile. Please reload and try again.' })); }
   }, []);
 
-  useEffect(() => { loadProfile(); }, [loadProfile]);
+  useEffect(() => { const controller = new AbortController(); loadProfile(controller.signal); return () => controller.abort(); }, [loadProfile]);
+  useEffect(() => {
+    if (!focusField.current) return;
+    const field = formRef.current?.elements.namedItem(focusField.current);
+    if (field) { field.focus(); focusField.current = ''; }
+  }, [activeTab, profileForm, fieldErrors]);
+
+  const showFieldErrors = (errors) => {
+    setFieldErrors(errors);
+    const first = Object.keys(errors)[0];
+    if (!first) return;
+    focusField.current = first;
+    const group = first.split('.')[0];
+    setActiveTab(['experience', 'education', 'skills', 'resume'].includes(group) ? group : 'basic');
+    if (group === 'experience' || group === 'education') {
+      const index = Number(first.split('.')[1]);
+      setProfileForm((current) => ({ ...current, [group]: current[group].map((item, itemIndex) => itemIndex === index ? { ...item, isEditing: true } : item) }));
+    }
+  };
+  const clearFieldError = (event) => {
+    const name = event.target.name;
+    if (!name) return;
+    setFieldErrors((current) => { const next = { ...current }; delete next[name]; delete next[name.split('.')[0]]; return next; });
+  };
+  const chooseResume = (event) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = '';
+    if (!file) return;
+    const errors = validateSeekerProfile(profileForm, file);
+    if (errors.resume) { setFieldErrors((current) => ({ ...current, resume: errors.resume })); return; }
+    uploadedResume.current = null;
+    setResumeFile(file);
+    setFieldErrors((current) => ({ ...current, resume: undefined }));
+  };
 
   // --- Handlers ---
   const addExperience = () => setProfileForm(c => ({ ...c, experience: [...c.experience, { title: '', company: '', startDate: '', endDate: '', description: '', current: false, isEditing: true }] }));
@@ -69,31 +99,25 @@ export default function JobSeekerProfilePage() {
       const result = await apiRequest('/job-seeker/resume-url', { auth: true });
       if (result?.url) window.open(result.url, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      setDashboardState(c => ({ ...c, error: error.message || 'Resume could not be opened.' }));
+      setDashboardState(c => ({ ...c, error: extractErrorMessage(error, 'Resume could not be opened.') }));
+      showErrorToast(error, 'Resume could not be opened.');
     }
   };
 
-  const hasDateErrors = profileForm.experience.some(exp => {
-    if (exp.startDate && exp.startDate > todayStr) return true;
-    if (!exp.current && exp.endDate && exp.endDate > todayStr) return true;
-    if (!exp.current && exp.startDate && exp.endDate && exp.startDate > exp.endDate) return true;
-    return false;
-  }) || profileForm.education.some(edu => {
-    if (edu.startDate && edu.startDate > todayStr) return true;
-    if (!edu.current && edu.endDate && edu.endDate > todayStr) return true;
-    if (!edu.current && edu.startDate && edu.endDate && edu.startDate > edu.endDate) return true;
-    return false;
-  });
-
   const saveProfile = async (event) => {
     event.preventDefault();
-    if (hasDateErrors) return; 
+    if (pending.current || !profileDirty) return;
+    const errors = validateSeekerProfile(profileForm, resumeFile, todayStr);
+    if (Object.keys(errors).length) { showFieldErrors(errors); return; }
+    const submitted = seekerProfilePayload(profileForm);
+    pending.current = true;
     setSavingProfile(true);
+    setFieldErrors({});
     setDashboardState(c => ({ ...c, error: '', success: '' }));
 
     try {
-      let resumePath = profileForm.default_resume_path || null;
-      if (resumeFile) {
+      let resumePath = uploadedResume.current?.file === resumeFile ? uploadedResume.current.path : submitted.default_resume_path;
+      if (resumeFile && uploadedResume.current?.file !== resumeFile) {
         if (!supabase || !auth.user?.id) throw new Error('Resume upload is not available.');
         if (resumeFile.size > 5 * 1024 * 1024) throw new Error('Resume must be 5 MB or smaller.');
         if (resumeFile.type !== 'application/pdf' && !resumeFile.name.toLowerCase().endsWith('.pdf')) throw new Error('Only PDF resumes are accepted.');
@@ -104,33 +128,30 @@ export default function JobSeekerProfilePage() {
         try {
           await apiRequest('/job-seeker/resumes', { method: 'POST', auth: true, body: { path, original_name: resumeFile.name, size_bytes: resumeFile.size, content_type: 'application/pdf' } });
         } catch (registrationError) {
-          await supabase.storage.from('resumes').remove([path]);
+          try { await supabase.storage.from('resumes').remove([path]); } catch { /* preserve the registration error */ }
           throw registrationError;
         }
         resumePath = path;
+        uploadedResume.current = { file: resumeFile, path };
       }
-
-      const cleanExperience = profileForm.experience.map(exp => { const { isEditing, ...rest } = exp; return { ...rest, startDate: rest.startDate || null, endDate: rest.endDate || null }; });
-      const cleanEducation = profileForm.education.map(edu => { const { isEditing, ...rest } = edu; return { ...rest, startDate: rest.startDate || null, endDate: rest.endDate || null }; });
-
-      await apiRequest('/auth/profile', {
-        method: 'PATCH', auth: true,
-        body: {
-          full_name: profileForm.full_name, phone: profileForm.phone || null, headline: profileForm.headline || null,
-          location_city: profileForm.location_city || null, location_province: profileForm.location_province || null,
-          skills: profileForm.skills.map((v) => v.trim()).filter(Boolean).slice(0, 50), 
-          default_resume_path: resumePath, experience: cleanExperience, education: cleanEducation
-        },
+      submitted.default_resume_path = resumePath;
+      const result = await apiRequest('/auth/profile', {
+        method: 'PATCH', auth: true, notifyError: false,
+        body: submitted,
       });
-
-      setDashboardState(c => ({ ...c, success: 'Profile updated successfully.' }));
+      const saved = seekerProfilePayload(result?.profile || submitted);
+      setProfileBaseline(saved);
+      setProfileForm(seekerProfileForm(saved));
+      showSuccessToast('Profile updated successfully.');
       setResumeFile(null);
-      await loadProfile();
-      await auth.refreshProfile();
-      setTimeout(() => setDashboardState(curr => ({...curr, success: ''})), 4000);
+      uploadedResume.current = null;
+      auth.updateCachedProfile?.(result.profile);
     } catch (error) {
-      setDashboardState(c => ({ ...c, error: error.message || 'Could not update profile.' }));
-    } finally { setSavingProfile(false); }
+      const fields = getFieldErrors(error);
+      if (Object.keys(fields).length) { showFieldErrors(fields); return; }
+      setDashboardState(c => ({ ...c, error: extractErrorMessage(error, 'Could not update profile.') }));
+      showErrorToast(error, 'Could not update profile.');
+    } finally { pending.current = false; setSavingProfile(false); }
   };
 
   // 🔥 TABS DEFINITION
@@ -146,7 +167,6 @@ export default function JobSeekerProfilePage() {
     <DashboardLayout title="My Profile" subtitle="Build your profile and stand out to employers.">
       <style>{premiumCSS}</style>
       {dashboardState.error && <div className="banner banner-error"><X size={18}/> {dashboardState.error}</div>}
-      {dashboardState.success && <div className="banner banner-success"><CheckCircle2 size={18}/> {dashboardState.success}</div>}
 
       <div className="profile-container">
         
@@ -165,7 +185,8 @@ export default function JobSeekerProfilePage() {
           ))}
         </div>
 
-        <form onSubmit={saveProfile} className="profile-tab-content-area">
+        <form ref={formRef} onSubmit={saveProfile} onChangeCapture={clearFieldError} className="profile-tab-content-area">
+          <fieldset disabled={savingProfile || !profileBaseline} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           
           {/* 1. BASIC INFO TAB */}
           {activeTab === 'basic' && (
@@ -173,14 +194,14 @@ export default function JobSeekerProfilePage() {
               <div className="profile-section-card">
                 <div className="profile-section-header"><UserRound size={20} color="#2557a7" /><h3>Basic Information</h3></div>
                 <div className="profile-form-grid">
-                  <ProfileField label="Full Name" value={profileForm.full_name} onChange={(val) => setProfileForm(c => ({...c, full_name: val}))} />
-                  <ProfileField label="Phone Number" value={profileForm.phone} onChange={(val) => setProfileForm(c => ({...c, phone: val}))} />
-                  <ProfileField label="Professional Headline" value={profileForm.headline} onChange={(val) => setProfileForm(c => ({...c, headline: val}))} wide placeholder="e.g. Senior Software Engineer at Tech Corp" />
-                  <ProfileField label="City" value={profileForm.location_city} onChange={(val) => setProfileForm(c => ({...c, location_city: val}))} />
-                  <ProfileField label="Province / State" value={profileForm.location_province} onChange={(val) => setProfileForm(c => ({...c, location_province: val}))} />
+                  <ProfileField name="full_name" error={fieldErrors.full_name} required minLength={2} maxLength={160} label="Full Name" value={profileForm.full_name} onChange={(val) => setProfileForm(c => ({...c, full_name: val}))} />
+                  <ProfileField name="phone" error={fieldErrors.phone} maxLength={50} label="Phone Number" value={profileForm.phone} onChange={(val) => setProfileForm(c => ({...c, phone: val}))} />
+                  <ProfileField name="headline" error={fieldErrors.headline} maxLength={220} label="Professional Headline" value={profileForm.headline} onChange={(val) => setProfileForm(c => ({...c, headline: val}))} wide placeholder="e.g. Senior Software Engineer at Tech Corp" />
+                  <ProfileField name="location_city" error={fieldErrors.location_city} maxLength={120} label="City" value={profileForm.location_city} onChange={(val) => setProfileForm(c => ({...c, location_city: val}))} />
+                  <ProfileField name="location_province" error={fieldErrors.location_province} maxLength={120} label="Province / State" value={profileForm.location_province} onChange={(val) => setProfileForm(c => ({...c, location_province: val}))} />
                 </div>
                 <div className="tab-footer">
-                  <button type="submit" className="btn-primary" disabled={savingProfile || hasDateErrors}>
+                  <button type="submit" className="btn-primary" disabled={savingProfile || !profileDirty}>
                     {savingProfile ? 'Saving...' : <><Save size={16} /> Save Updates</>}
                   </button>
                 </div>
@@ -194,8 +215,9 @@ export default function JobSeekerProfilePage() {
               <div className="profile-section-card">
                 <div className="profile-section-header" style={{ justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><BriefcaseBusiness size={20} color="#2557a7" /><h3>Work Experience</h3></div>
-                  <button type="button" className="btn-secondary" onClick={addExperience} style={{ padding: '6px 12px', fontSize: '0.85rem' }}><Plus size={16} /> Add New</button>
+                  <button type="button" className="btn-secondary" onClick={addExperience} disabled={profileForm.experience.length >= 20} style={{ padding: '6px 12px', fontSize: '0.85rem' }}><Plus size={16} /> Add New</button>
                 </div>
+                {fieldErrors.experience && <p className="field-error">{fieldErrors.experience}</p>}
                 
                 {profileForm.experience.length === 0 && <div className="empty-state">No experience added yet. Add your past roles to stand out.</div>}
                 
@@ -215,11 +237,6 @@ export default function JobSeekerProfilePage() {
                     );
                   }
 
-                  let errorMsg = null;
-                  if (exp.startDate && exp.startDate > todayStr) errorMsg = "Start Date cannot be in the future.";
-                  else if (!exp.current && exp.endDate && exp.endDate > todayStr) errorMsg = "End Date cannot be in the future.";
-                  else if (!exp.current && exp.startDate && exp.endDate && exp.startDate > exp.endDate) errorMsg = "Start Date cannot be greater than End Date.";
-
                   return (
                     <div key={index} className="experience-item">
                       <div className="exp-header-actions" style={{ gap: '8px', display: 'flex' }}>
@@ -227,26 +244,25 @@ export default function JobSeekerProfilePage() {
                         <button type="button" className="btn-danger-ghost" onClick={() => removeExperience(index)}><Trash2 size={14} /> Remove</button>
                       </div>
                       <div className="profile-form-grid">
-                        <ProfileField label="Job Title" value={exp.title} onChange={(val) => updateExperience(index, 'title', val)} placeholder="e.g. Product Manager" />
-                        <ProfileField label="Company" value={exp.company} onChange={(val) => updateExperience(index, 'company', val)} placeholder="e.g. Google" />
-                        <ProfileField type="date" label="Start Date" max={todayStr} value={exp.startDate || ''} onChange={(val) => updateExperience(index, 'startDate', val)} />
+                        <ProfileField name={`experience.${index}.title`} error={fieldErrors[`experience.${index}.title`]} required maxLength={180} label="Job Title" value={exp.title} onChange={(val) => updateExperience(index, 'title', val)} placeholder="e.g. Product Manager" />
+                        <ProfileField name={`experience.${index}.company`} error={fieldErrors[`experience.${index}.company`]} required maxLength={180} label="Company" value={exp.company} onChange={(val) => updateExperience(index, 'company', val)} placeholder="e.g. Google" />
+                        <ProfileField name={`experience.${index}.startDate`} error={fieldErrors[`experience.${index}.startDate`]} type="date" label="Start Date" max={todayStr} value={exp.startDate || ''} onChange={(val) => updateExperience(index, 'startDate', val)} />
                         {exp.current ? (
                           <div className="form-group"><label>End Date</label><input type="text" className="form-input" value="Present" disabled style={{ backgroundColor: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }} /></div>
                         ) : (
-                          <ProfileField type="date" label="End Date" min={exp.startDate} max={todayStr} value={exp.endDate || ''} onChange={(val) => updateExperience(index, 'endDate', val)} />
+                          <ProfileField name={`experience.${index}.endDate`} error={fieldErrors[`experience.${index}.endDate`]} type="date" label="End Date" min={exp.startDate} max={todayStr} value={exp.endDate || ''} onChange={(val) => updateExperience(index, 'endDate', val)} />
                         )}
                         <div className="form-group full-width" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                           <input type="checkbox" id={`current-exp-${index}`} checked={exp.current || false} onChange={(e) => updateExperience(index, 'current', e.target.checked)} style={{ cursor: 'pointer', width: '16px', height: '16px' }} />
                           <label htmlFor={`current-exp-${index}`} style={{ cursor: 'pointer', margin: 0, fontWeight: '500', color: '#374151' }}>I currently work in this role</label>
                         </div>
-                        {errorMsg && <div className="form-group full-width" style={{ color: '#e11d48', fontSize: '0.85rem', marginTop: '-4px', fontWeight: '500' }}>{errorMsg}</div>}
-                        <div className="form-group full-width"><label>Description</label><textarea className="form-input form-textarea" value={exp.description} onChange={(e) => updateExperience(index, 'description', e.target.value)} placeholder="Describe your responsibilities and achievements..." /></div>
+                        <div className="form-group full-width"><label htmlFor={`experience-description-${index}`}>Description</label><textarea name={`experience.${index}.description`} id={`experience-description-${index}`} maxLength={4000} className="form-input form-textarea" value={exp.description || ''} aria-invalid={Boolean(fieldErrors[`experience.${index}.description`])} aria-describedby={fieldErrors[`experience.${index}.description`] ? `experience-description-error-${index}` : undefined} onChange={(e) => updateExperience(index, 'description', e.target.value)} placeholder="Describe your responsibilities and achievements..." />{fieldErrors[`experience.${index}.description`] && <span className="field-error" id={`experience-description-error-${index}`}>{fieldErrors[`experience.${index}.description`]}</span>}</div>
                       </div>
                     </div>
                   );
                 })}
                 <div className="tab-footer">
-                  <button type="submit" className="btn-primary" disabled={savingProfile || hasDateErrors}>
+                  <button type="submit" className="btn-primary" disabled={savingProfile || !profileDirty}>
                     {savingProfile ? 'Saving...' : <><Save size={16} /> Save Updates</>}
                   </button>
                 </div>
@@ -260,8 +276,9 @@ export default function JobSeekerProfilePage() {
               <div className="profile-section-card">
                 <div className="profile-section-header" style={{ justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><GraduationCap size={20} color="#2557a7" /><h3>Educational Background</h3></div>
-                  <button type="button" className="btn-secondary" onClick={addEducation} style={{ padding: '6px 12px', fontSize: '0.85rem' }}><Plus size={16} /> Add New</button>
+                  <button type="button" className="btn-secondary" onClick={addEducation} disabled={profileForm.education.length >= 20} style={{ padding: '6px 12px', fontSize: '0.85rem' }}><Plus size={16} /> Add New</button>
                 </div>
+                {fieldErrors.education && <p className="field-error">{fieldErrors.education}</p>}
                 
                 {profileForm.education.length === 0 && <div className="empty-state">No education added yet. Add your degrees or certifications.</div>}
                 
@@ -281,11 +298,6 @@ export default function JobSeekerProfilePage() {
                     );
                   }
 
-                  let errorMsg = null;
-                  if (edu.startDate && edu.startDate > todayStr) errorMsg = "Start Date cannot be in the future.";
-                  else if (!edu.current && edu.endDate && edu.endDate > todayStr) errorMsg = "End Date cannot be in the future.";
-                  else if (!edu.current && edu.startDate && edu.endDate && edu.startDate > edu.endDate) errorMsg = "Start Date cannot be greater than End Date.";
-
                   return (
                     <div key={index} className="experience-item">
                       <div className="exp-header-actions" style={{ gap: '8px', display: 'flex' }}>
@@ -293,25 +305,24 @@ export default function JobSeekerProfilePage() {
                         <button type="button" className="btn-danger-ghost" onClick={() => removeEducation(index)}><Trash2 size={14} /> Remove</button>
                       </div>
                       <div className="profile-form-grid">
-                        <ProfileField label="Degree / Certification" value={edu.degree} onChange={(val) => updateEducation(index, 'degree', val)} placeholder="e.g. B.S. Computer Science" />
-                        <ProfileField label="Institution / School" value={edu.institution} onChange={(val) => updateEducation(index, 'institution', val)} placeholder="e.g. University of Toronto" />
-                        <ProfileField type="date" label="Start Date" max={todayStr} value={edu.startDate || ''} onChange={(val) => updateEducation(index, 'startDate', val)} />
+                        <ProfileField name={`education.${index}.degree`} error={fieldErrors[`education.${index}.degree`]} required maxLength={180} label="Degree / Certification" value={edu.degree} onChange={(val) => updateEducation(index, 'degree', val)} placeholder="e.g. B.S. Computer Science" />
+                        <ProfileField name={`education.${index}.institution`} error={fieldErrors[`education.${index}.institution`]} required maxLength={180} label="Institution / School" value={edu.institution} onChange={(val) => updateEducation(index, 'institution', val)} placeholder="e.g. University of Toronto" />
+                        <ProfileField name={`education.${index}.startDate`} error={fieldErrors[`education.${index}.startDate`]} type="date" label="Start Date" max={todayStr} value={edu.startDate || ''} onChange={(val) => updateEducation(index, 'startDate', val)} />
                         {edu.current ? (
                           <div className="form-group"><label>End Date</label><input type="text" className="form-input" value="Present" disabled style={{ backgroundColor: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }} /></div>
                         ) : (
-                          <ProfileField type="date" label="End Date" min={edu.startDate} max={todayStr} value={edu.endDate || ''} onChange={(val) => updateEducation(index, 'endDate', val)} />
+                          <ProfileField name={`education.${index}.endDate`} error={fieldErrors[`education.${index}.endDate`]} type="date" label="End Date" min={edu.startDate} max={todayStr} value={edu.endDate || ''} onChange={(val) => updateEducation(index, 'endDate', val)} />
                         )}
                         <div className="form-group full-width" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                           <input type="checkbox" id={`current-edu-${index}`} checked={edu.current || false} onChange={(e) => updateEducation(index, 'current', e.target.checked)} style={{ cursor: 'pointer', width: '16px', height: '16px' }} />
                           <label htmlFor={`current-edu-${index}`} style={{ cursor: 'pointer', margin: 0, fontWeight: '500', color: '#374151' }}>I am currently studying here</label>
                         </div>
-                        {errorMsg && <div className="form-group full-width" style={{ color: '#e11d48', fontSize: '0.85rem', marginTop: '-4px', fontWeight: '500' }}>{errorMsg}</div>}
                       </div>
                     </div>
                   );
                 })}
                 <div className="tab-footer">
-                  <button type="submit" className="btn-primary" disabled={savingProfile || hasDateErrors}>
+                  <button type="submit" className="btn-primary" disabled={savingProfile || !profileDirty}>
                     {savingProfile ? 'Saving...' : <><Save size={16} /> Save Updates</>}
                   </button>
                 </div>
@@ -325,22 +336,23 @@ export default function JobSeekerProfilePage() {
               <div className="profile-section-card">
                 <div className="profile-section-header" style={{ justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><Award size={20} color="#2557a7" /><h3>Skills</h3></div>
-                  <button type="button" className="btn-secondary" onClick={addSkill} style={{ padding: '6px 12px', fontSize: '0.85rem' }}><Plus size={16} /> Add New</button>
+                  <button type="button" className="btn-secondary" onClick={addSkill} disabled={profileForm.skills.length >= 50} style={{ padding: '6px 12px', fontSize: '0.85rem' }}><Plus size={16} /> Add New</button>
                 </div>
+                {fieldErrors.skills && <p className="field-error">{fieldErrors.skills}</p>}
                 
                 {profileForm.skills.length === 0 && <div className="empty-state">No skills added yet. Add skills to get better job recommendations.</div>}
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {profileForm.skills.map((skill, index) => (
                     <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <input className="form-input" value={skill} placeholder="e.g. React.js, Marketing, Data Analysis" onChange={(e) => updateSkill(index, e.target.value)} style={{ flex: 1 }} />
+                      <div style={{ flex: 1 }}><input name={`skills.${index}`} aria-label={`Skill ${index + 1}`} aria-invalid={Boolean(fieldErrors[`skills.${index}`])} aria-describedby={fieldErrors[`skills.${index}`] ? `skill-error-${index}` : undefined} maxLength={80} className="form-input" value={skill} placeholder="e.g. React.js, Marketing, Data Analysis" onChange={(e) => updateSkill(index, e.target.value)} />{fieldErrors[`skills.${index}`] && <span className="field-error" id={`skill-error-${index}`}>{fieldErrors[`skills.${index}`]}</span>}</div>
                       <button type="button" className="btn-icon" onClick={() => removeSkill(index)} style={{ color: '#e11d48', borderColor: '#fecaca', flexShrink: 0 }}><Trash2 size={16} /></button>
                     </div>
                   ))}
                 </div>
 
                 <div className="tab-footer">
-                  <button type="submit" className="btn-primary" disabled={savingProfile || hasDateErrors}>
+                  <button type="submit" className="btn-primary" disabled={savingProfile || !profileDirty}>
                     {savingProfile ? 'Saving...' : <><Save size={16} /> Save Updates</>}
                   </button>
                 </div>
@@ -369,7 +381,7 @@ export default function JobSeekerProfilePage() {
                         <UploadCloud size={36} className="icon" style={{marginBottom: '8px'}} />
                         <span style={{fontWeight: '600', color: '#111827', fontSize: '1rem'}}>Click to Upload Resume</span>
                         <span style={{fontSize: '0.85rem'}}>PDF up to 5MB</span>
-                        <input type="file" accept="application/pdf,.pdf" onChange={(e) => setResumeFile(e.target.files?.[0] || null)} />
+                        <input name="resume" type="file" accept="application/pdf,.pdf" onChange={chooseResume} />
                       </label>
                     </div>
                   ) : (
@@ -392,10 +404,10 @@ export default function JobSeekerProfilePage() {
                         </button>
                         <label className="btn-icon-small" title="Replace Resume" style={{ width: '34px', height: '34px' }}>
                           <UploadCloud size={16} />
-                          <input type="file" accept="application/pdf,.pdf" style={{display: 'none'}} onChange={(e) => setResumeFile(e.target.files?.[0] || null)} />
+                          <input name="resume" type="file" accept="application/pdf,.pdf" style={{display: 'none'}} onChange={chooseResume} />
                         </label>
                         {resumeFile && (
-                          <button type="button" className="btn-icon-small" onClick={() => setResumeFile(null)} title="Cancel upload" style={{ width: '34px', height: '34px', color: '#e11d48', borderColor: '#fecaca' }}>
+                          <button type="button" className="btn-icon-small" onClick={() => { setResumeFile(null); uploadedResume.current = null; }} title="Cancel upload" style={{ width: '34px', height: '34px', color: '#e11d48', borderColor: '#fecaca' }}>
                             <X size={16} />
                           </button>
                         )}
@@ -404,8 +416,9 @@ export default function JobSeekerProfilePage() {
                   )}
                 </div>
 
+                {fieldErrors.resume && <p className="field-error" role="status">{fieldErrors.resume}</p>}
                 <div className="tab-footer">
-                  <button type="submit" className="btn-primary" disabled={savingProfile || hasDateErrors} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>
+                  <button type="submit" className="btn-primary" disabled={savingProfile || !profileDirty} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>
                     {savingProfile ? 'Saving...' : <><Save size={16} /> Save Updates</>}
                   </button>
                 </div>
@@ -414,6 +427,7 @@ export default function JobSeekerProfilePage() {
             </div>
           )}
 
+          </fieldset>
         </form>
       </div>
     </DashboardLayout>
@@ -495,7 +509,7 @@ const premiumCSS = `
   @media (max-width: 768px) { .profile-form-grid { grid-template-columns: 1fr; } .profile-section-card { padding: 20px; } }
 `;
 
-function ProfileField({ label, value, onChange, wide = false, placeholder = '', type = 'text', min, max }) {
-  if (!label) return <input type={type} min={min} max={max} className="form-input" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />;
-  return <div className={`form-group ${wide ? 'full-width' : ''}`}><label>{label}</label><input type={type} min={min} max={max} className="form-input" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></div>;
+function ProfileField({ label, name, error, value, onChange, wide = false, placeholder = '', type = 'text', min, max, ...constraints }) {
+  const id = `profile-${name}`;
+  return <div className={`form-group ${wide ? 'full-width' : ''}`}><label htmlFor={id}>{label}</label><input {...constraints} id={id} name={name} type={type} min={min} max={max} className="form-input" value={value || ''} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />{error && <span className="field-error" id={`${id}-error`}>{error}</span>}</div>;
 }

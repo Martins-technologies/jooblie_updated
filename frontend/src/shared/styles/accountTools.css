@@ -1,0 +1,50 @@
+.account-tools{position:relative;display:flex;align-items:center;gap:18px;}
+.account-tools button{cursor:pointer;}
+.account-tools .workspace-topbar__avatar{border:0;font:inherit;font-size:12px;font-weight:600;}
+.account-bell{position:relative;}
+.account-unread{position:absolute;top:-4px;right:-6px;min-width:15px;height:15px;padding:0 3px;display:grid;place-items:center;font-size:8px;font-weight:700;background:#0868f3;color:white;border:2px solid white;border-radius:10px;line-height:1;}
+.account-popover{position:absolute;z-index:1000;top:48px;right:0;background:white;border:1px solid #e1e8f3;border-radius:14px;box-shadow:0 14px 50px #163a711a;color:#283e5f;overflow:hidden;text-align:left;}
+.account-profile{width:300px;padding:20px 0 9px;}
+.account-profile__identity{display:flex;gap:12px;align-items:center;padding:0 20px;}
+.account-profile__identity>div{min-width:0;}
+.account-profile__identity strong{font-size:13px;font-weight:650;display:block;overflow-wrap:anywhere;}
+.account-profile small{font-size:11px;color:#7c8ba3;display:block;margin-top:4px;overflow-wrap:anywhere;}
+.account-profile__status{display:flex;justify-content:space-between;gap:10px;margin:15px 20px;padding-bottom:15px;border-bottom:1px solid #edf1f7;font-size:10px;color:#7a8da7;text-transform:capitalize;}
+.account-profile>a,.account-profile>button{display:flex;align-items:center;gap:10px;width:100%;padding:12px 20px;border:0;background:white;font-size:12px;color:#506887;text-align:left;}
+.account-profile>a:hover,.account-profile>button:hover{background:#f5f9ff;color:#0967ef;}
+.notification-center{width:400px;max-width:calc(100vw - 28px);}
+.notification-center__heading{display:flex;justify-content:space-between;align-items:center;padding:20px 20px 15px;}
+.notification-center__heading strong{font-size:16px;font-weight:650;letter-spacing:-.3px;}
+.notification-center__heading small{display:block;color:#8b98ab;font-size:11px;margin-top:5px;}
+.notification-icon{border:0;border-radius:6px;background:transparent;color:#8492a6;display:grid;place-items:center;width:28px;height:28px;}
+.notification-icon:hover:not(:disabled){background:#edf5ff;color:#0967ef;}
+.notification-center__toolbar{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eaf0f7;padding:0 16px 12px;gap:8px;}
+.notification-center__toolbar>div{display:flex;gap:4px;}
+.notification-center__toolbar button{border:0;background:none;font-size:10.5px;color:#8292aa;display:flex;align-items:center;gap:5px;padding:7px 9px;border-radius:6px;}
+.notification-center__toolbar button.is-active{background:#edf4ff;color:#0765e9;font-weight:600;}
+.notification-center__list{max-height:min(460px,calc(100dvh - 285px));overflow:auto;overscroll-behavior:contain;}
+.notification-item{display:flex;gap:11px;padding:17px 20px;border-bottom:1px solid #edf2f8;}
+.notification-item.is-unread{background:#f7faff;}
+.notification-item__dot{width:6px;height:6px;border-radius:50%;background:transparent;margin-top:5px;flex-shrink:0;}
+.notification-item.is-unread .notification-item__dot{background:#1775f4;}
+.notification-item>div{min-width:0;}
+.notification-item strong{display:block;font-size:12px;font-weight:600;line-height:1.55;overflow-wrap:anywhere;text-transform:capitalize;}
+.notification-item p{font-size:11px;color:#7286a1;line-height:1.6;margin:5px 0;overflow-wrap:anywhere;}
+.notification-item time{display:block;font-size:10px;color:#97a4b6;margin-top:5px;}
+.notification-item__actions{display:flex;gap:15px;margin-top:9px;}
+.notification-item__actions button{padding:0;border:0;background:transparent;color:#1269e7;font-size:10px;}
+.notification-center button:disabled{opacity:.4;cursor:default;}
+.notification-center__footer{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-top:1px solid #edf1f7;font-size:10.5px;color:#8d9bb0;}
+.notification-center__footer>div{display:flex;gap:7px;align-items:center;}
+.notification-center__footer>a{color:#176ce5;}
+.notification-empty{display:flex;flex-direction:column;align-items:center;gap:12px;color:#a1b3ca;padding:50px 22px;text-align:center;}
+.notification-empty strong{font-size:13px;color:#4b6384;}
+.notification-empty span{font-size:11px;}
+.notification-error{padding:18px;color:#ac4f60;background:#fff5f5;font-size:11px;line-height:1.7;}
+.notification-error button{display:block;margin-top:7px;border:0;background:transparent;padding:0;color:#176ce5;font-size:11px;}
+@media(max-width:560px){.account-tools{gap:14px;}.account-popover{position:fixed;right:14px;top:64px;}.account-profile{max-width:calc(100vw - 28px);}.notification-center{width:calc(100vw - 28px);}}
+
+/* A quiet notification bell; retain the keyboard focus indicator. */
+.workspace .account-tools .account-bell{border:0;appearance:none;-webkit-appearance:none;background:transparent;box-shadow:none;border-radius:50%;padding:0;color:#7386a2;}
+.workspace .account-tools .account-bell:hover,.workspace .account-tools .account-bell[aria-expanded="true"]{border:0;background:#edf4ff;color:#1769d4;box-shadow:none;}
+.workspace .account-tools .account-bell:focus-visible{outline:2px solid #8eb6f2;outline-offset:3px;}

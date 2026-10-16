@@ -1,0 +1,50 @@
+.app-notifications.Toastify__toast-container {
+  --toastify-color-success: #07966a; --toastify-color-error: #dc3545;
+  --toastify-color-warning: #b97808; --toastify-color-info: #0967f2;
+  width: min(320px, calc(100vw - 32px)); padding: 0;
+  top: max(16px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right));
+  font-family: inherit; z-index: 10000;
+}
+.app-notifications .app-notice {
+  width: 100%; box-sizing: border-box; background: #fff; color: #344054;
+  min-height: 48px; padding: 12px 32px 12px 13px;
+  border: 1px solid #e4eaf3; border-radius: 10px;
+  box-shadow: 0 6px 22px #1b365d16;
+  align-items: center; gap: 9px; margin-bottom: 8px;
+  border-left: 3px solid var(--toastify-color-info);
+}
+.app-notifications .Toastify__toast--error { border-left-color: var(--toastify-color-error); }
+.app-notifications .Toastify__toast--success { border-left-color: var(--toastify-color-success); }
+.app-notifications .Toastify__toast--warning { border-left-color: var(--toastify-color-warning); }
+.app-notifications .Toastify__toast-icon { width: 18px; margin: 0; flex: 0 0 18px; }
+.app-notifications .Toastify__close-button { position: absolute; right: 8px; top: 10px; color: #667085; opacity: 1; padding: 2px; border-radius: 4px; }
+.app-notifications .Toastify__close-button:hover { color: #101828; background: #f0f4fa; }
+.app-notifications .Toastify__close-button:focus-visible { outline: 2px solid #0967f2; outline-offset: 2px; }
+.app-notifications .Toastify__progress-bar { height: 2px; }
+.notice-content { min-width: 0; width: 100%; overflow-wrap: anywhere; }
+.notice-content__message { margin: 0; font-size: 12px; line-height: 1.5; color: #344054; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.field-error { display: block; margin-top: 6px; color: #c32d40; font-size: 12px; font-weight: 400; line-height: 1.45; }
+.field-hint, .form-save-status { display: block; color: #738098; font-size: 12px; margin-top: 6px; line-height: 1.5; }
+/* The control has one red border in every state; focus never adds another red ring. */
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"],
+input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus, textarea[aria-invalid="true"]:focus {
+  border-color: #d63a4e !important; box-shadow: none !important; outline: none !important;
+}
+.jb-control-wrap:has([aria-invalid="true"]), .field-shell:has([aria-invalid="true"]), .select-shell:has([aria-invalid="true"]) {
+  border-color: #d63a4e !important; box-shadow: none !important; outline: none !important;
+}
+.jb-control-wrap [aria-invalid="true"], .field-shell [aria-invalid="true"], .select-shell [aria-invalid="true"] { border: 0 !important; }
+.company-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.company-load-error { padding: 30px; text-align: center; color: #536178; }
+.job-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.job-form-grid--title { grid-template-columns: 2fr 1fr; }
+.job-form-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+button:disabled { cursor: not-allowed; }
+@media (max-width: 600px) {
+  .app-notifications.Toastify__toast-container { left: auto; right: 16px; top: max(12px, env(safe-area-inset-top)); margin: 0; transform: none; }
+  .company-form-grid, .job-form-grid, .job-form-grid--title, .job-form-grid--three { grid-template-columns: 1fr; gap: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-notifications .Toastify__toast { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+  .app-notifications .Toastify__progress-bar { animation: none !important; }
+}

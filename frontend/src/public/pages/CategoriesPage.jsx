@@ -1,3 +1,4 @@
+import SkeletonContent from '../../shared/components/Skeleton';
 import { useState, useEffect } from 'react';
 import PageHero from '../../shared/components/PageHero';
 import PageSection from '../../shared/components/PageSection';
@@ -61,14 +62,7 @@ export default function CategoriesPage() {
       
       {/* Loading Spinner during fetch */}
       {loading ? (
-        <div style={{ padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <style>{`
-            .cat-spinner { width: 40px; height: 40px; border: 4px solid #eef2f9; border-top-color: #2557a7; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }
-            @keyframes spin { to { transform: rotate(360deg); } }
-          `}</style>
-          <div className="cat-spinner"></div>
-          <span style={{ color: '#4b5563', fontSize: '1.05rem', fontWeight: '500' }}>Loading live categories...</span>
-        </div>
+        <div className="container" style={{ padding: 32 }}><SkeletonContent variant="cards" rows={6} label="Loading categories..." /></div>
       ) : (
         <PageSection containerClassName="category-grid category-grid--large" stagger>
           {focusCategories.map((category) => (

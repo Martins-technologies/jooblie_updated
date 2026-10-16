@@ -1,3 +1,4 @@
+import Select from './Select';
 import { useEffect, useMemo, useState } from 'react';
 import { BriefcaseBusiness, ChevronDown, Filter, MapPin, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -94,10 +95,10 @@ function SelectFilter({ label, value, onChange, options, icon = null }) {
   return (
     <label className="select-shell">
       {icon}
-      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">{label}</option>
         {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
-      </select>
+      </Select>
       <ChevronDown size={14} />
     </label>
   );

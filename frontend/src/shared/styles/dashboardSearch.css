@@ -1,0 +1,36 @@
+.workspace-global-search{position:relative;width:clamp(260px,28vw,420px);min-width:0;}
+.workspace-global-search .workspace-search{display:flex;width:100%;margin:0;min-height:38px;padding:8px 11px;gap:9px;background:#f9fbff;border:1px solid #e0e8f5;border-radius:8px;}
+.workspace-global-search .workspace-search:focus-within{border-color:#96baf0;box-shadow:0 0 0 3px #1769df08;}
+.workspace-global-search input{font-size:12px!important;color:#294568!important;}
+.workspace-global-search input::-webkit-search-cancel-button{display:none;}
+.workspace-global-search .workspace-search kbd{font-family:inherit;font-size:10px;white-space:nowrap;color:#91a2bc;}
+.global-search-clear,.global-search-mobile-toggle{display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#7187a5;cursor:pointer;flex-shrink:0;}
+.global-search-clear{width:20px;height:20px;border-radius:4px;}.global-search-clear:hover{background:#eaf1fc;color:#1769d4;}
+.global-search-mobile-toggle{display:none;width:34px;height:34px;border-radius:50%;}
+.global-search-results{position:absolute;right:0;top:calc(100% + 10px);width:min(540px,calc(100vw - 32px));max-height:min(72vh,660px);overflow:auto;overscroll-behavior:contain;background:#fff;border:1px solid #dce6f4;border-radius:11px;box-shadow:0 16px 46px #173b6b1a;z-index:100;color:#294365;scrollbar-width:thin;}
+.global-search-group{padding:6px 10px 10px;border-bottom:1px solid #edf1f7;}
+.global-search-group-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 9px 7px;font-size:11px;color:#6c809f;}
+.global-search-group-heading>strong{font-size:11px;font-weight:600;letter-spacing:.035em;text-transform:uppercase;color:#6c809f;}
+.global-search-group-heading>a{display:inline-flex;align-items:center;gap:4px;color:#216acf;font-size:11px;text-decoration:none;}
+.global-search-group>a{display:flex;align-items:center;gap:11px;padding:10px 9px;border-radius:7px;min-height:55px;color:#2f496e;text-decoration:none;}
+.global-search-group>a:hover,.global-search-group>a:focus-visible{background:#f1f6ff;outline:none;}
+.global-search-group>a:focus-visible{box-shadow:inset 0 0 0 2px #a8c8f5;}
+.global-search-result-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:8px;background:#edf4ff;color:#3978ca;flex-shrink:0;}
+.global-search-result-copy{display:grid;gap:4px;min-width:0;flex:1;}
+.global-search-result-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600;color:#284567;}
+.global-search-result-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#788ba7;line-height:1.4;}
+.global-search-group>a>svg{color:#6993c9;flex-shrink:0;}
+.global-search-message{display:flex;align-items:center;gap:9px;padding:22px 20px;margin:0;font-size:13px;color:#617896;line-height:1.6;overflow-wrap:anywhere;}
+.global-search-error{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 19px;font-size:12px;color:#6b7d98;background:#f9fbfe;}
+.global-search-error button{border:0;background:none;color:#1767ce;font-size:12px;font-weight:600;cursor:pointer;}
+.global-search-hint{display:flex;justify-content:space-between;gap:12px;padding:11px 18px;background:#fafcff;font-size:10px;color:#8395af;border-top:1px solid #eaf0f7;}
+.global-search-spinner{animation:global-search-spin .8s linear infinite;}@keyframes global-search-spin{to{transform:rotate(360deg);}}
+@media(prefers-reduced-motion:reduce){.global-search-spinner{animation:none;}}
+@media(max-width:800px){.workspace-global-search{width:clamp(210px,35vw,330px);}.workspace-global-search .workspace-search kbd{display:none;}}
+@media(max-width:560px){
+ .workspace-global-search{width:34px;flex:0 0 34px;}.global-search-mobile-toggle{display:inline-flex;}
+ .workspace-global-search .workspace-search{display:none;}
+ .workspace-global-search.is-mobile-open .workspace-search{display:flex;position:fixed;top:68px;left:12px;right:12px;width:calc(100vw - 24px);background:#fff;z-index:101;box-shadow:0 4px 15px #254d7e10;}
+ .global-search-results{position:fixed;top:119px;left:12px;right:12px;width:auto;max-height:calc(100dvh - 136px);}
+ .global-search-hint{font-size:10px;}.global-search-group-heading{font-size:11px;}
+}

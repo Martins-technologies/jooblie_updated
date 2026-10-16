@@ -1,5 +1,6 @@
 import { supabase, isBackendConfigured } from './supabase';
 import { apiRequest } from './api';
+import { showErrorToast } from './toast';
 import { normalizeCategory, normalizeCompany, normalizeJob } from './normalizers';
 
 function normalizeDataset(payload = {}) {
@@ -205,7 +206,13 @@ export async function getSession() {
 
 export async function signOut() {
   if (!supabase) return;
-  await supabase.auth.signOut();
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  } catch (error) {
+    showErrorToast(error, 'Sign out failed. Please try again.');
+    throw error;
+  }
 }
 
 export { isBackendConfigured };

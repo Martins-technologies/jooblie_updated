@@ -1,12 +1,8 @@
 import { Database, SearchX } from 'lucide-react';
+import SkeletonContent from './Skeleton';
 
-export function LoadingState({ label = 'Loading...', compact = false }) {
-  return (
-    <div className={`loading-state${compact ? ' loading-state--compact' : ''}`} role="status" aria-live="polite">
-      <span className="loading-state__spinner" aria-hidden="true" />
-      <span>{label}</span>
-    </div>
-  );
+export function LoadingState({ label = 'Loading...', compact = false, variant = 'list', rows, columns }) {
+  return <SkeletonContent label={label} variant={variant} columns={columns} rows={rows || (compact ? 2 : 4)} />;
 }
 
 export function EmptyState({ title = 'Nothing to show yet', text = 'New content will appear here when it is available.', backendMissing = false }) {
@@ -15,7 +11,7 @@ export function EmptyState({ title = 'Nothing to show yet', text = 'New content 
     <div className="empty-state">
       <span className="empty-state__icon"><Icon size={25} /></span>
       <h3>{title}</h3>
-      <p>{backendMissing ? 'Add the Supabase URL and anon key in your environment file to load live data.' : text}</p>
+      <p>{backendMissing ? 'Content is temporarily unavailable. Please try again shortly.' : text}</p>
     </div>
   );
 }

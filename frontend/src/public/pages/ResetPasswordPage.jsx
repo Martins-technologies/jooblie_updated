@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/config/site';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../shared/lib/supabase';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
+import { applyFormErrors, clearFieldError, validateForm } from '../../shared/lib/formValidation';
 import { 
   ArrowLeft, 
   Briefcase, 
@@ -22,19 +23,17 @@ export default function ResetPasswordPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const pending = useRef(false);
 
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (password.length < 8) {
-      showErrorToast('Password must be at least 8 characters long.');
-      return;
-    }
+    if (pending.current || !validateForm(e.currentTarget)) return;
 
     if (password !== confirmPassword) {
-      showErrorToast('Passwords do not match. Please re-enter.');
+      applyFormErrors(e.currentTarget, { details: { fieldErrors: { confirmPassword: ['Passwords do not match.'] } } });
       return;
     }
 
@@ -43,6 +42,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    pending.current = true;
     setLoading(true);
 
     try {
@@ -59,6 +59,7 @@ export default function ResetPasswordPage() {
     } catch (err) {
       showErrorToast(err, 'An unexpected error occurred. Please try again.');
     } finally {
+      pending.current = false;
       setLoading(false);
     }
   };
@@ -68,10 +69,7 @@ export default function ResetPasswordPage() {
       {/* Top Application Header */}
       <header className="jb-app-nav">
         <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
-          <div className="jb-brand-mark">
-            <Briefcase size={18} strokeWidth={2.4} color="#ffffff" />
-          </div>
-          <span className="jb-brand-title">{SITE_NAME}</span>
+          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -178,12 +176,15 @@ export default function ResetPasswordPage() {
                       <Lock size={16} strokeWidth={2} className="jb-control-icon" />
                       <input
                         id="new-pass"
+                        name="password"
+                        autoComplete="new-password"
+                        maxLength={200}
                         type={showPassword ? 'text' : 'password'}
                         required
                         minLength={8}
                         placeholder="••••••••"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => { setPassword(e.target.value); clearFieldError(e.currentTarget.form?.elements.namedItem('confirmPassword')); }}
                         className="jb-control-input"
                       />
                       <button
@@ -204,6 +205,9 @@ export default function ResetPasswordPage() {
                       <Lock size={16} strokeWidth={2} className="jb-control-icon" />
                       <input
                         id="conf-pass"
+                        name="confirmPassword"
+                        autoComplete="new-password"
+                        maxLength={200}
                         type={showConfirmPassword ? 'text' : 'password'}
                         required
                         minLength={8}

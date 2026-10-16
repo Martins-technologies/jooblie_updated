@@ -289,13 +289,7 @@ export default function DashboardLayout({
           className="jd-mobile-brand"
           onClick={closeMobile}
         >
-          <span className="jd-brand-mark">
-            <BriefcaseBusiness size={20} />
-          </span>
-
-          <strong>
-            Jooblie
-          </strong>
+          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
         </Link>
 
         <button
@@ -334,13 +328,7 @@ export default function DashboardLayout({
             className="jd-brand"
             onClick={closeMobile}
           >
-            <span className="jd-brand-mark">
-              <BriefcaseBusiness size={21} />
-            </span>
-
-            <strong>
-              Jooblie
-            </strong>
+            <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
           </Link>
 
           <button

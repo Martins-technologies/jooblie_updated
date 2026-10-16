@@ -1,0 +1,17 @@
+import {BriefcaseBusiness} from 'lucide-react';
+import SkeletonContent,{Skeleton} from './Skeleton';
+import {SITE_NAME} from '../config/site';
+import '../../admin/styles/admin.css';
+import '../styles/dashboard.css';
+import '../styles/workspace.css';
+
+const titles={'/dashboard/admin':'Network overview','/dashboard/recruiter':'Hiring overview','/dashboard/job-seeker':'Overview','/admin/jobs':'Job management','/admin/moderation':'Job review queue','/admin/users':'People & access','/admin/companies':'Company directory','/admin/portals':'Portal directory','/admin/applications':'Applications','/admin/activity':'Activity log','/admin/security':'Security events','/my-jobs':'Your opportunities','/candidates':'Candidates','/post-job':'Post a job','/my-company':'Company profile','/settings':'Account settings'};
+export default function DashboardLoading({pathname,role='account'}){
+  const admin=role==='admin'||pathname.startsWith('/admin')||pathname==='/dashboard/admin';
+  const overview=/^\/dashboard\/(admin|recruiter|job-seeker)$/.test(pathname);
+  const form=/settings|profile|my-company|post-job|hire-talent/.test(pathname);
+  const cards=pathname==='/dashboard/job-seeker/jobs';
+  const detail=/\/jobs\//.test(pathname)||/\/admin\/portals\//.test(pathname);
+  const title=titles[pathname]||(pathname.includes('applications')?'My applications':pathname.includes('saved')?'Saved jobs':pathname.includes('jobs')?'Find jobs':'Your workspace');
+  return <div className={'jd-app workspace workspace--'+role+' dashboard-loading-shell'} role="status" aria-busy="true"><span className="sr-only">Loading {title}</span><aside className="jd-sidebar" aria-hidden="true"><div className="jd-sidebar-brand"><span className="jd-brand"><span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span></span></div><div className="skeleton-shell-nav"><Skeleton width="65%" height={10}/>{Array.from({length:admin?9:5},(_,index)=><div key={index}><Skeleton width={19} height={19}/><Skeleton width={`${52+index%3*11}%`} height={12}/></div>)}</div><div className="skeleton-shell-account"><Skeleton circle width={33} height={33}/><Skeleton width={110} height={12}/></div></aside><div className="jd-main"><header className="workspace-topbar" aria-hidden="true"><Skeleton width={115} height={12}/><div className="skeleton-shell-tools"><Skeleton width={260} height={36}/><Skeleton circle width={31} height={31}/></div></header><main className="jd-content"><div className="jd-page-heading jd-page-heading--compact" aria-hidden="true"><h1>{title}</h1></div><div className="jd-body">{overview?<SkeletonContent variant={admin?'admin-dashboard':'dashboard'} metrics={role==='recruiter'?5:4} rows={5} label=""/>:form?<div className="workspace-panel"><SkeletonContent variant="form" rows={4} label=""/></div>:detail?<div className="workspace-panel"><SkeletonContent variant="form" rows={2} label=""/></div>:cards?<SkeletonContent variant="cards" rows={6} label=""/>:<div className="workspace-panel skeleton-shell-table"><div className="skeleton-shell-toolbar" aria-hidden="true"><Skeleton width="36%" height={40}/><Skeleton width={150} height={40}/></div><SkeletonContent variant="table" rows={10} columns={admin?6:5} label=""/></div>}</div><footer className="workspace-footer" aria-hidden="true"><Skeleton width={170} height={10}/><Skeleton width={100} height={10}/></footer></main></div></div>;
+}

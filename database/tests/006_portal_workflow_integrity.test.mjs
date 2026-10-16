@@ -145,6 +145,19 @@ await test('portal workflow integrity in isolated PostgreSQL', async (t) => {
     assert.ok(nursing.published_at);
     assert.deepEqual(await destinations(nursing.id),[1,4,5]);
   });
+  await t.test('admin concurrency guard preserves the existing publishing transaction and mappings', async () => {
+    await db.exec('create table public.notifications(id uuid primary key,user_id uuid,read_at timestamptz,created_at timestamptz)');
+    const adminMigration = await readFile(new URL('../migrations/007_admin_concurrency.sql', import.meta.url), 'utf8');
+    await db.exec(adminMigration);
+    const record = await save({payload:content(201)});
+    const revision = (await rows('select updated_at::text as revision from public.jobs where id=$1',[record.id]))[0].revision;
+    const before = await destinations(record.id);
+    const changed = (await rows('select * from public.admin_update_portal_job($1,$2,$3,$4)',[admin,record.id,revision,JSON.stringify({title:'Admin revised title'})]))[0];
+    assert.equal(changed.title,'Admin revised title');
+    assert.deepEqual(await destinations(record.id),before);
+    await fails(()=>rows('select * from public.admin_update_portal_job($1,$2,$3,$4)',[admin,record.id,revision,JSON.stringify({title:'Stale overwrite'})]),'JOB_VERSION_CONFLICT');
+    assert.equal((await rows('select title from public.jobs where id=$1',[record.id]))[0].title,'Admin revised title');
+  });
   await t.test('legacy pending insert is activated atomically and verified insert preserves expiration', async () => {
     assert.equal((await rows('select verification_status from public.companies where id=$1',[company]))[0].verification_status,'pending');
     const pendingCompanyJob = await save({payload:content(201)});

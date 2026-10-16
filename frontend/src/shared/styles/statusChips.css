@@ -1,0 +1,16 @@
+/* Reference status chips: medium 14px, softly tinted rectangular surfaces. */
+body .workspace .workspace-status,body .workspace-status{
+ --chip-text:#000f45;--chip-fill:rgba(0,15,69,.1);
+ display:inline-flex!important;align-items:center;justify-content:center;
+ min-width:79px;min-height:27px;height:auto;padding:6px 12px!important;
+ border:0!important;border-radius:5px!important;box-shadow:none!important;
+ background:var(--chip-fill)!important;color:var(--chip-text)!important;
+ font-family:var(--font-ui,"Proxima Nova","Segoe UI",sans-serif)!important;
+ font-size:14px!important;font-weight:500!important;line-height:1.1!important;
+ letter-spacing:0!important;text-align:center;text-transform:none;white-space:nowrap;vertical-align:middle;
+}
+body .workspace-status:is(.workspace-status--active,.workspace-status--enabled,.workspace-status--verified,.workspace-status--live,.workspace-status--hired,.workspace-status--approved,.workspace-status--shortlisted,.workspace-status--offered,.workspace-status--low){--chip-text:#00846c;--chip-fill:rgba(50,212,183,.1)}
+body .workspace-status:is(.workspace-status--inactive,.workspace-status--disabled,.workspace-status--pending,.workspace-status--pending_review,.workspace-status--submitted,.workspace-status--medium,.workspace-status--interviewing,.workspace-status--draft){--chip-text:#d8800f;--chip-fill:rgba(255,181,87,.1)}
+body .workspace-status:is(.workspace-status--archived,.workspace-status--closed,.workspace-status--expired,.workspace-status--withdrawn,.workspace-status--viewed){--chip-text:#000f45;--chip-fill:rgba(0,15,69,.1)}
+/* Keep adverse states distinct from ordinary inactivity. */
+body .workspace-status:is(.workspace-status--rejected,.workspace-status--blocked,.workspace-status--removed,.workspace-status--high,.workspace-status--critical){--chip-text:#c33c51;--chip-fill:rgba(255,77,106,.1)}

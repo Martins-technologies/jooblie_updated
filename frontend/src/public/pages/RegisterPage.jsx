@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/config/site';
 import { Link, useSearchParams } from 'react-router-dom';
 import { signUp } from '../../shared/lib/data';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
+import { validateCompanyForm } from '../../shared/lib/companyForm';
+import { applyFormErrors, validateForm } from '../../shared/lib/formValidation';
 import { 
   ArrowLeft, 
   ArrowRight,
@@ -35,6 +37,7 @@ export default function RegisterPage() {
   const [companyName, setCompanyName] = useState('');
   const [companyWebsite, setCompanyWebsite] = useState('');
   const [companyRegistrationNumber, setCompanyRegistrationNumber] = useState('');
+  const pending = useRef(false);
   
   const [state, setState] = useState({
     loading: false,
@@ -48,45 +51,24 @@ export default function RegisterPage() {
 
   const handleNextStep = (e) => {
     e.preventDefault();
-
-    if (!name.trim()) {
-      showErrorToast('Please enter your full name.');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email.trim() || !emailRegex.test(email.trim())) {
-      showErrorToast('Please enter a valid email address.');
-      return;
-    }
-    if (!password || password.length < 8) {
-      showErrorToast('Password must be at least 8 characters.');
-      return;
-    }
-
+    if (!validateForm(e.currentTarget.form || e.currentTarget)) return;
     setStep(2);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    if (!name.trim()) {
-      showErrorToast('Please enter your full name.');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email.trim() || !emailRegex.test(email.trim())) {
-      showErrorToast('Please enter a valid email address.');
-      return;
-    }
-    if (!password || password.length < 8) {
-      showErrorToast('Password must be at least 8 characters.');
-      return;
-    }
-    if (role === 'recruiter' && step === 2 && !companyName.trim()) {
-      showErrorToast('Please enter your company name.');
-      return;
+    if (pending.current || !validateForm(event.currentTarget)) return;
+    if (role === 'recruiter' && step === 1) { handleNextStep(event); return; }
+    if (role === 'recruiter') {
+      const fieldErrors = validateCompanyForm({ name: companyName, website: companyWebsite, registration_number: companyRegistrationNumber });
+      if (Object.keys(fieldErrors).length) {
+        const names = { name: 'company_name', website: 'company_website', registration_number: 'company_registration_number' };
+        applyFormErrors(event.currentTarget, { code: 'VALIDATION_ERROR', details: { fieldErrors: Object.fromEntries(Object.entries(fieldErrors).map(([key, value]) => [names[key] || key, value])) } });
+        return;
+      }
     }
 
+    pending.current = true;
     setState({
       loading: true,
       success: false,
@@ -120,7 +102,7 @@ export default function RegisterPage() {
         loading: false,
         success: false,
       });
-    }
+    } finally { pending.current = false; }
   };
 
 
@@ -129,10 +111,7 @@ export default function RegisterPage() {
       {/* Top Application Header */}
       <header className="jb-app-nav">
         <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
-          <div className="jb-brand-mark">
-            <Briefcase size={18} strokeWidth={2.4} color="#ffffff" />
-          </div>
-          <span className="jb-brand-title">{SITE_NAME}</span>
+          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -274,6 +253,9 @@ export default function RegisterPage() {
                           <User size={16} strokeWidth={2} className="jb-control-icon" />
                           <input
                             id="reg-name"
+                            name="name"
+                            minLength={2}
+                            maxLength={160}
                             type="text"
                             required
                             placeholder="Sarah Jenkins"
@@ -293,6 +275,8 @@ export default function RegisterPage() {
                           <Mail size={16} strokeWidth={2} className="jb-control-icon" />
                           <input
                             id="reg-email"
+                            name="email"
+                            maxLength={320}
                             type="email"
                             required
                             placeholder="sarah@company.com"
@@ -310,6 +294,8 @@ export default function RegisterPage() {
                           <Lock size={16} strokeWidth={2} className="jb-control-icon" />
                           <input
                             id="reg-password"
+                            name="password"
+                            maxLength={200}
                             type={showPassword ? 'text' : 'password'}
                             required
                             minLength={8}
@@ -382,6 +368,9 @@ export default function RegisterPage() {
                           <Building2 size={16} strokeWidth={2} className="jb-control-icon" />
                           <input
                             id="reg-company"
+                            name="company_name"
+                            minLength={2}
+                            maxLength={180}
                             type="text"
                             required
                             placeholder="Acme Technologies Inc."
@@ -398,6 +387,8 @@ export default function RegisterPage() {
                           <Globe size={16} strokeWidth={2} className="jb-control-icon" />
                           <input
                             id="reg-website"
+                            name="company_website"
+                            maxLength={1000}
                             type="url"
                             required
                             placeholder="https://company.com"
@@ -414,6 +405,9 @@ export default function RegisterPage() {
                           <FileText size={16} strokeWidth={2} className="jb-control-icon" />
                           <input
                             id="reg-regno"
+                            name="company_registration_number"
+                            minLength={2}
+                            maxLength={180}
                             type="text"
                             required
                             placeholder="e.g. US-9874523"

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { apiRequest } from '../lib/api';
+import { showErrorToast } from '../lib/toast';
 
 const AuthContext = createContext(null);
 
@@ -48,8 +49,9 @@ export function AuthProvider({ children }) {
           const result = await apiRequest('/auth/me', { auth: true, accessToken: data.session.access_token });
           if (mounted) setProfile(result.profile || null);
         }
-      } catch {
+      } catch (error) {
         if (mounted) {
+          showErrorToast(error, 'Your session could not be restored. Please sign in again.');
           setSession(null);
           setProfile(null);
         }
@@ -81,8 +83,18 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  const updateCachedProfile = useCallback((next) => {
+    if (next?.id && next.id === session?.user?.id) setProfile(current => ({ ...current, ...next }));
+  }, [session?.user?.id]);
+
   const signOut = useCallback(async () => {
-    await supabase?.auth.signOut();
+    try {
+      const result = await supabase?.auth.signOut();
+      if (result?.error) throw result.error;
+    } catch (error) {
+      showErrorToast(error, 'Sign out failed. Please try again.');
+      throw error;
+    }
     setSession(null);
     setProfile(null);
   }, []);
@@ -94,9 +106,10 @@ export function AuthProvider({ children }) {
     role: profile?.role || null,
     loading,
     refreshProfile,
+    updateCachedProfile,
     signOut,
     dashboardPath: dashboardPathForRole(profile?.role),
-  }), [session, profile, loading, refreshProfile, signOut]);
+  }), [session, profile, loading, refreshProfile, updateCachedProfile, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

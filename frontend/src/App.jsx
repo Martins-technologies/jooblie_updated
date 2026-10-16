@@ -1,3 +1,5 @@
+import WorkspaceAccountPage from './shared/pages/WorkspaceAccountPage';
+import WorkspaceHelpPage from './shared/pages/WorkspaceHelpPage';
 import {
   Navigate,
   Route,
@@ -55,6 +57,7 @@ import SettingsPage from './recruiter/pages/SettingsPage';
 import AdminModerationPage from './admin/pages/AdminModerationPage';
 import AdminUsersPage from './admin/pages/AdminUsersPage';
 import AdminActivityPage from './admin/pages/AdminActivityPage';
+import AdminDirectoryPage from './admin/pages/AdminDirectoryPage';
 import AdminPortalDetailPage from './admin/pages/AdminPortalDetailPage';
 
 import NotFoundPage from './public/pages/NotFoundPage';
@@ -188,7 +191,7 @@ export default function App() {
       <Route
         path="my-jobs"
         element={
-          <ProtectedRoute roles={['recruiter', 'admin']}>
+          <ProtectedRoute roles={['recruiter']}>
             <MyJobsPage />
           </ProtectedRoute>
         }
@@ -198,7 +201,7 @@ export default function App() {
       <Route
         path="candidates"
         element={
-          <ProtectedRoute roles={['recruiter', 'admin']}>
+          <ProtectedRoute roles={['recruiter']}>
             <CandidatesPage />
           </ProtectedRoute>
         }
@@ -208,7 +211,7 @@ export default function App() {
       <Route
         path="my-company"
         element={
-          <ProtectedRoute roles={['recruiter', 'admin']}>
+          <ProtectedRoute roles={['recruiter']}>
             <CompanyProfilePage />
           </ProtectedRoute>
         }
@@ -218,12 +221,14 @@ export default function App() {
       <Route
         path="post-job"
         element={
-          <ProtectedRoute roles={['recruiter', 'admin']}>
+          <ProtectedRoute roles={['recruiter']}>
             <PostJobPage />
           </ProtectedRoute>
         }
       />
 
+      <Route path="account/profile" element={<ProtectedRoute roles={['admin','recruiter','job_seeker']}><WorkspaceAccountPage/></ProtectedRoute>}/>
+      <Route path="account/help" element={<ProtectedRoute roles={['admin','recruiter','job_seeker']}><WorkspaceHelpPage/></ProtectedRoute>}/>
       {/* Settings Page */}
       <Route
         path="settings"
@@ -265,6 +270,7 @@ export default function App() {
         }
       />
 
+      {['portals','companies','applications','security'].map(type => <Route key={type} path={`admin/${type}`} element={<ProtectedRoute roles={['admin']}><AdminDirectoryPage type={type==='security'?'security-events':type}/></ProtectedRoute>}/>)}
       {/* Admin Moderation Page */}
       <Route
         path="admin/moderation"
@@ -298,7 +304,7 @@ export default function App() {
       <Route
         path="hire-talent"
         element={
-          <ProtectedRoute roles={['recruiter', 'admin']}>
+          <ProtectedRoute roles={['recruiter']}>
             <PostJobPage />
           </ProtectedRoute>
         }

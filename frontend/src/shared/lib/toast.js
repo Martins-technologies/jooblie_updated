@@ -1,93 +1,72 @@
+import { createElement } from 'react';
 import { toast } from 'react-toastify';
+import ToastContent from '../components/ToastContent';
+import { normalizeError, isAbortError } from './errors.js';
+import { applyFormErrors, getSubmittedForm } from './formValidation.js';
+export { extractErrorMessage } from './errors.js';
 
-/**
- * Extracts a clear, user-friendly error message from various error types
- * (ApiClientError, Supabase error, Error instance, or plain string).
- */
-export function extractErrorMessage(error, defaultMessage = 'An unexpected error occurred. Please try again.') {
-  if (!error) return defaultMessage;
-  if (typeof error === 'string') return error;
+const reported = new WeakSet();
+const recent = new Map();
+const NOTICE_ID = 'app-notification';
 
-  const code = error?.code || error?.error?.code;
-  const message = error?.message || error?.error?.message;
-
-  if (code === 'EMAIL_ALREADY_REGISTERED' || (message && /already exists|already registered/i.test(message))) {
-    return 'An account with this email already exists. Please sign in instead.';
+function notice(type, content, options = {}) {
+  const key = `${type}:${content.title}:${content.message}:${(content.messages || []).join('|')}`;
+  const now = Date.now();
+  for (const [id, time] of recent) if (now - time > 2000) recent.delete(id);
+  if (recent.has(key)) return NOTICE_ID;
+  recent.set(key, now);
+  const settings = {
+    toastId: NOTICE_ID,
+    autoClose: type === 'error' ? 4500 : 2600,
+    role: type === 'error' || type === 'warning' ? 'alert' : 'status',
+    ariaLabel: content.message,
+    ...options,
+  };
+  const render = createElement(ToastContent, content);
+  toast.clearWaitingQueue();
+  if (toast.isActive(NOTICE_ID)) {
+    toast.update(NOTICE_ID, { ...settings, render, type });
+    return NOTICE_ID;
   }
-  if (code === 'SIGN_IN_FAILED' || (message && /invalid login credentials|invalid email or password/i.test(message))) {
-    return 'Incorrect email or password. Please verify your credentials and try again.';
-  }
-  if (code === 'AUTH_REQUIRED') {
-    return 'Your session has expired. Please sign in again to continue.';
-  }
-  if (code === 'SIGN_UP_RATE_LIMITED' || (message && /rate limit/i.test(message))) {
-    return 'Too many attempts. Please wait a few moments and try again.';
-  }
-  if (code === 'API_UNAVAILABLE' || (message && /failed to fetch|network error|could not be reached/i.test(message))) {
-    return 'Unable to reach the Jooblie server. Please check your internet connection.';
-  }
-
-  return message || defaultMessage;
+  return toast[type](render, settings);
 }
 
 /**
- * Shows an error toast notification with intelligent message extraction.
+ * API and local catches can report the same failure safely without duplicate notices.
  */
-export function showErrorToast(error, defaultMessage) {
-  const msg = extractErrorMessage(error, defaultMessage);
-  return toast.error(msg, {
-    position: 'top-right',
-    autoClose: 5000,
-    hideProgressBar: false,
-    closeOnClick: true,
-    pauseOnHover: true,
-    draggable: true,
-  });
+export function showErrorToast(error, defaultMessage, options = {}) {
+  if (isAbortError(error)) return null;
+  if (error && typeof error === 'object') {
+    if (reported.has(error)) return null;
+    reported.add(error);
+  }
+  const content = normalizeError(error, defaultMessage);
+  if (Object.keys(content.fieldErrors).length && applyFormErrors(options.form || getSubmittedForm(), error)) return null;
+  // A notice is only a short fallback; individual validation messages belong at the inputs.
+  if (content.code === 'VALIDATION_ERROR' || content.messages.length) content.message = 'Please review the form details.';
+  if (content.retryAfter > 0) content.message = `Too many requests. Try again in ${Math.ceil(content.retryAfter)} seconds.`;
+  return notice('error', content, options);
 }
 
 /**
  * Shows a success toast notification.
  */
 export function showSuccessToast(message, options = {}) {
-  return toast.success(message, {
-    position: 'top-right',
-    autoClose: 4000,
-    hideProgressBar: false,
-    closeOnClick: true,
-    pauseOnHover: true,
-    draggable: true,
-    ...options,
-  });
+  return notice('success', { title: 'All done', message }, options);
 }
 
 /**
  * Shows an informative toast notification.
  */
 export function showInfoToast(message, options = {}) {
-  return toast.info(message, {
-    position: 'top-right',
-    autoClose: 4000,
-    hideProgressBar: false,
-    closeOnClick: true,
-    pauseOnHover: true,
-    draggable: true,
-    ...options,
-  });
+  return notice('info', { title: 'Good to know', message }, options);
 }
 
 /**
  * Shows a warning toast notification.
  */
 export function showWarningToast(message, options = {}) {
-  return toast.warning(message, {
-    position: 'top-right',
-    autoClose: 4500,
-    hideProgressBar: false,
-    closeOnClick: true,
-    pauseOnHover: true,
-    draggable: true,
-    ...options,
-  });
+  return notice('warning', { title: 'Please check', message }, options);
 }
 
 export { toast };

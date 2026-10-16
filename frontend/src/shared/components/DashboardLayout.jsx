@@ -1,606 +1,74 @@
-import { useState } from 'react';
-
-import {
-  Link,
-  NavLink,
-} from 'react-router-dom';
-
-import {
-  LayoutDashboard,
-  BriefcaseBusiness,
-  Bookmark,
-  FileText,
-  Building2,
-  Users,
-  ScrollText,
-  Search,
-  UserRound,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  ChevronDown,
-  ExternalLink,
-  Globe2,
-  Laptop,
-  HeartHandshake,
-  Stethoscope,
-  Tractor,
-  UserPlus,
-} from 'lucide-react';
-
+import { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
+import { CircleHelp, LayoutDashboard, BriefcaseBusiness, Bookmark, FileText, Building2, Users, ScrollText, Search, UserRound, Settings, LogOut, Menu, X, ChevronDown, ExternalLink, Globe2, Laptop, HeartHandshake, Stethoscope, Tractor, UserPlus, ArrowRight, Bell, ShieldCheck, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SITE_NAME } from '../config/site';
-
+import WorkspaceAccountTools from './WorkspaceAccountTools';
+import DashboardSearch from './DashboardSearch';
+import '../../admin/styles/admin.css';
 import '../styles/dashboard.css';
+import '../styles/workspace.css';
+import '../styles/tables.css';
 
-const homeByRole = {
-  job_seeker: '/dashboard/job-seeker',
-  recruiter: '/dashboard/recruiter',
-  admin: '/dashboard/admin',
+const homes = { job_seeker: '/dashboard/job-seeker', recruiter: '/dashboard/recruiter', admin: '/dashboard/admin' };
+const roleLabels = { job_seeker: 'Job seeker', recruiter: 'Recruiter', admin: 'Administrator' };
+const navigation = {
+  job_seeker: [['Overview', '/dashboard/job-seeker', LayoutDashboard], ['Find jobs', '/dashboard/job-seeker/jobs', Search], ['My applications', '/dashboard/job-seeker/applications', FileText], ['Saved jobs', '/dashboard/job-seeker/saved', Bookmark], ['My profile', '/dashboard/job-seeker/profile', UserRound]],
+  recruiter: [['Overview', '/dashboard/recruiter', LayoutDashboard], ['My jobs', '/my-jobs', BriefcaseBusiness], ['Candidates', '/candidates', Users], ['Post a job', '/post-job', FileText], ['Company profile', '/my-company', Building2]],
+  admin: [['Overview', '/dashboard/admin', LayoutDashboard], ['Jobs', '/admin/jobs', BriefcaseBusiness], ['Review queue', '/admin/moderation', FileText], ['Users', '/admin/users', Users], ['Companies', '/admin/companies', Building2], ['Portals', '/admin/portals', Globe2], ['Applications', '/admin/applications', FileText], ['Activity log', '/admin/activity', ScrollText], ['Security events', '/admin/security', ShieldCheck]],
 };
+const portals = [
+  ['Office Jobline', Building2, import.meta.env.VITE_OFFICE_JOBS_URL], ['IT Jobline', Laptop, import.meta.env.VITE_IT_JOBS_URL],
+  ['ServiceCare', HeartHandshake, import.meta.env.VITE_SERVICE_CARE_URL], ['Health Care', Stethoscope, import.meta.env.VITE_HEALTH_CARE_URL],
+  ['FarmerFreight', Tractor, import.meta.env.VITE_FARMERFREIGHT_URL], ['Aboriginal Jobline', Users, import.meta.env.VITE_ABORIGINAL_URL],
+  ['Newcomer Jobline', UserPlus, import.meta.env.VITE_NEWCOMERS_URL],
+].filter(([, , url]) => /^https?:\/\//i.test(url || ''));
 
-const roleLabels = {
-  job_seeker: 'Job Seeker',
-  recruiter: 'Recruiter',
-  admin: 'Administrator',
-};
-
-const linksByRole = {
-  job_seeker: [
-    {
-      to: '/dashboard/job-seeker',
-      label: 'Overview',
-      icon: LayoutDashboard,
-      end: true,
-    },
-    {
-      to: '/dashboard/job-seeker/jobs',
-      label: 'Find Jobs',
-      icon: Search,
-    },
-    {
-      to: '/dashboard/job-seeker/applications',
-      label: 'My Applications',
-      icon: FileText,
-    },
-    {
-      to: '/dashboard/job-seeker/saved',
-      label: 'Saved Jobs',
-      icon: Bookmark,
-    },
-    {
-      to: '/dashboard/job-seeker/profile',
-      label: 'My Profile',
-      icon: UserRound,
-    },
-  ],
-
-  recruiter: [
-    {
-      to: '/dashboard/recruiter',
-      label: 'Overview',
-      icon: LayoutDashboard,
-      end: true,
-    },
-    {
-      to: '/my-jobs',
-      label: 'My Jobs',
-      icon: BriefcaseBusiness,
-    },
-    {
-      to: '/candidates',
-      label: 'Candidates',
-      icon: Users,
-    },
-    {
-      to: '/post-job',
-      label: 'Post a Job',
-      icon: FileText,
-    },
-    {
-      to: '/my-company',
-      label: 'Company Profile',
-      icon: Building2,
-    },
-  ],
-
-  // YAHAN ADMIN KE LINKS UPDATE KIYE HAIN
-  admin: [
-    {
-      to: '/dashboard/admin',
-      label: 'Overview',
-      icon: LayoutDashboard,
-      end: true,
-    },
-    {
-      to: '/admin/jobs',
-      label: 'All Jobs',
-      icon: BriefcaseBusiness,
-    },
-    {
-      to: '/admin/moderation',
-      label: 'Job Moderation',
-      icon: BriefcaseBusiness,
-    },
-    {
-      to: '/admin/users',
-      label: 'Users',
-      icon: Users,
-    },
-    {
-      to: '/admin/activity',
-      label: 'System & Activity',
-      icon: ScrollText,
-    },
-  ],
-};
-
-// YAHAN ADMIN KA SETTINGS PATH BHI UPDATE KIYA HAI
-const settingsByRole = {
-  job_seeker: '/dashboard/job-seeker/settings',
-  recruiter: '/settings', 
-  admin: '/settings',
-};
-
-const networkPortals = [
-  {
-    key: 'jooblie',
-    label: 'Jooblie',
-    subtitle: 'All Jobs',
-    icon: Globe2,
-    internal: true,
-  },
-  {
-    key: 'office-jobs',
-    label: 'Office Jobline',
-    subtitle: 'Office & Administration',
-    icon: Building2,
-    url: import.meta.env.VITE_OFFICE_JOBS_URL || '',
-  },
-  {
-    key: 'it-jobs',
-    label: 'IT Jobline',
-    subtitle: 'Technology Jobs',
-    icon: Laptop,
-    url: import.meta.env.VITE_IT_JOBS_URL || '',
-  },
-  {
-    key: 'service-care',
-    label: 'ServiceCare',
-    subtitle: 'Hospitality & Service',
-    icon: HeartHandshake,
-    url: import.meta.env.VITE_SERVICE_CARE_URL || '',
-  },
-  {
-    key: 'health-care',
-    label: 'Health Care',
-    subtitle: 'Healthcare Jobs',
-    icon: Stethoscope,
-    url: import.meta.env.VITE_HEALTH_CARE_URL || '',
-  },
-  {
-    key: 'farmerfreight',
-    label: 'FarmerFreight',
-    subtitle: 'Transport & Farming',
-    icon: Tractor,
-    url: import.meta.env.VITE_FARMERFREIGHT_URL || '',
-  },
-  {
-    key: 'aboriginal',
-    label: 'Aboriginal Jobline',
-    subtitle: 'Audience Portal',
-    icon: Users,
-    url: import.meta.env.VITE_ABORIGINAL_URL || '',
-  },
-  {
-    key: 'newcomers',
-    label: 'Newcomer Jobline',
-    subtitle: 'Audience Portal',
-    icon: UserPlus,
-    url: import.meta.env.VITE_NEWCOMERS_URL || '',
-  },
-];
-
-export default function DashboardLayout({
-  title,
-  subtitle,
-  children,
-  actions,
-}) {
-  const {
-    profile,
-    role,
-    signOut,
-  } = useAuth();
-
-  const [
-    mobileOpen,
-    setMobileOpen,
-  ] = useState(false);
-
-  const [
-    networkOpen,
-    setNetworkOpen,
-  ] = useState(true);
-
-  const links =
-    linksByRole[role] || [];
-
-  const dashboardHome =
-    homeByRole[role] ||
-    '/dashboard/job-seeker';
-
-  const settingsPath =
-    settingsByRole[role] ||
-    dashboardHome;
-
-  const fullName =
-    profile?.full_name?.trim() ||
-    profile?.email?.split('@')?.[0] ||
-    `${SITE_NAME} User`;
-
-  const avatarLetter =
-    fullName
-      .slice(0, 1)
-      .toUpperCase();
-
-  const closeMobile = () => {
-    setMobileOpen(false);
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-    } catch (error) {
-      console.error(
-        'Sign out failed:',
-        error
-      );
-    }
-  };
-
-  const handleSectionClick = (
-    event,
-    href
-  ) => {
-    closeMobile();
-
-    if (!href?.startsWith('#')) {
-      return;
-    }
-
-    const target =
-      document.querySelector(href);
-
-    if (!target) {
-      return;
-    }
-
-    event.preventDefault();
-
-    target.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
-  };
-
-  return (
-    <div className="jd-app">
-
-      {/* MOBILE HEADER */}
-      <header className="jd-mobile-header">
-        <Link
-          to={dashboardHome}
-          className="jd-mobile-brand"
-          onClick={closeMobile}
-        >
-          <span className="jd-brand-mark">
-            <BriefcaseBusiness size={20} />
-          </span>
-
-          <strong>
-            {SITE_NAME}
-          </strong>
-        </Link>
-
-        <button
-          type="button"
-          className="jd-menu-button"
-          onClick={() =>
-            setMobileOpen(true)
-          }
-        >
-          <Menu size={23} />
-        </button>
-      </header>
-
-      {mobileOpen && (
-        <button
-          type="button"
-          className="jd-overlay"
-          onClick={closeMobile}
-        />
-      )}
-
-      {/* SIDEBAR */}
-      <aside
-        className={
-          `jd-sidebar${
-            mobileOpen
-              ? ' is-open'
-              : ''
-          }`
-        }
-      >
-        {/* LOGO */}
-        <div className="jd-sidebar-brand">
-          <Link
-            to={dashboardHome}
-            className="jd-brand"
-            onClick={closeMobile}
-          >
-            <span className="jd-brand-mark">
-              <BriefcaseBusiness size={21} />
-            </span>
-
-            <strong>
-              {SITE_NAME}
-            </strong>
-          </Link>
-
-          <button
-            type="button"
-            className="jd-close-button"
-            onClick={closeMobile}
-          >
-            <X size={21} />
-          </button>
-        </div>
-
-        {/* USER */}
-        <div className="jd-user">
-          <span className="jd-user-avatar">
-            {avatarLetter}
-          </span>
-          <div className="jd-user-copy">
-            <strong>
-              {fullName}
-            </strong>
-            <span>
-              {roleLabels[role] || 'Account'}
-            </span>
-          </div>
-        </div>
-
-        {/* NAV */}
-        <div className="jd-sidebar-scroll">
-          <section className="jd-menu-section">
-            <span className="jd-section-label">
-              Workspace
-            </span>
-
-            <nav className="jd-nav">
-              {links.map(
-                ({
-                  to,
-                  href,
-                  label,
-                  icon: Icon,
-                  end = false,
-                }) => {
-                  if (href) {
-                    return (
-                      <a
-                        key={href}
-                        href={href}
-                        className="jd-nav-link"
-                        onClick={(event) =>
-                          handleSectionClick(
-                            event,
-                            href
-                          )
-                        }
-                      >
-                        <Icon size={18} />
-                        <span>
-                          {label}
-                        </span>
-                      </a>
-                    );
-                  }
-
-                  return (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      end={end}
-                      onClick={closeMobile}
-                      className={({ isActive }) =>
-                        `jd-nav-link${
-                          isActive
-                            ? ' is-active'
-                            : ''
-                        }`
-                      }
-                    >
-                      <Icon size={18} />
-                      <span>
-                        {label}
-                      </span>
-                    </NavLink>
-                  );
-                }
-              )}
-            </nav>
-          </section>
-
-          {/* NETWORK */}
-          <section className="jd-menu-section">
-            <button
-              type="button"
-              className="jd-network-toggle"
-              onClick={() =>
-                setNetworkOpen(
-                  (current) => !current
-                )
-              }
-            >
-              <span>
-                <Globe2 size={15} />
-                Jooblie Network
-              </span>
-              <ChevronDown
-                size={15}
-                className={
-                  networkOpen
-                    ? 'is-open'
-                    : ''
-                }
-              />
-            </button>
-
-            {networkOpen && (
-              <div className="jd-network-list">
-                {networkPortals.map(
-                  ({
-                    key,
-                    label,
-                    subtitle: portalSubtitle,
-                    icon: Icon,
-                    url,
-                    internal,
-                  }) => {
-                    if (internal) {
-                      return (
-                        <Link
-                          key={key}
-                          to={dashboardHome}
-                          className="jd-network-item"
-                          onClick={closeMobile}
-                        >
-                          <span className="jd-network-icon">
-                            <Icon size={16} />
-                          </span>
-
-                          <span className="jd-network-copy">
-                            <strong>
-                              {label}
-                            </strong>
-                            <small>
-                              {portalSubtitle}
-                            </small>
-                          </span>
-                        </Link>
-                      );
-                    }
-
-                    if (!url) {
-                      return null;
-                    }
-
-                    return (
-                      <a
-                        key={key}
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="jd-network-item"
-                      >
-                        <span className="jd-network-icon">
-                          <Icon size={16} />
-                        </span>
-
-                        <span className="jd-network-copy">
-                          <strong>
-                            {label}
-                          </strong>
-                          <small>
-                            {portalSubtitle}
-                          </small>
-                        </span>
-
-                        <ExternalLink
-                          size={12}
-                          className="jd-external-icon"
-                        />
-                      </a>
-                    );
-                  }
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-
-        {/* SIMPLE FOOTER */}
-        <div className="jd-sidebar-footer">
-          <NavLink
-            to={settingsPath}
-            onClick={closeMobile}
-            className={({ isActive }) =>
-              `jd-footer-link${isActive ? ' is-active' : ''}`
-            }
-          >
-            <Settings size={18} />
-            <span>
-              Settings
-            </span>
-          </NavLink>
-
-          <button
-            type="button"
-            className="jd-signout"
-            onClick={handleSignOut}
-          >
-            <LogOut size={18} />
-            <span>
-              Sign Out
-            </span>
-          </button>
-        </div>
-      </aside>
-
-      {/* MAIN */}
-      <main className="jd-main">
-        <div className="jd-content">
-          <div className="jd-page-heading">
-            <div className="jd-page-heading-copy">
-              <span className="jd-eyebrow">
-                {SITE_NAME} Dashboard
-              </span>
-              <h1>
-                {title}
-              </h1>
-              {subtitle && (
-                <p>
-                  {subtitle}
-                </p>
-              )}
-            </div>
-
-            {actions && (
-              <div className="jd-page-actions">
-                {actions}
-              </div>
-            )}
-          </div>
-
-          <div className="jd-body">
-            {children}
-          </div>
-        </div>
-      </main>
-
+export default function DashboardLayout({ title, subtitle, children, actions }) {
+  const { profile, role, signOut } = useAuth();
+  const [mobileOpen, setMobileOpen] = useState(false), [networkOpen, setNetworkOpen] = useState(false), [signingOut, setSigningOut] = useState(false);
+  const [narrow, setNarrow] = useState(() => window.innerWidth <= 800);
+  const sidebar = useRef(null), menuButton = useRef(null);
+  const location = useLocation();
+  const home = homes[role] || homes.job_seeker;
+  const settings = role === 'job_seeker' ? '/dashboard/job-seeker/settings' : '/settings';
+  const name = profile?.full_name?.trim() || profile?.email?.split('@')[0] || 'Your account';
+  const overview = location.pathname === home;
+  const activeLabel = (navigation[role] || []).find(([, path]) => location.pathname === path || (path !== home && location.pathname.startsWith(path + '/')))?.[0] || title || 'Workspace';
+  const cta = role === 'recruiter' ? { title: 'Build your next great team.', text: 'Connect your next opportunity with the right people.', label: 'Post a job', to: '/post-job' } : role === 'admin' ? { title: 'A trusted jobs network.', text: 'Keep opportunities relevant and the community growing.', label: 'Review jobs', to: '/admin/moderation' } : { title: 'Your next chapter starts here.', text: 'Find an opportunity that moves you forward.', label: 'Explore jobs', to: '/dashboard/job-seeker/jobs' };
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+  useEffect(() => { const resize = () => { setNarrow(window.innerWidth <= 800); if (window.innerWidth > 800) setMobileOpen(false); }; window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize); }, []);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const overflow = document.body.style.overflow; document.body.style.overflow = 'hidden';
+    const first = sidebar.current?.querySelector('a,button'); first?.focus();
+    const keyboard = event => {
+      if (event.key === 'Escape') { setMobileOpen(false); menuButton.current?.focus(); }
+      if (event.key !== 'Tab') return;
+      const focusable = [...sidebar.current.querySelectorAll('a,button:not(:disabled)')].filter(el => el.getClientRects().length);
+      if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1)?.focus(); }
+      else if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0]?.focus(); }
+    };
+    document.addEventListener('keydown', keyboard);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', keyboard); };
+  }, [mobileOpen]);
+  const logout = async () => { if (signingOut) return; setSigningOut(true); try { await signOut(); } catch { /* shared auth reports failures */ } finally { setSigningOut(false); } };
+  return <div className={`jd-app workspace workspace--${role || 'account'}`}>
+    {mobileOpen && <button className="jd-overlay" type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
+    <aside ref={sidebar} className={`jd-sidebar${mobileOpen ? ' is-open' : ''}`} aria-label="Workspace navigation" aria-hidden={narrow && !mobileOpen ? true : undefined} inert={narrow && !mobileOpen ? '' : undefined}>
+      <div className="jd-sidebar-brand"><Link to={home} className="jd-brand"><span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span></Link><button type="button" className="jd-close-button" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={20} /></button></div>
+      <div className="jd-workspace-label"><span className="workspace-dot" />{roleLabels[role] || 'Your'} workspace</div>
+      <div className="jd-sidebar-scroll">
+        <span className="jd-section-label">Workspace</span><nav className="jd-nav" aria-label="Main navigation">{(navigation[role] || []).map(([label, path, Icon], index) => <NavLink key={path} to={path} end={index === 0} className={({ isActive }) => `jd-nav-link${isActive ? ' is-active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{label}</span><ChevronRight className="jd-nav-arrow" size={14} /></NavLink>)}</nav>
+        {role !== 'admin' && <div className="jd-sidebar-cta"><span className="jd-cta-icon"><BriefcaseBusiness size={21} /></span><h3>{cta.title}</h3><p>{cta.text}</p><Link to={cta.to}>{cta.label}<ArrowRight size={15} /></Link></div>}
+        <section className="jd-network-section"><button type="button" className="jd-network-toggle" aria-expanded={networkOpen} onClick={() => setNetworkOpen(value => !value)}><span><Globe2 size={16} />Jooblie network</span><ChevronDown size={14} className={networkOpen ? 'is-open' : ''} /></button>{networkOpen && <div className="jd-network-list"><Link className="jd-network-item" to="/jobs"><Globe2 size={16} /><span>Explore all jobs</span><ArrowRight size={13} /></Link>{portals.map(([label, Icon, url]) => <a key={label} href={url} target="_blank" rel="noopener noreferrer" className="jd-network-item"><Icon size={16} /><span>{label}</span><ExternalLink size={12} /></a>)}</div>}</section>
+      </div>
+      <div className="jd-sidebar-footer jd-account-footer"><h2 className="jd-account-heading">My account</h2><Link to="/account/profile" className="jd-account-link"><span className="jd-user-avatar">{name.slice(0,1).toUpperCase()}</span><span className="jd-account-name">{name}</span></Link><Link to="/account/help" className="jd-footer-link"><CircleHelp size={17}/><span>Help</span></Link><NavLink to={settings} className="jd-footer-link"><Settings size={17}/><span>Settings</span></NavLink><button type="button" className="jd-signout" disabled={signingOut} onClick={logout}><LogOut size={17}/><span>{signingOut?'Logging out…':'Log Out'}</span></button></div>
+    </aside>
+    <div className="jd-main">
+      <header className="workspace-topbar"><div className="workspace-topbar__trail"><button ref={menuButton} className="workspace-menu" type="button" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}><Menu size={22} /></button><span className="workspace-topbar__section">Workspace</span><ChevronRight size={13} /><strong>{activeLabel}</strong></div><div className="workspace-topbar__tools"><DashboardSearch key={`${role}:${profile?.id || 'account'}`} role={role} pages={[...(navigation[role] || []),['Settings',settings,Settings]]}/><WorkspaceAccountTools key={profile?.id || role} name={name} settings={settings} onSignOut={logout} signingOut={signingOut}/></div></header>
+      <main className="jd-content"><div className="jd-page-heading jd-page-heading--compact"><div className="jd-page-heading-copy"><h1>{title}</h1></div><div className="jd-page-actions">{actions || (overview && <Link className="button button--primary" to={cta.to}>{role === 'job_seeker' ? <Search size={17} /> : <BriefcaseBusiness size={17} />}{cta.label}</Link>)}</div></div><div className="jd-body">{children}</div><footer className="workspace-footer"><span>Â© {new Date().getFullYear()} {SITE_NAME}. All rights reserved.</span><Link to="/account/help">Help & support<ArrowRight size={12} /></Link></footer></main>
     </div>
-  );
+  </div>;
 }
-
-export const DashboardIcons = {
-  Bookmark,
-  FileText,
-  Users,
-  ScrollText,
-  BriefcaseBusiness,
-  Building2,
-};
+export const DashboardIcons = { Bookmark, FileText, Users, ScrollText, BriefcaseBusiness, Building2 };

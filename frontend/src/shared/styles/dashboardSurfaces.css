@@ -1,0 +1,41 @@
+/* Shared dashboard surface values supplied by the design reference. */
+.workspace{
+  --dashboard-surface:#ffffff;
+  --dashboard-surface-border:.5px solid #e5e5e5;
+  --dashboard-surface-shadow:0 4px 8px 0 rgb(0 0 0 / 10%);
+}
+.workspace :is(
+  .workspace-panel,.workspace-metric,.workspace-job,.workspace-callout,
+  .dashboard-panel,.dashboard-table-panel,.admin-collection,.jobs-summary-card,
+  .profile-container,.profile-section-card,.dash-job-card,.settings-card,
+  .company-profile-card,.skeleton-card,.skeleton-overview-panel
+){
+  background:var(--dashboard-surface)!important;
+  border:var(--dashboard-surface-border)!important;
+  box-shadow:var(--dashboard-surface-shadow)!important;
+}
+.workspace :is(.workspace-panel,.workspace-metric,.workspace-job,.jobs-summary-card):hover{
+  background:var(--dashboard-surface)!important;
+  border:var(--dashboard-surface-border)!important;
+  box-shadow:var(--dashboard-surface-shadow)!important;
+}
+.workspace :is(.admin-table,.dashboard-data-table,.workspace-table,.skeleton-table){
+  background:var(--dashboard-surface);
+}
+.workspace :is(.admin-table,.dashboard-data-table,.workspace-table,.skeleton-table) th{
+  background:#fff!important;
+  border-bottom:.5px solid #e5e5e5!important;
+}
+.workspace :is(.admin-table,.dashboard-data-table,.workspace-table,.skeleton-table) td{
+  border-bottom:.5px solid #e5e5e5!important;
+}
+.workspace :is(.admin-table,.dashboard-data-table,.workspace-table) tbody tr:hover{
+  background:#fafbfc;
+}
+.workspace :is(.admin-table,.dashboard-data-table,.workspace-table) tbody tr.is-selected{
+  background:#f2f7ff;
+}
+.workspace :is(.admin-toolbar,.dashboard-table-toolbar,.table-status-tabs,.dashboard-pagination){
+  background:#fff;
+  border-color:#e5e5e5;
+}

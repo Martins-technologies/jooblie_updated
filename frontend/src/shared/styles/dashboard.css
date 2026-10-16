@@ -852,3 +852,21 @@
     font-size: 25px;
   }
 }
+
+/* Account actions remain anchored in the sidebar, following the reference. */
+.jd-sidebar-footer.jd-account-footer{background:transparent;border-top:0;padding:24px 20px 22px;display:flex;flex-direction:column;gap:3px}
+body .jd-account-footer .jd-account-heading{font-size:12px!important;font-weight:500!important;line-height:1.4;color:#000f45!important;text-transform:uppercase;margin:0 10px 12px;letter-spacing:.025em!important}
+.jd-account-footer .jd-account-link{display:flex;align-items:center;gap:12px;min-height:46px;padding:0 10px;margin-bottom:6px;border-radius:7px;min-width:0;color:#000f45}
+.jd-account-footer .jd-user-avatar{width:34px;height:34px;flex:0 0 34px;background:#e3ebff;color:#174eb1;border:1px solid #ccd9f0;box-shadow:none;font-size:14px}
+.jd-account-footer .jd-account-name{font-size:14px;line-height:1.4;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body .jd-account-footer .jd-footer-link,body .jd-account-footer .jd-signout{font-size:14px!important;font-weight:400;min-height:39px;padding:0 10px;border-radius:7px;color:#000f45;gap:10px;margin:0}
+body .jd-account-footer .jd-signout{color:#075bfa}.jd-account-footer .jd-signout:hover,.jd-account-footer .jd-account-link:hover{background:#e9effb}.jd-account-footer .jd-signout:disabled{opacity:.5;cursor:wait}.jd-account-footer a:focus-visible,.jd-account-footer button:focus-visible{outline:2px solid #84b1ff;outline-offset:2px}
+
+/* A quiet navigation surface with one consistent blue accent. */
+body .jd-sidebar{background:#f3f6fc;border-right:1px solid #e2e8f2}
+body .workspace-topbar{background:#fff;border-bottom:1px solid #e4eaf3;box-shadow:0 2px 8px #17345d03}
+body .jd-nav-link{color:#53647e;border-radius:8px}body .jd-nav-link:hover{background:#eaf0fb;color:#145fe5}body .jd-nav-link.is-active{background:#e3edff;color:#075be8;box-shadow:inset 3px 0 #246cf0}
+body .jd-account-footer button.jd-signout{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;width:100%!important;max-width:none!important;min-width:0!important;height:40px!important;white-space:nowrap!important;gap:10px!important}
+body .jd-account-footer .jd-signout span{display:inline!important;white-space:nowrap!important;word-break:normal!important;width:auto!important}body .jd-account-footer .jd-signout svg{flex:0 0 17px}
+.account-detail-panel{max-width:780px;padding:28px!important}.account-detail-identity{display:flex;align-items:center;gap:16px;padding-bottom:22px;border-bottom:1px solid #edf0f5}.account-detail-avatar{display:flex;align-items:center;justify-content:center;width:58px;height:58px;border-radius:50%;background:#e8efff;color:#1864e6;font-size:24px}.account-detail-identity h2{margin:0 0 5px}.account-detail-identity p{margin:0;font-size:13px}.account-detail-panel dl{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin:24px 0}.account-detail-panel dt{display:flex;align-items:center;gap:8px;color:#7b899d;font-size:12px}.account-detail-panel dd{margin:8px 0 0;color:#183455;font-size:15px;overflow-wrap:anywhere}.workspace-help-item{border-top:1px solid #edf0f5;padding:16px 0}.workspace-help-item summary{font-size:14px;color:#17385d;cursor:pointer;font-weight:500}.workspace-help-item p{font-size:14px!important;line-height:1.65;margin-bottom:0}.settings-draft-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12px;color:#71819a}
+@media(max-width:599px){.account-detail-panel{padding:20px!important}.account-detail-panel dl{grid-template-columns:1fr}}

@@ -1,3 +1,5 @@
+import SkeletonContent from '../../shared/components/Skeleton';
+import Select from '../../shared/components/Select';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -181,22 +183,22 @@ export default function JobSeekerJobsPage() {
                   <label className="input-label">Category</label>
                   <div className="input-wrapper">
                     <Layers className="input-icon" size={16} />
-                    <select className="pro-input" value={filters.category} onChange={(e) => setFilters(c => ({...c, category: e.target.value}))}>
+                    <Select className="pro-input" value={filters.category} onChange={(e) => setFilters(c => ({...c, category: e.target.value}))}>
                       <option value="">All Categories</option>
                       {categories.map((c) => <option key={c.id} value={c.slug || c.id}>{c.name}</option>)}
-                    </select>
+                    </Select>
                   </div>
                 </div>
                 <div className="input-group">
                   <label className="input-label">Work Setup</label>
                   <div className="input-wrapper">
                     <MonitorSmartphone className="input-icon" size={16} />
-                    <select className="pro-input" value={filters.workplace} onChange={(e) => setFilters(c => ({...c, workplace: e.target.value}))}>
+                    <Select className="pro-input" value={filters.workplace} onChange={(e) => setFilters(c => ({...c, workplace: e.target.value}))}>
                       <option value="">Any Workplace</option>
                       <option value="remote">Remote</option>
                       <option value="onsite">On-site</option>
                       <option value="hybrid">Hybrid</option>
-                    </select>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -219,7 +221,7 @@ export default function JobSeekerJobsPage() {
 
             {/* Results Grid */}
             {jobsState.loading ? (
-              <LoadingSpinner />
+              <SkeletonContent variant="cards" rows={6} label="Loading opportunities…"/>
             ) : availableJobs.length ? (
               <>
                 <div className="dash-job-grid">

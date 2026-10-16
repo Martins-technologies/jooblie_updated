@@ -1,0 +1,109 @@
+import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowUpRight, Eye, Download, Users, Building2, Globe2, FileText, Activity, ShieldCheck, CheckCircle2, Clock3 } from 'lucide-react';
+import { TableStatusTabs } from '../../shared/components/DashboardTable';
+import { csvCell } from '../utils/jobsExport';
+import DashboardLayout from '../../shared/components/DashboardLayout';
+import Select from '../../shared/components/Select';
+import { Monogram, StatusBadge } from '../../shared/components/WorkspaceCards';
+import { useAuth } from '../../shared/context/AuthContext';
+import { apiRequest } from '../../shared/lib/api';
+import { showSuccessToast } from '../../shared/lib/toast';
+import { humanize } from '../../shared/lib/dashboardPresentation';
+import { safeWebsite, displayDate, activityLabel } from '../utils/presentation';
+import { AdminDialog, CollectionTable, CollectionToolbar, Filter, useAdminCollection } from '../components/AdminCollection';
+
+const tabFilters={users:['status',[['active','Active'],['blocked','Blocked']]],portals:['active',[['true','Enabled'],['false','Disabled']]],companies:['verification',[['pending','Pending'],['verified','Verified'],['rejected','Rejected']]],applications:['status',['submitted','viewed','shortlisted','interviewing','offered','hired','rejected','withdrawn'].map(value=>[value,humanize(value)])],'security-events':['severity',['low','medium','high','critical'].map(value=>[value,humanize(value)])]};
+const roles = [['job_seeker','Job seeker'],['recruiter','Recruiter'],['admin','Administrator']];
+const configs = {
+  users: { title: 'People & access', subtitle: 'Manage account roles with a clear, auditable approval step.', search: 'Search name or email', sort: 'full_name', columns: [{label:'Member',sort:'full_name'},{label:'Account status',sort:'status'},{label:'Role',sort:'role'},{label:'Joined',sort:'created_at'},{label:'Actions'}] },
+  portals: { title:'Portal directory', subtitle:'Configured portals and their database activity across your network.', search:'Search name, slug or domain',sort:'name',columns:[{label:'Portal',sort:'name'},{label:'Configuration'},{label:'Type / sector',sort:'site_type'},{label:'Mapped jobs'},{label:'Members'},{label:'Latest activity'},{label:'Actions'}]},
+  companies: { title:'Company directory',subtitle:'Review employer records and verification status.',search:'Search company name',sort:'created_at',columns:[{label:'Company',sort:'name'},{label:'Verification',sort:'verification_status'},{label:'Status',sort:'status'},{label:'Created',sort:'created_at'},{label:'Actions'}]},
+  applications: { title:'Applications',subtitle:'Monitor application progress across the network.',sort:'created_at',columns:[{label:'Applicant'},{label:'Opportunity'},{label:'Status',sort:'status'},{label:'Applied',sort:'created_at'},{label:'Actions'}]},
+  'audit-logs': { title:'Activity log',subtitle:'Recorded administrative and platform actions.',search:'Search action or entity type',sort:'created_at',columns:[{label:'Action',sort:'action'},{label:'Entity',sort:'entity_type'},{label:'Recorded',sort:'created_at'},{label:'Actions'}]},
+  'security-events':{title:'Security events',subtitle:'Review recorded access and security events. Event counts do not indicate system health.',search:'Search event type',sort:'created_at',columns:[{label:'Event',sort:'event_type'},{label:'Severity',sort:'severity'},{label:'Recorded',sort:'created_at'},{label:'Actions'}]},
+};
+export default function AdminDirectoryPage({ type = 'users' }) {
+  const config = configs[type];
+  const [exporting,setExporting]=useState(false),[exportError,setExportError]=useState('');
+  const tablePanel=useRef(null);
+  const tabs=tabFilters[type];
+  const collection = useAdminCollection(`/admin/${type}`, { sort:config.sort, direction: ['users','portals'].includes(type) ? 'asc':'desc' });
+  const { user } = useAuth();
+  const [selected,setSelected] = useState(null), [newRole,setNewRole] = useState(''), [saving,setSaving] = useState(false), [roleError,setRoleError] = useState('');
+  const pending = useRef(false);
+  const close = () => { if (!pending.current) setSelected(null); };
+  async function saveRole(event) {
+    event.preventDefault();
+    if (pending.current || !selected || selected.role === newRole || selected.id === user?.id) return;
+    pending.current=true;setSaving(true);setRoleError('');
+    try {
+      await apiRequest(`/admin/users/${selected.id}/role`, { method:'PATCH',auth:true,notifyError:false,body:{ role:newRole,previous_role:selected.role } });
+      setSelected(null);collection.reload();showSuccessToast('Account role updated.');
+    } catch(error) { setRoleError(error.message || 'This role could not be updated.'); }
+    finally {pending.current=false;setSaving(false);}
+  }
+  const summaryConfig={
+    users:{icon:Users,label:'Members',field:'status',value:'active',match:'Active on this page',other:'Other account states'},
+    companies:{icon:Building2,label:'Companies',field:'verification_status',value:'pending',match:'Awaiting verification on this page',other:'Other verification states'},
+    portals:{icon:Globe2,label:'Portals',field:'is_active',value:true,match:'Enabled on this page',other:'Disabled on this page'},
+    applications:{icon:FileText,label:'Applications',field:'status',value:'submitted',match:'New submissions on this page',other:'Other application stages'},
+    'audit-logs':{icon:Activity,label:'Activity records',field:'action',value:'auth.sign_in',match:'Records on this page',other:'Entity types on this page'},
+    'security-events':{icon:ShieldCheck,label:'Security events',field:'severity',value:'critical',match:'Critical on this page',other:'Other severity levels'},
+  }[type];
+  const matching=type==='audit-logs'?collection.items.length:collection.items.filter(item=>item[summaryConfig.field]===summaryConfig.value).length;
+  const secondary=type==='audit-logs'?new Set(collection.items.map(item=>item.entity_type).filter(Boolean)).size:collection.items.length-matching;
+  const SummaryIcon=summaryConfig.icon;
+  const summaryUnavailable=collection.loading||Boolean(collection.error);
+  const open = item => {setRoleError('');setSelected(item);setNewRole(item.role || '');};
+  async function exportPage(format){
+    if(exporting||collection.loading||!collection.items.length)return;
+    setExporting(true);setExportError('');
+    try{
+      const table=tablePanel.current?.querySelector('table');
+      if(!table)throw new Error('Refresh the records before exporting.');
+      const headers=Array.from(table.querySelectorAll('thead th')).slice(0,-1).map(cell=>cell.innerText.trim());
+      const rows=Array.from(table.querySelectorAll('tbody tr')).map(row=>Array.from(row.cells).slice(0,-1).map(cell=>cell.innerText.trim()));
+      const filename=type+'-page-'+(collection.pagination?.page||1)+'-'+new Date().toISOString().slice(0,10);
+      if(format==='pdf'){
+        const [{jsPDF},{default:autoTable}]=await Promise.all([import('jspdf'),import('jspdf-autotable')]);
+        const doc=new jsPDF({orientation:headers.length>5?'landscape':'portrait'});doc.setFontSize(16);doc.text(config.title,14,18);doc.setFontSize(10);doc.text('Current page · '+rows.length+' records',14,25);autoTable(doc,{head:[headers],body:rows,startY:32,styles:{fontSize:9},headStyles:{fillColor:[24,74,142]}});doc.save(filename+'.pdf');
+      }else{
+        const blob=new Blob(['\uFEFF'+[headers,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      }
+    }catch(error){setExportError(error.message||'Export unavailable. Please try again.');}finally{setExporting(false);}
+  }
+  return <DashboardLayout title={config.title} subtitle={config.subtitle}>
+    {type === 'portals' && <div className="admin-note">Enabled means the database configuration is active. Website uptime, deployment and integration health are not monitored here.</div>}
+    {type === 'companies' && <div className="admin-note">Verification records are read-only here. No company approval workflow is configured in the existing API.</div>}
+    {['audit-logs','security-events'].includes(type) && <div className="admin-tabs"><Link className={type==='audit-logs'?'is-active':''} to="/admin/activity">Activity log</Link><Link className={type==='security-events'?'is-active':''} to="/admin/security">Security events</Link></div>}
+    <div className="directory-summary-grid" aria-label={config.title+' summary'} aria-busy={collection.loading}>
+      {[[SummaryIcon,collection.pagination?.total,`Matching ${summaryConfig.label.toLowerCase()}`,'Across all pages · current filters','blue'],[Clock3,matching,summaryConfig.match,'Current page only','amber'],[CheckCircle2,secondary,summaryConfig.other,'Current page only','green']].map(([Icon,value,label,hint,tone])=><article key={label} className={`workspace-panel directory-summary directory-summary--${tone}`}><span className="directory-summary-icon"><Icon size={21} strokeWidth={1.8}/></span><div><span className="directory-summary-label">{label}</span><strong>{summaryUnavailable?'—':Number(value||0).toLocaleString()}</strong><small>{collection.error?'Currently unavailable':collection.loading?'Loading records…':hint}</small></div></article>)}
+    </div>
+    <section ref={tablePanel} className="workspace-panel admin-collection">
+      <CollectionToolbar collection={collection} searchLabel={config.search}>
+        {type==='users' && <Filter collection={collection} name="role" label="All roles" options={roles}/>}
+
+
+
+
+        <details className="directory-export"><summary aria-label="Export records"><Download size={15}/>{exporting?'Exporting…':'Export'}</summary><div><button type="button" disabled={exporting||collection.loading||!collection.items.length} onClick={()=>exportPage('csv')}>CSV · current page</button><button type="button" disabled={exporting||collection.loading||!collection.items.length} onClick={()=>exportPage('pdf')}>PDF · current page</button></div></details>
+      </CollectionToolbar>
+      {exportError&&<div className="admin-note" role="alert">{exportError}</div>}
+      {tabs&&<TableStatusTabs label={'Filter '+config.title} value={collection.params.get(tabs[0])||'all'} onChange={value=>collection.update({[tabs[0]]:value})} items={[["all","All"],...tabs[1]]}/>}
+      <CollectionTable collection={collection} noun={type==='users'?'members':type==='audit-logs'?'events':type==='security-events'?'events':type} columns={config.columns}>{collection.items.map(item => <tr key={item.id}>
+        {type==='users' && <><td><div className="admin-identity"><Monogram name={item.full_name || item.email}/><div><strong>{item.full_name || 'Unnamed member'}{item.id===user?.id && <span className="admin-you">You</span>}</strong><small>{item.email}</small></div></div></td><td><StatusBadge status={item.status || 'unknown'}/></td><td>{roles.find(([role])=>role===item.role)?.[1] || 'Unknown'}</td><td>{displayDate(item.created_at)}</td><td><button type="button" className="admin-row-action" onClick={()=>open(item)} aria-label="View account" title="View account"><span className="table-action-label">View account</span><Eye size={16}/></button></td></>}
+        {type==='portals' && <><td><div className="admin-identity"><Monogram name={item.name}/><div><Link to={`/admin/portals/${encodeURIComponent(item.slug)}`}><strong>{item.name}</strong></Link><small>{item.domain || 'Domain not configured'}</small><small>/{item.slug}</small></div></div></td><td><span className={`workspace-status workspace-status--${item.is_active?'active':'closed'}`}>{item.is_active?'Enabled':'Disabled'}</span></td><td>{humanize(item.site_type)}<small>{item.sectors?.name || 'No sector assigned'}</small></td><td>{item.metrics?.jobs ?? 'Unavailable'}</td><td>{item.metrics?.users ?? 'Unavailable'}</td><td>{item.activityAvailable ? item.lastActivity ? displayDate(item.lastActivity):'No activity recorded':'Unavailable'}</td><td><Link className="admin-row-action" to={`/admin/portals/${encodeURIComponent(item.slug)}`} aria-label="View portal" title="View portal"><span className="table-action-label">View portal</span><Eye size={16}/></Link></td></>}
+        {type==='companies' && <><td><div className="admin-identity"><Monogram name={item.name}/><div><strong>{item.name}</strong><small>{item.website || 'No website'}</small></div></div></td><td><StatusBadge status={item.verification_status || 'unknown'}/></td><td><StatusBadge status={item.status || 'unknown'}/></td><td>{displayDate(item.created_at)}</td><td><button type="button" className="admin-row-action" onClick={()=>open(item)} aria-label="View company" title="View company"><span className="table-action-label">View company</span><Eye size={16}/></button></td></>}
+        {type==='applications' && <><td><strong>{item.profiles?.full_name || 'Unavailable applicant'}</strong><small>{item.profiles?.email}</small></td><td>{item.jobs?.title || 'Unavailable job'}</td><td><StatusBadge status={item.status || 'unknown'}/></td><td>{displayDate(item.created_at)}</td><td><button type="button" className="admin-row-action" onClick={()=>open(item)} aria-label="View details" title="View details"><span className="table-action-label">View details</span><Eye size={16}/></button></td></>}
+        {type==='audit-logs' && <><td><strong>{activityLabel(item.action)}</strong></td><td>{humanize(item.entity_type)}</td><td>{displayDate(item.created_at,true)}</td><td><button type="button" className="admin-row-action" onClick={()=>open(item)} aria-label="View details" title="Details"><span className="table-action-label">Details</span><Eye size={16}/></button></td></>}
+        {type==='security-events' && <><td><strong>{humanize(item.event_type)}</strong></td><td><StatusBadge status={item.severity || 'unknown'}/></td><td>{displayDate(item.created_at,true)}</td><td><button type="button" className="admin-row-action" onClick={()=>open(item)} aria-label="View details" title="Details"><span className="table-action-label">Details</span><Eye size={16}/></button></td></>}
+      </tr>)}</CollectionTable>
+    </section>
+    {selected && <AdminDialog title={type==='users'?'Account details':type==='companies'?'Company details':'Record details'} busy={saving} onClose={close}>
+      <dl className="admin-details">{(type==='users' ? [['Name',selected.full_name],['Email',selected.email],['Status',humanize(selected.status)],['Joined',displayDate(selected.created_at,true)]] : type==='companies' ? [['Company',selected.name],['Website',selected.website],['Description',selected.description],['Verification',humanize(selected.verification_status)],['Rejection reason',selected.rejection_reason]] : type==='applications' ? [['Applicant',selected.profiles?.full_name],['Email',selected.profiles?.email],['Job',selected.jobs?.title],['Status',humanize(selected.status)],['Applied',displayDate(selected.created_at,true)]] : [['Event',activityLabel(selected.action || selected.event_type)],['Entity',selected.entity_type],['Recorded',displayDate(selected.created_at,true)],['Record ID',selected.id],['Request ID',selected.request_id]]).filter(([,value])=>value).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+      {type==='users' && <form onSubmit={saveRole} className="admin-edit-form">{roleError && <div className="error-banner" role="alert">{roleError}</div>}<label>Platform role<Select aria-label="Platform role" value={newRole} disabled={saving || selected.id===user?.id} onChange={event=>setNewRole(event.target.value)}>{roles.map(([value,text])=><option key={value} value={value}>{text}</option>)}</Select></label><p className="admin-note">{selected.id===user?.id?'Your own administrator role is protected.':'Changing this role changes which workspace and records this member can access. Confirm only the access they need.'}</p><div className="admin-dialog__actions"><button type="button" className="button button--secondary" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="button button--primary" disabled={saving || newRole===selected.role || selected.id===user?.id}>{saving?'Updating roleâ€¦':'Confirm role change'}</button></div></form>}
+      {type==='companies' && safeWebsite(selected.website) && <a className="button button--secondary" href={safeWebsite(selected.website)} target="_blank" rel="noopener noreferrer">Open company website<Eye size={16}/></a>}
+    </AdminDialog>}
+  </DashboardLayout>;
+}

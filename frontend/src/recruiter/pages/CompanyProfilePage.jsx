@@ -1,210 +1,134 @@
-import { useState, useEffect } from 'react';
-import { 
-  Building2, Globe2, Linkedin, Loader2, 
-  Users, Briefcase, FileText, AlignLeft, MapPin 
-} from 'lucide-react';
+import SkeletonContent from '../../shared/components/Skeleton';
+import { useEffect, useRef, useState } from 'react';
+import { Building2, Globe2, FileText, AlignLeft, Loader2, LockKeyhole, Save } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
+import { showErrorToast, showSuccessToast, extractErrorMessage } from '../../shared/lib/toast';
+import { getFieldErrors, isAbortError } from '../../shared/lib/errors';
+import { companyChanges, validateCompanyForm } from '../../shared/lib/companyForm';
+
+const EMPTY = { id: null, name: '', website: '', registration_number: '', description: '' };
+const labelStyle = { fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, color: '#14243e' };
+const inputStyle = { width: '100%', padding: '0.85rem', borderRadius: 8, border: '1px solid #cfd8e6', fontSize: '0.95rem', background: '#fff' };
 
 export default function CompanyProfilePage() {
-  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState(EMPTY);
+  const [baseline, setBaseline] = useState(null);
   const [fetching, setFetching] = useState(true);
-  const [success, setSuccess] = useState('');
-  
-  // State mein 'location' aur 'is_remote' add kar diya gaya hai
-  const [form, setForm] = useState({
-    id: null, name: '', website: '', linkedin_url: '', 
-    registration_number: '', industry: 'Technology', company_size: '1-10', 
-    location: '', is_remote: false, description: ''
-  });
+  const [loadError, setLoadError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const pending = useRef(false);
+  const formRef = useRef(null);
+  const saveController = useRef(null);
 
   useEffect(() => {
-    async function loadCompany() {
-      try {
-        const data = await apiRequest('/recruiter/dashboard', { auth: true });
-        if (data.companies?.length > 0) {
-          setForm({ ...form, ...data.companies[0] });
+    const controller = new AbortController();
+    setFetching(true); setLoadError('');
+    apiRequest('/recruiter/companies', { auth: true, signal: controller.signal })
+      .then(data => {
+        if (!controller.signal.aborted) {
+          if (!Array.isArray(data?.items) || (data.items.length > 0 && !data.items[0]?.id)) {
+            throw new Error('Your company could not be loaded. Please try again.');
+          }
+          const loaded = { ...EMPTY, ...(data.items?.[0] || {}) };
+          setForm(loaded); setBaseline(loaded); setFieldErrors({}); setSaveError('');
         }
-      } catch (err) { 
-        console.error(err); 
-      } finally { 
-        setFetching(false); 
-      }
-    }
-    loadCompany();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      })
+      .catch(error => { if (!isAbortError(error)) { setLoadError(extractErrorMessage(error, 'Your company could not be loaded.')); showErrorToast(error, 'Your company could not be loaded.'); } })
+      .finally(() => { if (!controller.signal.aborted) setFetching(false); });
+    return () => controller.abort();
+  }, [attempt]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true); setSuccess('');
+  useEffect(() => () => saveController.current?.abort(), []);
+
+  const changes = companyChanges(form, baseline);
+  const hasChanges = Object.keys(changes).length > 0;
+  const unchanged = Boolean(form.id) && !hasChanges;
+
+  const focusError = errors => {
+    requestAnimationFrame(() => {
+      const field = [...(formRef.current?.elements || [])].find(element => errors[element.name] && !element.readOnly && !element.disabled);
+      field?.focus();
+    });
+  };
+  const handleChange = event => {
+    const { name, value } = event.target;
+    setForm(previous => ({ ...previous, [name]: value }));
+    setFieldErrors(previous => { const next = { ...previous }; delete next[name]; return next; });
+    setSaveError('');
+  };
+  const handleSubmit = async event => {
+    event.preventDefault();
+    if (pending.current || fetching || loadError) return;
+    // Guard the handler too: Enter and programmatic submits must not issue a no-op PATCH.
+    const payload = companyChanges(form, baseline);
+    if (form.id && !Object.keys(payload).length) { setFieldErrors({}); setSaveError(''); return; }
+    const errors = validateCompanyForm(form, baseline);
+    setFieldErrors(errors); setSaveError('');
+    if (Object.keys(errors).length) {
+      focusError(errors); return;
+    }
+    pending.current = true; setLoading(true);
+    const controller = new AbortController();
+    saveController.current = controller;
     try {
-      const endpoint = form.id ? `/recruiter/companies/${form.id}` : '/recruiter/companies';
-      
-      // Payload tayyar karte waqt agar remote hai to location null bhejenge
-      const payload = { 
-        ...form, 
-        location: form.is_remote ? null : form.location 
-      };
-
-      await apiRequest(endpoint, { method: form.id ? 'PATCH' : 'POST', auth: true, body: payload });
-      setSuccess('Company profile updated successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error(err);
-    } finally { 
-      setLoading(false); 
+      const result = await apiRequest(form.id ? `/recruiter/companies/${form.id}` : '/recruiter/companies', {
+        method: form.id ? 'PATCH' : 'POST', auth: true, body: payload, signal: controller.signal, notifyError: false,
+      });
+      if (!result?.company?.id) throw new Error('Your request finished, but the saved company could not be confirmed. Refresh before saving again.');
+      const saved = { ...EMPTY, ...form, ...payload, ...result.company };
+      setForm(saved); setBaseline(saved); setFieldErrors({}); setSaveError('');
+      showSuccessToast(form.id ? 'Company profile updated successfully.' : 'Company profile created successfully.');
+    } catch (error) {
+      if (!isAbortError(error)) {
+        const errors = Object.fromEntries(Object.entries(getFieldErrors(error)).filter(([field]) => Object.hasOwn(EMPTY, field)));
+        const hasFieldErrors = Object.keys(errors).length > 0;
+        setFieldErrors(errors); setSaveError(hasFieldErrors ? '' : extractErrorMessage(error, 'Your company could not be saved.'));
+        if (!hasFieldErrors) showErrorToast(error, 'Your company could not be saved.');
+        focusError(errors);
+      }
+    } finally {
+      pending.current = false;
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
+  const props = name => ({
+    id: `company-${name}`, name, value: form[name] || '', onChange: handleChange,
+    'data-skip-validation': form.id && !Object.hasOwn(changes, name) ? 'true' : undefined,
+    'aria-invalid': fieldErrors[name]?.length ? true : undefined,
+    'aria-describedby': [fieldErrors[name]?.length && `company-${name}-error`, name === 'name' && form.id && 'company-name-hint'].filter(Boolean).join(' ') || undefined,
+  });
+  const errorFor = name => fieldErrors[name]?.length ? <span id={`company-${name}-error`} className="field-error">{fieldErrors[name].join(' ')}</span> : null;
 
-  // Checkbox aur text dono ke liye generic handler
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setForm(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-      // Agar user remote check kare to location empty kar dein
-      ...(name === 'is_remote' && checked ? { location: '' } : {})
-    }));
-  };
-
-  // CSS Styles for uniform alignment
-  const labelStyle = { 
-    fontWeight: 'bold', 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '8px', 
-    marginBottom: '0.6rem',
-    color: '#111827'
-  };
-  
-  const inputStyle = { 
-    width: '100%', 
-    padding: '0.8rem', 
-    borderRadius: '6px', 
-    border: '1px solid #d1d5db', 
-    fontSize: '0.95rem',
-    backgroundColor: '#fff'
-  };
-
-  return (
-    <DashboardLayout 
-      title="Company Profile" 
-      subtitle="Update your employer details to build trust with candidates."
-    >
-      <div className="dashboard-panel" style={{ maxWidth: '900px', padding: '2.5rem', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-        {fetching ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
-            Loading profile...
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            
-            {success && (
-              <div className="success-banner" style={{ marginBottom: '-1rem' }}>
-                {success}
+  return <DashboardLayout title="Company Profile" subtitle="Update your employer details to build trust with candidates.">
+    <div className="dashboard-panel company-profile-panel" style={{ maxWidth: 900, padding: 'clamp(20px, 4vw, 40px)', background: '#fff', borderRadius: 14, border: '1px solid #e5eaf2' }}>
+      {fetching ? <SkeletonContent variant="form" rows={2} label="Loading company profile..." />
+        : loadError ? <div className="company-load-error"><h2>Company could not be loaded</h2><p role="alert">{loadError}</p><button type="button" className="button button--primary" onClick={() => setAttempt(value => value + 1)}>Try again</button></div>
+          : <form noValidate ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
+            {saveError && <div className="error-banner" role="alert">{saveError}</div>}
+            <fieldset disabled={loading} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'grid', gap: 26 }}>
+              <div className="company-form-grid">
+                <label htmlFor="company-name"><span style={labelStyle}><Building2 size={18} />Company Name {form.id ? <LockKeyhole size={14} aria-label="Locked" /> : '*'}</span>
+                  <input {...props('name')} type="text" required={!form.id} minLength={2} maxLength={180} readOnly={Boolean(form.id)} style={{ ...inputStyle, ...(form.id ? { background: '#f5f8fc', color: '#536178' } : {}) }} placeholder="Enter company name" />
+                  {form.id && <span id="company-name-hint" className="field-hint">Company name is locked after creation.</span>}{errorFor('name')}</label>
+                <label htmlFor="company-website"><span style={labelStyle}><Globe2 size={18} />Website URL *</span>
+                  <input {...props('website')} type="url" required maxLength={1000} style={inputStyle} placeholder="https://example.com" />{errorFor('website')}</label>
               </div>
-            )}
-            
-            {/* ROW 1: Name & Website */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-              <label>
-                <span style={labelStyle}><Building2 size={18} color="#4b5563" /> Company Name *</span>
-                <input type="text" name="name" required value={form.name} onChange={handleChange} style={inputStyle} placeholder="Enter company name" />
-              </label>
-              <label>
-                <span style={labelStyle}><Globe2 size={18} color="#4b5563" /> Website URL *</span>
-                <input type="url" name="website" required value={form.website} onChange={handleChange} style={inputStyle} placeholder="https://example.com" />
-              </label>
+              <label htmlFor="company-registration_number"><span style={labelStyle}><FileText size={18} />Registration / Tax Number *</span>
+                <input {...props('registration_number')} type="text" required minLength={2} maxLength={180} style={inputStyle} placeholder="e.g. TAX-123456" />{errorFor('registration_number')}</label>
+              <label htmlFor="company-description"><span style={labelStyle}><AlignLeft size={18} />Company Description</span>
+                <textarea {...props('description')} maxLength={10000} rows={6} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} placeholder="Tell candidates about your company..." />{errorFor('description')}</label>
+            </fieldset>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <button type="submit" className="button button--primary" disabled={loading || unchanged} aria-busy={loading} style={{ width: 'fit-content', display: 'flex', alignItems: 'center', gap: 9, padding: '0.85rem 1.7rem', ...(unchanged ? { opacity: 0.6, cursor: 'default' } : {}) }}>
+                {loading ? <Loader2 className="spinner" size={18} /> : <Save size={18} />}{loading ? 'Saving profile...' : 'Save Profile'}
+              </button>
+              {form.id && <span className="field-hint" role="status">{loading ? 'Saving your changes…' : unchanged ? 'No unsaved changes' : 'Unsaved changes'}</span>}
             </div>
-
-            {/* ROW 2: LinkedIn & Registration Number */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-              <label>
-                <span style={labelStyle}><Linkedin size={18} color="#4b5563" /> LinkedIn URL</span>
-                <input type="url" name="linkedin_url" value={form.linkedin_url || ''} onChange={handleChange} placeholder="https://linkedin.com/company/..." style={inputStyle} />
-              </label>
-              <label>
-                <span style={labelStyle}><FileText size={18} color="#4b5563" /> Registration / Tax Number</span>
-                <input type="text" name="registration_number" value={form.registration_number || ''} onChange={handleChange} placeholder="e.g. TAX-123456" style={inputStyle} />
-              </label>
-            </div>
-
-            {/* ROW 3: Industry & Size */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-              <label>
-                <span style={labelStyle}><Briefcase size={18} color="#4b5563" /> Industry</span>
-                <select name="industry" value={form.industry || 'Technology'} onChange={handleChange} style={inputStyle}>
-                  <option value="Technology">Technology / IT</option>
-                  <option value="Healthcare">Healthcare</option>
-                  <option value="Finance">Finance</option>
-                  <option value="Education">Education</option>
-                  <option value="Manufacturing">Manufacturing</option>
-                  <option value="Retail">Retail</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-              <label>
-                <span style={labelStyle}><Users size={18} color="#4b5563" /> Company Size</span>
-                <select name="company_size" value={form.company_size || '1-10'} onChange={handleChange} style={inputStyle}>
-                  <option value="1-10">1-10 Employees</option>
-                  <option value="11-50">11-50 Employees</option>
-                  <option value="51-200">51-200 Employees</option>
-                  <option value="200+">200+ Employees</option>
-                </select>
-              </label>
-            </div>
-
-            {/* ROW 4: Location & Remote Checkbox */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-              <label>
-                <span style={labelStyle}><MapPin size={18} color="#4b5563" /> Company Address / Headquarters</span>
-                <input 
-                  type="text" 
-                  name="location" 
-                  value={form.location || ''} 
-                  onChange={handleChange} 
-                  disabled={form.is_remote}
-                  placeholder={form.is_remote ? "N/A (Fully Remote)" : "e.g. 123 Business Rd, New York, NY"} 
-                  style={{ ...inputStyle, opacity: form.is_remote ? 0.5 : 1 }} 
-                />
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', width: 'fit-content' }}>
-                <input 
-                  type="checkbox" 
-                  name="is_remote" 
-                  checked={form.is_remote || false} 
-                  onChange={handleChange} 
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                />
-                <span style={{ fontWeight: '600', color: '#374151', fontSize: '0.95rem' }}>This is a fully remote company (No physical office)</span>
-              </label>
-            </div>
-
-            {/* ROW 5: Description */}
-            <label>
-              <span style={labelStyle}><AlignLeft size={18} color="#4b5563" /> Company Description</span>
-              <textarea 
-                name="description" 
-                value={form.description || ''} 
-                onChange={handleChange} 
-                placeholder="Tell candidates about your company's mission and culture..."
-                style={{ ...inputStyle, minHeight: '160px', resize: 'vertical', fontFamily: 'inherit' }} 
-              />
-            </label>
-
-            {/* SUBMIT BUTTON */}
-            <button 
-              type="submit" 
-              className="button button--primary" 
-              disabled={loading} 
-              style={{ width: 'fit-content', padding: '0.8rem 2.5rem', fontSize: '1.05rem', marginTop: '0.5rem' }}
-            >
-              {loading ? <Loader2 className="spinner" size={20} /> : 'Save Profile'}
-            </button>
-            
-          </form>
-        )}
-      </div>
-    </DashboardLayout>
-  );
+          </form>}
+    </div>
+  </DashboardLayout>;
 }

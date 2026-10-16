@@ -1,3 +1,6 @@
+import DashboardTable, {TablePagination} from '../../shared/components/DashboardTable';
+import {StatusBadge} from '../../shared/components/WorkspaceCards';
+import Select from '../../shared/components/Select';
 import { useCallback, useEffect, useState } from 'react';
 import { FileText, Search } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
@@ -14,6 +17,8 @@ export default function CandidatesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [error, setError] = useState('');
   const [working, setWorking] = useState(null);
+  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(20);
+  useEffect(()=>setPage(1),[search,statusFilter,pageSize]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,42 +57,10 @@ export default function CandidatesPage() {
     return app.profiles?.full_name?.toLowerCase().includes(q) || app.jobs?.title?.toLowerCase().includes(q);
   });
 
-  return (
-    <DashboardLayout title="Candidates" subtitle="Review applications, open verified resumes, and move candidates through hiring stages.">
-      <div className="dashboard-panel" style={{ padding: '2rem' }}>
-        {error && <div className="error-banner" style={{ marginBottom: '1rem' }}>{error}</div>}
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search candidate or job title..." style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.2rem', borderRadius: '6px', border: '1px solid #d1d5db' }} />
-          </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '0.6rem', borderRadius: '6px', border: '1px solid #d1d5db', minWidth: '170px' }}>
-            <option value="all">All Statuses</option>
-            {STATUS_OPTIONS.map(status => <option key={status} value={status}>{status.replace('_', ' ')}</option>)}
-          </select>
-        </div>
-
-        {loading ? <LoadingState label="Loading candidates..." /> : filteredApps.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {filteredApps.map(app => (
-              <div key={app.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '8px', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '260px' }}>
-                  <strong style={{ display: 'block', fontSize: '1.1rem' }}>{app.profiles?.full_name || 'Candidate'}</strong>
-                  <span style={{ color: '#6b7280', fontSize: '0.85rem' }}>Applied for: {app.jobs?.title || 'Job'} on {formatDate(app.created_at)}</span>
-                  {app.profiles?.headline && <div style={{ color: '#374151', marginTop: '0.35rem', fontSize: '0.9rem' }}>{app.profiles.headline}</div>}
-                </div>
-                <button type="button" className="button button--secondary" disabled={!app.resume_path || working === `resume:${app.id}`} onClick={() => viewResume(app.id)} title={app.resume_path ? 'Open secure temporary resume link' : 'No resume attached'}>
-                  <FileText size={15} /> {working === `resume:${app.id}` ? 'Opening...' : 'View Resume'}
-                </button>
-                <select disabled={working === app.id} value={app.status} onChange={e => updateStatus(app.id, e.target.value)} style={{ padding: '0.45rem', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-                  {STATUS_OPTIONS.map(status => <option key={status} value={status}>{status.replace('_', ' ')}</option>)}
-                  {app.status === 'withdrawn' && <option value="withdrawn">withdrawn</option>}
-                </select>
-              </div>
-            ))}
-          </div>
-        ) : <p style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>No candidates found.</p>}
-      </div>
-    </DashboardLayout>
-  );
+  const visiblePage=Math.min(page,Math.max(1,Math.ceil(filteredApps.length/pageSize)));
+  return <DashboardLayout title="Candidates" subtitle="Review applications, open verified resumes, and move candidates through hiring stages."><section className="workspace-panel dashboard-table-panel">
+    {error&&<div className="error-banner" role="alert">{error}</div>}
+    <div className="dashboard-table-toolbar"><label className="dashboard-table-search"><Search size={16}/><input aria-label="Search loaded candidates" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search candidate or job title…"/></label><Select aria-label="Filter candidate status" value={statusFilter} onChange={event=>setStatusFilter(event.target.value)}><option value="all">All statuses</option>{STATUS_OPTIONS.map(status=><option key={status} value={status}>{status.replaceAll('_',' ')}</option>)}</Select></div>
+    {loading?<LoadingState variant="table" columns={['Candidate','Job','Applied','Status','Resume'].map(label=>({label}))} rows={pageSize} label="Loading candidates…"/>:filteredApps.length?<><DashboardTable className="dashboard-data-table--candidates" label="Candidates" columns={[{label:'Candidate',width:'26%'},{label:'Job',width:'25%'},{label:'Applied',width:'15%'},{label:'Status',width:'20%'},{label:'Actions',width:'14%'}]}>{filteredApps.slice((visiblePage-1)*pageSize,visiblePage*pageSize).map(app=><tr key={app.id}><td><strong className="table-primary">{app.profiles?.full_name || 'Candidate'}</strong><small>{app.profiles?.headline || 'Application received'}</small></td><td>{app.jobs?.title || 'Job unavailable'}</td><td>{formatDate(app.created_at) || '—'}</td><td><div className="table-cell-actions" style={{justifyContent:'flex-start'}}><Select aria-label={`Application status for ${app.profiles?.full_name || 'candidate'}`} disabled={working===app.id} value={app.status} onChange={event=>updateStatus(app.id,event.target.value)}>{STATUS_OPTIONS.map(status=><option key={status} value={status}>{status.replaceAll('_',' ')}</option>)}{app.status==='withdrawn'&&<option value="withdrawn">withdrawn</option>}</Select></div></td><td><button type="button" className="table-action" disabled={!app.resume_path || working===`resume:${app.id}`} onClick={()=>viewResume(app.id)} title={app.resume_path?'Open secure temporary resume link':'No resume attached'}><FileText size={14}/>{working===`resume:${app.id}`?'Opening…':'Resume'}</button></td></tr>)}</DashboardTable><TablePagination page={visiblePage} pageSize={pageSize} total={filteredApps.length} noun="loaded candidates" onPageChange={setPage} onPageSizeChange={setPageSize}/></>:<div className="admin-state"><Search size={24}/><strong>No candidates found</strong><p>Try another search or status filter.</p></div>}
+  </section></DashboardLayout>;
 }

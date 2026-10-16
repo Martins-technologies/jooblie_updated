@@ -24,9 +24,15 @@ import * as authController from './controllers/auth.controller.js';
 import * as seekerController from './controllers/jobSeeker.controller.js';
 import * as recruiterController from './controllers/recruiter.controller.js';
 import * as adminController from './controllers/admin.controller.js';
-import { publicDb } from './config/supabase.js';
+import { createNotificationHandlers } from './controllers/notifications.controller.js';
+import { z } from 'zod';
+import { serviceDb, publicDb } from './config/supabase.js';
 
 const router = Router();
+const notifications = createNotificationHandlers(serviceDb);
+router.get('/notifications', requireAuth, notifications.list);
+router.patch('/notifications/read-all', requireAuth, writeLimiter, validate(z.object({ before: z.string().datetime() }).strict()), notifications.readAll);
+router.patch('/notifications/:notificationId', requireAuth, writeLimiter, validate(z.object({ read: z.boolean() }).strict()), notifications.update);
 
 router.get('/health', (_req, res) => {
   res.json({
@@ -97,12 +103,16 @@ router.use('/recruiter', recruiter);
 const admin = Router();
 admin.use(requireAuth, requireRole('admin'));
 admin.get('/dashboard', adminController.dashboard);
+admin.get('/analytics', adminController.overviewAnalytics);
 admin.get('/portals', adminController.listPortals);
 admin.get('/portals/:slug', adminController.getPortal);
 admin.get('/jobs', adminController.listJobs);
+admin.get('/jobs/insights', adminController.jobInsights);
 admin.get('/jobs/:jobId', adminController.getJob);
 admin.patch('/jobs/:jobId', writeLimiter, validate(adminJobUpdateSchema), adminController.updateJob);
 admin.delete('/jobs/:jobId', writeLimiter, adminController.deleteJob);
+admin.get('/companies', adminController.listCompanies);
+admin.get('/applications', adminController.listApplications);
 admin.get('/users', adminController.listUsers);
 admin.patch('/users/:userId/role', writeLimiter, validate(adminRoleSchema), adminController.changeUserRole);
 admin.patch('/jobs/:jobId/status', writeLimiter, validate(adminJobStatusSchema), adminController.moderateJob);

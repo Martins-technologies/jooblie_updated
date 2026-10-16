@@ -1,0 +1,23 @@
+.app-select { position: relative; min-width: 0; font: inherit; }
+.app-select .app-select__native { position: absolute !important; left: 0; top: 0; width: 1px !important; height: 1px !important; padding: 0 !important; margin: 0 !important; visibility: hidden; pointer-events: none; border: 0 !important; }
+.app-select .app-select__trigger { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #dce3ed; border-radius: 8px; background: #fff; color: #253551; text-align: left; font: inherit; font-size: 13px; font-weight: 450; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; }
+.app-select__trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-select__trigger > svg { flex-shrink: 0; color: #8492a7; transition: transform .15s; }
+.app-select__trigger > svg.is-open { transform: rotate(180deg); }
+.app-select__trigger .is-placeholder { color: #8894a7; }
+.app-select .app-select__trigger:hover:not(:disabled) { border-color: #a9b9d0; background: #fcfdff; }
+.app-select .app-select__trigger:focus-visible, .app-select .app-select__trigger[aria-expanded="true"] { outline: none; border-color: #2774ed; box-shadow: 0 0 0 3px #0967f210; }
+.app-select .app-select__trigger:disabled { cursor: not-allowed; background: #f5f7fa; color: #98a2b3; }
+.app-select .app-select__trigger[aria-invalid="true"] { border-color: #d63a4e; box-shadow: none; }
+.app-select__menu { position: fixed; z-index: 12000; padding: 5px; overflow-y: auto; overscroll-behavior: contain; background: #fff; border: 1px solid #e0e6ef; border-radius: 10px; box-shadow: 0 12px 36px #20325220, 0 2px 7px #20325208; font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; scrollbar-width: thin; scrollbar-color: #ccd6e3 transparent; animation: select-appear .12s ease-out; }
+.app-select__option { min-height: 36px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-radius: 6px; cursor: pointer; color: #3a4961; }
+.app-select__option > span { overflow-wrap: anywhere; }
+.app-select__option.is-highlighted { background: #f1f5fc; }
+.app-select__option.is-selected { color: #0967f2; font-weight: 600; background: #edf4ff; }
+.app-select__option[aria-disabled="true"] { color: #a5adba; cursor: not-allowed; background: transparent; }
+.app-select__empty { margin: 0; padding: 12px; color: #8492a7; }
+.select-shell .app-select__trigger { min-height: 36px; padding: 6px 2px; border: 0; background: transparent; box-shadow: none; }
+.select-shell .app-select { flex: 1; }
+@keyframes select-appear { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .app-select__menu { animation: none; } }
+.app-select .app-select__trigger { font-size: 13.5px; }

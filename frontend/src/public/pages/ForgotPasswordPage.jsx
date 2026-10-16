@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/config/site';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../shared/lib/supabase';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
+import { validateForm } from '../../shared/lib/formValidation';
 import { 
   ArrowLeft, 
   Briefcase, 
@@ -18,20 +19,19 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const pending = useRef(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!email.trim() || !email.includes('@')) {
-      showErrorToast('Please enter a valid email address.');
-      return;
-    }
+    if (pending.current || !validateForm(e.currentTarget)) return;
 
     if (!supabase) {
       showErrorToast('Supabase authentication is not configured.');
       return;
     }
 
+    pending.current = true;
     setLoading(true);
 
     try {
@@ -48,6 +48,7 @@ export default function ForgotPasswordPage() {
     } catch (err) {
       showErrorToast(err, 'An unexpected error occurred. Please try again.');
     } finally {
+      pending.current = false;
       setLoading(false);
     }
   };
@@ -57,10 +58,7 @@ export default function ForgotPasswordPage() {
       {/* Top Application Header */}
       <header className="jb-app-nav">
         <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
-          <div className="jb-brand-mark">
-            <Briefcase size={18} strokeWidth={2.4} color="#ffffff" />
-          </div>
-          <span className="jb-brand-title">{SITE_NAME}</span>
+          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -176,6 +174,8 @@ export default function ForgotPasswordPage() {
                       <Mail size={16} strokeWidth={2} className="jb-control-icon" />
                       <input
                         id="fp-email"
+                        name="email"
+                        maxLength={320}
                         type="email"
                         required
                         placeholder="name@company.com"

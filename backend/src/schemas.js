@@ -85,6 +85,7 @@ export const jobUpdateSchema = z.object({
 });
 
 export const adminJobUpdateSchema = jobUpdateSchema.extend({
+  expected_updated_at: z.string().datetime({ offset: true }).optional(),
   status: z.enum(['pending_review', 'active', 'closed', 'expired', 'removed']).optional(),
   moderation_note: z.string().trim().max(5000).optional(),
 });
@@ -175,5 +176,6 @@ export const adminJobStatusSchema = z.object({
 });
 
 export const adminRoleSchema = z.object({
+  previous_role: z.enum(['job_seeker', 'recruiter', 'admin']).optional(),
   role: z.enum(['job_seeker', 'recruiter', 'admin']),
 });

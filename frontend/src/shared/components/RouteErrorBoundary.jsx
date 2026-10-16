@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { showErrorToast } from '../lib/toast';
 
 export default class RouteErrorBoundary extends Component {
   constructor(props) {
@@ -12,6 +13,7 @@ export default class RouteErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('Route rendering failed', error, info);
+    showErrorToast('This page could not be displayed. Reload the page and try again.');
   }
 
   render() {
