@@ -95,8 +95,7 @@ export default function SignInPage() {
 
             {/* Photo Card */}
             <div className="jb-visual-frame">
-              <img 
-                src={loginHeroImg} 
+              <img width="960" height="1100" decoding="async" src={loginHeroImg} 
                 alt="Two professionals collaborating at a modern desk" 
                 className="jb-visual-img"
               />
@@ -109,7 +108,7 @@ export default function SignInPage() {
                   <Briefcase size={16} strokeWidth={2.4} />
                 </div>
                 <div className="jb-badge-labels">
-                  <span className="jb-badge-sub">Thousands of</span>
+                  <span className="jb-badge-sub">Discover</span>
                   <span className="jb-badge-main">Opportunities</span>
                 </div>
               </div>
@@ -119,8 +118,8 @@ export default function SignInPage() {
                   <ShieldCheck size={17} strokeWidth={2.4} />
                 </div>
                 <div className="jb-badge-labels">
-                  <span className="jb-badge-sub">Verified & trusted</span>
-                  <span className="jb-badge-main">Top Employers</span>
+                  <span className="jb-badge-sub">Explore company profiles</span>
+                  <span className="jb-badge-main">Employer profiles</span>
                 </div>
               </div>
 

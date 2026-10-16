@@ -1,3 +1,6 @@
+import {lazy,Suspense} from 'react';
+import SkeletonContent from './shared/components/Skeleton';
+import RouteMetadata from './shared/components/RouteMetadata';
 import WorkspaceAccountPage from './shared/pages/WorkspaceAccountPage';
 import WorkspaceHelpPage from './shared/pages/WorkspaceHelpPage';
 import {
@@ -12,60 +15,60 @@ import GuestOnlyRoute from './shared/components/GuestOnlyRoute';
 import RouteErrorBoundary from './shared/components/RouteErrorBoundary';
 
 // --- Public Pages ---
-import HomePage from './public/pages/HomePage';
-import JobsPage from './public/pages/JobsPage';
-import JobDetailPage from './public/pages/JobDetailPage';
-import CategoriesPage from './public/pages/CategoriesPage';
-import CompaniesPage from './public/pages/CompaniesPage';
-import CompanyDetailPage from './public/pages/CompanyDetailPage';
-import ResourcesPage from './public/pages/ResourcesPage';
+const HomePage = lazy(()=>import('./public/pages/HomePage'));
+const JobsPage = lazy(()=>import('./public/pages/JobsPage'));
+const JobDetailPage = lazy(()=>import('./public/pages/JobDetailPage'));
+const CategoriesPage = lazy(()=>import('./public/pages/CategoriesPage'));
+const CompaniesPage = lazy(()=>import('./public/pages/CompaniesPage'));
+const CompanyDetailPage = lazy(()=>import('./public/pages/CompanyDetailPage'));
+const ResourcesPage = lazy(()=>import('./public/pages/ResourcesPage'));
 
 // --- Auth Pages ---
-import SignInPage from './public/pages/SignInPage';
-import RegisterPage from './public/pages/RegisterPage';
-import ForgotPasswordPage from './public/pages/ForgotPasswordPage';
-import ResetPasswordPage from './public/pages/ResetPasswordPage';
+const SignInPage = lazy(()=>import('./public/pages/SignInPage'));
+const RegisterPage = lazy(()=>import('./public/pages/RegisterPage'));
+const ForgotPasswordPage = lazy(()=>import('./public/pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(()=>import('./public/pages/ResetPasswordPage'));
 
 // --- General Pages ---
-import AboutPage from './public/pages/AboutPage';
-import ContactPage from './public/pages/ContactPage';
-import HelpPage from './public/pages/HelpPage';
-import PrivacyPage from './public/pages/PrivacyPage';
-import TermsPage from './public/pages/TermsPage';
+const AboutPage = lazy(()=>import('./public/pages/AboutPage'));
+const ContactPage = lazy(()=>import('./public/pages/ContactPage'));
+const HelpPage = lazy(()=>import('./public/pages/HelpPage'));
+const PrivacyPage = lazy(()=>import('./public/pages/PrivacyPage'));
+const TermsPage = lazy(()=>import('./public/pages/TermsPage'));
 
 // --- Dashboards ---
-import JobSeekerDashboardPage from './seeker/pages/JobSeekerDashboardPage';
+const JobSeekerDashboardPage = lazy(()=>import('./seeker/pages/JobSeekerDashboardPage'));
 // Naye Job Seeker Pages ke Imports:
-import JobSeekerJobsPage from './seeker/pages/JobSeekerJobsPage';
-import JobSeekerApplicationsPage from './seeker/pages/JobSeekerApplicationsPage';
-import JobSeekerSavedJobsPage from './seeker/pages/JobSeekerSavedJobsPage';
-import JobSeekerProfilePage from './seeker/pages/JobSeekerProfilePage';
-import JobSeekerSettingsPage from './seeker/pages/JobSeekerSettingsPage';
-import JobSeekerJobDetailPage from './seeker/pages/JobSeekerJobDetailPage';
+const JobSeekerJobsPage = lazy(()=>import('./seeker/pages/JobSeekerJobsPage'));
+const JobSeekerApplicationsPage = lazy(()=>import('./seeker/pages/JobSeekerApplicationsPage'));
+const JobSeekerSavedJobsPage = lazy(()=>import('./seeker/pages/JobSeekerSavedJobsPage'));
+const JobSeekerProfilePage = lazy(()=>import('./seeker/pages/JobSeekerProfilePage'));
+const JobSeekerSettingsPage = lazy(()=>import('./seeker/pages/JobSeekerSettingsPage'));
+const JobSeekerJobDetailPage = lazy(()=>import('./seeker/pages/JobSeekerJobDetailPage'));
 
-import RecruiterDashboardPage from './recruiter/pages/RecruiterDashboardPage';
-import AdminDashboardPage from './admin/pages/AdminDashboardPage';
+const RecruiterDashboardPage = lazy(()=>import('./recruiter/pages/RecruiterDashboardPage'));
+const AdminDashboardPage = lazy(()=>import('./admin/pages/AdminDashboardPage'));
 
 // --- Recruiter Sub-Pages ---
-import PostJobPage from './recruiter/pages/PostJobPage';
-import MyJobsPage from './recruiter/pages/MyJobsPage';
-import CandidatesPage from './recruiter/pages/CandidatesPage';
-import CompanyProfilePage from './recruiter/pages/CompanyProfilePage';
-import SettingsPage from './recruiter/pages/SettingsPage';
+const PostJobPage = lazy(()=>import('./recruiter/pages/PostJobPage'));
+const MyJobsPage = lazy(()=>import('./recruiter/pages/MyJobsPage'));
+const CandidatesPage = lazy(()=>import('./recruiter/pages/CandidatesPage'));
+const CompanyProfilePage = lazy(()=>import('./recruiter/pages/CompanyProfilePage'));
+const SettingsPage = lazy(()=>import('./recruiter/pages/SettingsPage'));
 
 // --- Naye Admin Sub-Pages Imports ---
-import AdminModerationPage from './admin/pages/AdminModerationPage';
-import AdminUsersPage from './admin/pages/AdminUsersPage';
-import AdminActivityPage from './admin/pages/AdminActivityPage';
-import AdminDirectoryPage from './admin/pages/AdminDirectoryPage';
-import AdminPortalDetailPage from './admin/pages/AdminPortalDetailPage';
+const AdminModerationPage = lazy(()=>import('./admin/pages/AdminModerationPage'));
+const AdminUsersPage = lazy(()=>import('./admin/pages/AdminUsersPage'));
+const AdminActivityPage = lazy(()=>import('./admin/pages/AdminActivityPage'));
+const AdminDirectoryPage = lazy(()=>import('./admin/pages/AdminDirectoryPage'));
+const AdminPortalDetailPage = lazy(()=>import('./admin/pages/AdminPortalDetailPage'));
 
-import NotFoundPage from './public/pages/NotFoundPage';
+const NotFoundPage = lazy(()=>import('./public/pages/NotFoundPage'));
 
 export default function App() {
   return (
     <RouteErrorBoundary>
-    <Routes>
+    <><RouteMetadata/><Suspense fallback={<div className="route-loading" role="status"><SkeletonContent variant="cards" rows={3} label="Loading page"/></div>}><Routes>
 
       {/* =====================================================
           AUTH PAGES (STANDALONE - NO NAVBAR)
@@ -325,7 +328,7 @@ export default function App() {
       ====================================================== */}
       <Route path="*" element={<NotFoundPage />} />
 
-    </Routes>
+    </Routes></Suspense></>
     </RouteErrorBoundary>
   );
 }

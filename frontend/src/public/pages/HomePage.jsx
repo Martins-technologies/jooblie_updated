@@ -14,7 +14,6 @@ import SearchPanel from '../../shared/components/SearchPanel';
 import CategoryCard from '../../shared/components/CategoryCard';
 import JobCard from '../../shared/components/JobCard';
 import SectionHeading from '../../shared/components/SectionHeading';
-import TrustedEmployers from '../../shared/components/TrustedEmployers';
 import Reveal from '../../shared/components/Reveal';
 import { EmptyState, LoadingState } from '../../shared/components/StatusMessage';
 import usePublicData from '../../shared/hooks/usePublicData';
@@ -27,7 +26,7 @@ import employerImage from '../../shared/assets/images/cta/04_for_employers.webp'
 const steps = [
   { icon: CircleUserRound, label: '1. Create Account', text: 'Sign up as a job seeker or employer.' },
   { icon: Search, label: '2. Search or Post', text: 'Search jobs or post your job in minutes.' },
-  { icon: Send, label: '3. Apply or Invite', text: 'Apply to jobs or invite candidates.' },
+  { icon: Send, label: '3. Apply or Review', text: 'Submit applications or review candidates in your workspace.' },
   { icon: MessageCircle, label: '4. Connect', text: 'Communicate easily within the platform.' },
   { icon: CheckCircle2, label: '5. Get Hired', text: 'Find the right match and get hired.' },
   { icon: TrendingUp, label: '6. Grow Together', text: 'Build your career or grow your business.' },
@@ -71,7 +70,7 @@ export default function HomePage() {
                 Faster with <span>{SITE_NAME}.</span>
               </h1>
               <p>
-                Explore thousands of jobs across multiple industries.
+                Explore current openings across multiple industries.
                 <br />
                 Connect with top employers and build your future.
               </p>
@@ -87,7 +86,7 @@ export default function HomePage() {
           </div>
 
           <div className="jooblie-home-hero-image" aria-hidden="true">
-            <img src={heroPeopleImage} alt="" />
+            <img src={heroPeopleImage} alt="" width="1280" height="800" fetchPriority="high" decoding="async"/>
           </div>
         </div>
 
@@ -139,7 +138,7 @@ export default function HomePage() {
             <Reveal>
               <EmptyState
                 backendMissing={!data.configured}
-                title={data.configured ? 'No new jobs in the last 24 hours' : 'Connect the backend'}
+                title={data.configured ? 'No new jobs in the last 24 hours' : 'Jobs temporarily unavailable'}
                 text="New active openings will appear here automatically. Browse all jobs to see earlier listings."
               />
             </Reveal>
@@ -158,10 +157,10 @@ export default function HomePage() {
           <Reveal as={Link} to="/register?role=job_seeker" className="audience-card audience-card--blue" direction="left">
             <div className="audience-card__content">
               <h2>For Job Seekers</h2>
-              <p>Search thousands of jobs, apply easily, and get hired faster.</p>
+              <p>Search current openings, save roles and manage your applications.</p>
               <span>Create your profile <ArrowRight size={16} /></span>
             </div>
-            <img src={jobSeekerImage} alt="Job seeker" />
+            <img src={jobSeekerImage} alt="Professional exploring career opportunities" width="960" height="640" loading="lazy" decoding="async"/>
           </Reveal>
 
           <Reveal as={Link} to="/post-job" className="audience-card audience-card--green" direction="right" delay={100}>
@@ -170,7 +169,7 @@ export default function HomePage() {
               <p>Post jobs, find qualified candidates, and grow your team.</p>
               <span>Post a job now <ArrowRight size={16} /></span>
             </div>
-            <img src={employerImage} alt="Employer" />
+            <img src={employerImage} alt="Professionals collaborating at work" width="960" height="640" loading="lazy" decoding="async"/>
           </Reveal>
         </div>
       </section>
@@ -191,7 +190,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <TrustedEmployers />
+      
     </div>
   );
 }

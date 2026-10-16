@@ -1,3 +1,5 @@
+import RecordMetadata from '../../shared/components/RecordMetadata';
+import ShareJobButton from '../../shared/components/ShareJobButton';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, CalendarDays, MapPin, MonitorSmartphone, CheckCircle2 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
@@ -21,7 +23,7 @@ export default function JobDetailPage() {
     let active = true;
     getJobById(jobId).then((result) => {
       if (active) setState({ loading: false, result });
-    });
+    }).catch(error=>{if(active)setState({loading:false,result:{configured:true,error}});});
     return () => { active = false; };
   }, [jobId]);
 
@@ -35,9 +37,9 @@ export default function JobDetailPage() {
   const salary = formatSalary(job);
   
   // Safe check for company verification
-  const isCompanyVerified = job.company?.linkedinVerified || job.company?.isVerified || false;
+  const isCompanyVerified = job.company?.verificationStatus === 'verified';
 
-  // 🔥 YAHAN FIX HAI: e.preventDefault() add kiya hai taake page hargiz redirect/refresh na ho
+  // ðŸ”¥ YAHAN FIX HAI: e.preventDefault() add kiya hai taake page hargiz redirect/refresh na ho
   const applyWithJooblie = async (e) => {
     e.preventDefault(); 
     setApplication({ loading: true, success: false, error: '' });
@@ -51,7 +53,7 @@ export default function JobDetailPage() {
 
   return (
     <PageSection className="detail-page" reveal={false}>
-      <style>{`
+      <RecordMetadata job={job}/>      <style>{`
         .detail-page-wrapper {
           max-width: 1100px;
           margin: 0 auto;
@@ -259,7 +261,7 @@ export default function JobDetailPage() {
             </div>
           </div>
 
-          <div className="job-detail-header__actions">
+          <div className="job-detail-header__actions"><ShareJobButton job={job}/>
             {salary && <span className="salary-highlight">{salary}</span>}
             
             {auth.role === 'job_seeker' ? (
@@ -326,7 +328,7 @@ function SummaryRow({ label, value, isVerified }) {
       <strong>
         {value}
         {isVerified && (
-          <span className="verified-badge" title="LinkedIn Verified">
+          <span className="verified-badge" title="Verified employer record">
             <CheckCircle2 size={12} /> Verified
           </span>
         )}

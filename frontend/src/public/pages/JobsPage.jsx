@@ -1,3 +1,5 @@
+import SharedJobCard from '../../shared/components/JobCard';
+import ShareJobButton from '../../shared/components/ShareJobButton';
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import PageHero from '../../shared/components/PageHero';
@@ -90,13 +92,14 @@ const JobCard = ({ job }) => {
   // Clean description snippet
   const cleanSnippet = useMemo(() => {
     if (!description) return '';
-    const text = stripHtml(description).replace(/^[•\s\-_*]+/, '').trim();
+    const text = stripHtml(description).replace(/^[·\s\-_*]+/, '').trim();
     return text.length > 125 ? `${text.substring(0, 125)}...` : text;
   }, [description]);
 
   return (
-    <Link to={`/jobs/${id}`} className="jb-card-anchor" aria-label={`View ${title} at ${companyName}`}>
+    <div className="jb-card-anchor">
       <article className="jb-job-card">
+        <ShareJobButton job={job}/>
         {/* Card Header: Avatar, Titles & Action Icon */}
         <div className="jb-card-top">
           <div className="jb-company-avatar-wrap">
@@ -120,7 +123,7 @@ const JobCard = ({ job }) => {
               <span className="jb-company-name">{companyName}</span>
               {location && (
                 <>
-                  <span className="jb-meta-sep">•</span>
+                  <span className="jb-meta-sep">·</span>
                   <span className="jb-location-text">
                     <MapPin size={12} strokeWidth={2.2} className="jb-meta-pin" />
                     {location}
@@ -191,13 +194,13 @@ const JobCard = ({ job }) => {
             Posted {postedTime}
           </span>
 
-          <span className="jb-apply-cta">
+          <Link to={`/jobs/${id}`} className="jb-apply-cta" aria-label={`View ${title} at ${companyName}`}>
             View details
             <ArrowRight size={13} strokeWidth={2.4} className="jb-cta-arrow" />
-          </span>
+          </Link>
         </div>
       </article>
-    </Link>
+    </div>
   );
 };
 
@@ -816,7 +819,7 @@ export default function JobsPage() {
               )}
             </div>
             <p className="jb-results-subtext">
-              Only active, verified openings for this portal are displayed.
+              Current openings available on this portal are displayed.
             </p>
           </div>
 
@@ -842,7 +845,7 @@ export default function JobsPage() {
           <>
             <Reveal className="jb-jobs-grid" stagger>
               {state.jobs.map((job) => (
-                <JobCard key={job.id} job={job} />
+                <SharedJobCard variant="grid" key={job.id} job={job} />
               ))}
             </Reveal>
 
@@ -880,7 +883,7 @@ export default function JobsPage() {
           <Reveal>
             <EmptyState
               backendMissing={!state.configured}
-              title="No matching jobs found"
+              title={state.error?'Jobs could not be loaded':'No matching jobs found'}
               text={state.error?.message || 'Try adjusting your search criteria, removing filters, or searching for related keywords.'}
             />
           </Reveal>

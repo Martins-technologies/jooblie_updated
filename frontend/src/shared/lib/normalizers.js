@@ -87,7 +87,8 @@ export function normalizeJob(row = {}, companyMap = new Map(), categoryMap = new
   const focusCategory = resolveFocusCategory([dbCategorySlug, categoryName].filter(Boolean).join(' '));
   const city = cleanText(pick(row, ['city']), '');
   const province = cleanText(pick(row, ['province', 'state']), '');
-  const isRemote = Boolean(pick(row, ['is_remote'], false));
+  const workplace = pick(row, ['workplace_type'], null);
+  const isRemote = workplace ? workplace === 'remote' : Boolean(pick(row, ['is_remote'], false));
   const physicalLocation = [city, province].filter(Boolean).join(', ');
   const location = isRemote
     ? (physicalLocation ? `Remote · ${physicalLocation}` : 'Remote')
@@ -119,7 +120,7 @@ export function normalizeJob(row = {}, companyMap = new Map(), categoryMap = new
     jobType: employmentLabel(cleanText(pick(row, ['employment_type', 'job_type', 'type']), '')),
     employmentType: cleanText(pick(row, ['employment_type']), ''),
     experience: '',
-    workplaceType: isRemote ? 'Remote' : 'On-site',
+    workplaceType: workplace === 'hybrid' ? 'Hybrid' : isRemote ? 'Remote' : 'On-site',
     salaryMin: pick(row, ['salary_min', 'min_salary', 'pay_min']),
     salaryMax: pick(row, ['salary_max', 'max_salary', 'pay_max']),
     salaryText: cleanText(pick(row, ['salary', 'salary_text', 'pay']), ''),

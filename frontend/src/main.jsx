@@ -25,3 +25,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 import './shared/styles/brand.css';
 
 import './shared/styles/brandTheme.css';
+
+import './shared/styles/publicPolish.css';
+
+import './shared/styles/visualExperience.css';

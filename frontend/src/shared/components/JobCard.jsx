@@ -1,3 +1,4 @@
+import ShareJobButton from './ShareJobButton';
 import {
   Bookmark,
   Briefcase,
@@ -52,7 +53,7 @@ export default function JobCard({ job, variant = 'row' }) {
         </div>
       )}
 
-      <div className="job-card__main">
+      <div className="job-card__main"><CompanyLogo company={job.company} size="md"/>
         <Link
           to={`/jobs/${job.id}`}
           className="job-card__title"
@@ -91,6 +92,7 @@ export default function JobCard({ job, variant = 'row' }) {
           </span>
         )}
 
+        {job.workplaceType && <span><MapPin size={14}/>{job.workplaceType}</span>}
         {job.experience && (
           <span>
             <Briefcase size={14} />
@@ -127,6 +129,7 @@ export default function JobCard({ job, variant = 'row' }) {
           fill={saved ? 'currentColor' : 'none'}
         />
       </button>
+      <Link to={`/jobs/${job.id}`} className="job-card-details">View details</Link><ShareJobButton job={job}/>
     </article>
   );
 }

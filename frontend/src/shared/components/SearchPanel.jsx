@@ -80,9 +80,9 @@ export default function SearchPanel({ variant = 'hero', initial = {}, actionPath
       <div className="search-panel__filters">
         <SelectFilter icon={<BriefcaseBusiness size={15} />} label="Job Type" value={jobType} onChange={setJobType} options={jobTypes} />
         <SelectFilter label="Salary Range" value={salary} onChange={setSalary} options={[['0-50000', 'Up to 50k'], ['50000-100000', '50k–100k'], ['100000-150000', '100k–150k'], ['150000+', '150k+']]} />
-        <SelectFilter label="Remote / On-site" value={workplace} onChange={setWorkplace} options={[['Remote', 'Remote'], ['On-site', 'On-site']]} />
+        <SelectFilter label="Work arrangement" value={workplace} onChange={setWorkplace} options={[['Remote', 'Remote'], ['Hybrid', 'Hybrid'], ['On-site', 'On-site']]} />
         <SelectFilter label="Date Posted" value={date} onChange={setDate} options={[['1', 'Past 24 hours'], ['3', 'Past 3 days'], ['7', 'Past week'], ['30', 'Past month']]} />
-        <button className="filter-link" type="submit">More Filters <Filter size={15} /></button>
+        <button className="filter-link" type="submit">Apply filters <Filter size={15} /></button>
         {variant === 'page' && (
           <button className="filter-link filter-link--clear" type="button" onClick={clearFilters}>Clear</button>
         )}
@@ -99,7 +99,7 @@ function SelectFilter({ label, value, onChange, options, icon = null }) {
         <option value="">{label}</option>
         {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
       </Select>
-      <ChevronDown size={14} />
+
     </label>
   );
 }

@@ -2,7 +2,7 @@ import { serviceDb } from '../config/supabase.js';
 import { ApiError, asyncHandler, parsePagination } from '../utils/http.js';
 
 const publicJobSelect = `
-  id,title,description,province,city,is_remote,
+  id,title,description,province,city,is_remote,workplace_type,
   salary_min,salary_max,salary_currency,salary_period,
   employment_type,skills,status,published_at,created_at,updated_at,expires_at,
   company_id,category_id,origin_site_id,
@@ -121,9 +121,9 @@ function applyForeignJobFilters(query, req) {
 
   if (employmentType) query = query.eq('jobs.employment_type', employmentType);
 
-  if (workplace === 'remote') query = query.eq('jobs.is_remote', true);
+  if (workplace === 'remote' || workplace === 'hybrid') query = query.eq('jobs.workplace_type', workplace);
   if (workplace === 'on-site' || workplace === 'onsite' || workplace === 'on_site') {
-    query = query.eq('jobs.is_remote', false);
+    query = query.eq('jobs.workplace_type', 'onsite');
   }
 
   const salary = String(req.query.salary || '');

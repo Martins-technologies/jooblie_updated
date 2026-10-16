@@ -1,19 +1,5 @@
+import EditorialImage from '../../shared/components/EditorialImage';
+import {Link} from 'react-router-dom';
 import PageHero from '../../shared/components/PageHero';
 import PageSection from '../../shared/components/PageSection';
-
-export default function AboutPage() {
-  return (
-    <>
-      <PageHero
-        eyebrow="About Jooblie"
-        title="One platform for specialist hiring"
-        text="Jooblie is the central entry point for job seekers and employers, connected to focused hiring categories."
-      />
-      <PageSection containerClassName="narrow prose-card content-card">
-        <h2>How the ecosystem works</h2>
-        <p>Jooblie brings current openings into one searchable experience while specialist category journeys can connect users to focused areas such as IT & Software, Office & Admin, Restaurant, Agriculture, and Trucking.</p>
-        <p>Public pages are designed to use live backend data instead of sample company names, salaries, locations, or job totals.</p>
-      </PageSection>
-    </>
-  );
-}
+export default function AboutPage(){return <><PageHero title='About Jooblie' text='A clearer path from opportunity to application'/><PageSection containerClassName="narrow content-card prose-card"><EditorialImage/><section><h2>Discover your next opportunity</h2><p>Jooblie brings job discovery, employer profiles and applications into one recruitment platform. Search by role, location and supported work preferences, explore current openings, and review an employer before applying.</p></section><section><h2>For job seekers</h2><p>Create a job-seeker account to save opportunities, manage your profile and resume, submit supported applications and follow their recorded status. An application does not guarantee an interview or employment.</p></section><section><h2>For employers</h2><p>Recruiters can manage their linked company profile, publish openings for review and review candidates through their workspace. Clear job descriptions, accurate locations and salary details help candidates decide whether to apply.</p></section><section><h2>A connected hiring network</h2><p>The central job directory and specialist portals support focused discovery. Availability depends on the openings published by employers. Jooblie does not promise placement or endorse every employer or listing.</p></section><nav className="policy-links" aria-label="Related pages"><Link to="/all-jobs">Browse jobs</Link><Link to="/companies">Explore employers</Link><Link to="/contact">Contact</Link><Link to="/terms">Terms of Use</Link><Link to="/privacy">Privacy Policy</Link></nav></PageSection></>};

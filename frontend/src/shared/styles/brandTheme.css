@@ -1,27 +1,16 @@
-/* Brand palette derived from the supplied blue-and-black Jooblie wordmark. */
-:root{--brand-blue:#0967ff;--brand-blue-hover:#0056df;--brand-ink:#111827;--brand-muted:#738096;--brand-tint:#edf4ff;--brand-canvas:#f7f9fc;--blue:var(--brand-blue);--blue-dark:var(--brand-blue-hover);--navy:var(--brand-ink);--soft-blue:var(--brand-tint);--text-title:#111827}
-body .jd-app,body .jd-main,body .jd-content{background:var(--brand-canvas)}
-body .jd-sidebar{background:#f1f5fb;border-color:#e4eaf3}
-body .workspace-topbar{background:#fff;border-bottom-color:#e5eaf2}
-body .jd-nav-link{color:#526176}body .jd-nav-link svg{color:#728198}body .jd-nav-link:hover{background:#e6efff;color:var(--brand-blue)}body .jd-nav-link.is-active{background:#e3edff;color:var(--brand-blue);box-shadow:inset 3px 0 var(--brand-blue)}body .jd-nav-link.is-active svg{color:var(--brand-blue)}
-body .button--primary{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff}body .button--primary:hover:not(:disabled){background:var(--brand-blue-hover);border-color:var(--brand-blue-hover)}
-body .admin-summary-footer{color:var(--brand-blue)}body .admin-summary-card .workspace-metric strong{color:var(--brand-ink)!important}
-body .workspace-text-link,body .jd-account-footer .jd-signout{color:var(--brand-blue)}
-body .workspace .admin-table th,body .workspace .dashboard-data-table th{background:#f4f7fc;color:#53647b}
-body .table-status-tabs>button.is-active{color:var(--brand-blue);border-bottom-color:var(--brand-blue)}body .dashboard-pagination button.is-current{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff}
-body .workspace-topbar .dashboard-search{background:#f8faff}
-body .hero h1 span,body .hero-title span{color:var(--brand-blue)}
-
-/* Distinct navigation canvas, coordinated with the blue-and-black wordmark. */
-body .jd-sidebar{background:linear-gradient(180deg,#edf2fa 0%,#e7edf7 100%);border-right:1px solid #dbe4f1;box-shadow:3px 0 14px rgba(20,43,78,.025)}
-body .jd-sidebar-brand{background:rgba(255,255,255,.42);border-bottom:1px solid #dde5f1}
-body .jd-nav-link{color:#425570;font-weight:500}
-body .jd-nav-link svg{color:#637a99}
-body .jd-nav-link:hover{background:#dde8fa;color:#075be8}
-body .jd-nav-link.is-active{background:#0967ff;color:#fff;box-shadow:0 4px 10px rgba(9,103,255,.15)}
-body .jd-nav-link.is-active svg{color:#fff}
-body .jd-section-label{color:#77869c}
-body .jd-account-footer{border-top:1px solid #dbe4f1;background:rgba(255,255,255,.16)}
-body .jd-account-footer .jd-footer-link{color:#354b69}
-body .jd-account-footer .jd-footer-link:hover,body .jd-account-footer .jd-account-link:hover,body .jd-account-footer .jd-signout:hover{background:#dce7f8}
-body .jd-account-footer .jd-user-avatar{background:#fff;border-color:#cddbf1;color:#0967ff}
+/* Premium light dashboard: shared visual tokens. */
+:root{--brand-blue:#1677ff;--brand-blue-hover:#0964df;--brand-ink:#14213d;--brand-muted:#64748b;--brand-tint:#e8f1ff;--brand-canvas:#f4f8ff;--brand-line:#dce7f5;--brand-hover:#f1f6ff;--brand-success:#10b981;--brand-warning:#f59e0b;--brand-purple:#8b5cf6;--brand-cyan:#06b6d4;--brand-danger:#ef4444;--blue:var(--brand-blue);--blue-dark:var(--brand-blue-hover);--navy:var(--brand-ink);--text-title:var(--brand-ink)}
+.workspace{--dashboard-surface:#fff;--dashboard-surface-border:1px solid var(--brand-line);--dashboard-surface-shadow:0 2px 7px #1f41730b}
+body .jd-app,body .jd-main,body .jd-content{background:var(--brand-canvas)}body .jd-sidebar{background:#fff;border-right:1px solid var(--brand-line);box-shadow:none}body .jd-sidebar-brand{background:#fff;border-bottom:1px solid var(--brand-line);padding-inline:24px}
+body .jd-nav-link{color:#52647e;border-radius:11px;min-height:43px;transition:background-color .15s,color .15s;box-shadow:none;font-weight:500}body .jd-nav-link svg{width:19px;height:19px;stroke-width:1.7;color:#7186a4}body .jd-nav-link:hover{background:var(--brand-hover);color:#0964d7}body .jd-nav-link.is-active{background:var(--brand-tint);color:#0964d7;box-shadow:inset 3px 0 var(--brand-blue)}body .jd-nav-link.is-active svg{color:#0964d7}
+body .jd-account-footer{background:#fff;border-top:1px solid var(--brand-line)}body .jd-account-footer .jd-footer-link{color:#52647e}body .jd-account-footer .jd-footer-link:hover,body .jd-account-footer .jd-account-link:hover,body .jd-account-footer .jd-signout:hover{background:var(--brand-hover)}
+body .workspace-topbar{background:#fff;border-bottom:1px solid var(--brand-line);box-shadow:none;min-height:68px}body .workspace-topbar__trail{gap:12px;align-items:center;color:var(--brand-muted)}body .workspace-topbar__trail strong{color:var(--brand-ink);font-weight:500}body .workspace-topbar__tools{gap:18px;align-items:center}body .dashboard-search input{background:#f8fbff;border-color:var(--brand-line);border-radius:9px}
+body .button--primary{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff;box-shadow:none}body .button--primary:hover:not(:disabled){background:var(--brand-blue-hover);border-color:var(--brand-blue-hover)}
+body .admin-metrics{gap:20px}body .workspace .admin-summary-card{border:1px solid var(--brand-line)!important;border-radius:16px!important;box-shadow:0 2px 8px #1f41730b!important;transition:border-color .15s,box-shadow .15s}body .workspace .admin-summary-card:hover{border-color:#b9d4f8!important;box-shadow:0 4px 12px #1f417312!important;transform:none}
+body .admin-summary-card{--summary-accent:#1677ff;--summary-soft:#e8f1ff}body .admin-summary-card:nth-child(2){--summary-accent:#8b5cf6;--summary-soft:#f1eafe}body .admin-summary-card:nth-child(3){--summary-accent:#c37b00;--summary-soft:#fff3d9}body .admin-summary-card:nth-child(4){--summary-accent:#10b981;--summary-soft:#ddf8ed}body .admin-summary-card:nth-child(5){--summary-accent:#06b6d4;--summary-soft:#ddf7fc}body .admin-summary-card:nth-child(6){--summary-accent:#a855f7;--summary-soft:#f3e8ff}
+body .workspace .admin-summary-card .workspace-metric{background:#fff!important;border:0!important;box-shadow:none!important;padding:24px 124px 22px 22px!important;min-height:136px}body .admin-summary-card .workspace-metric__icon{width:48px;height:48px;flex-basis:48px;border-radius:14px;background:var(--summary-soft);color:var(--summary-accent);box-shadow:none}body .admin-summary-card .workspace-metric strong{color:var(--brand-ink)!important;font-weight:600!important}body .admin-summary-card .workspace-metric__label{color:#64748b!important;font-weight:600!important;font-size:10px!important;letter-spacing:.055em!important}body .admin-summary-card .workspace-metric small{color:#64748b!important;font-size:12px!important}body .admin-summary-card .overview-card-graph{color:var(--summary-accent);right:20px}body .overview-card-graph svg polyline{stroke-width:1.5}
+body .admin-summary-preview{background:#fff;border-top:1px solid #edf2f9;padding:8px 22px 10px;min-height:86px}body .admin-summary-preview>a{font-size:13px!important;padding:7px 0}body .admin-summary-preview small{background:#f4f7fc;color:#64748b!important;border-radius:5px;font-size:11px!important}body .admin-summary-footer{margin:0 22px;padding:14px 0 16px;border-top:1px solid #edf2f9;color:#0964d7;font-size:12px!important;font-weight:500}
+body .admin-priority-grid{gap:20px}body .admin-priority-grid>.workspace-panel{border-radius:16px;padding:24px}body .admin-priority-grid h2{color:var(--brand-ink)!important;font-weight:600!important}body .admin-event-dot{background:#1677ff;box-shadow:0 0 0 4px #e8f1ff}body .admin-event-list time{color:#64748b}
+body .jd-sidebar a:focus-visible,body .jd-sidebar button:focus-visible,body .workspace-topbar button:focus-visible,body .admin-summary-card a:focus-visible{outline:2px solid var(--brand-blue);outline-offset:3px}
+@media(max-width:599px){body .admin-metrics{grid-template-columns:minmax(0,1fr);gap:16px}body .workspace .admin-summary-card .workspace-metric{padding:22px 112px 20px 18px!important}body .admin-summary-preview{padding-inline:18px}body .admin-summary-footer{margin-inline:18px}body .admin-priority-grid>.workspace-panel{padding:20px}}
+@media(prefers-reduced-motion:reduce){body .jd-nav-link,body .workspace .admin-summary-card{transition:none}}

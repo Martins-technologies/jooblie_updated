@@ -145,8 +145,7 @@ export default function RegisterPage() {
 
             {/* Photo Card */}
             <div className="jb-visual-frame">
-              <img 
-                src={registerHeroImg} 
+              <img width="960" height="1100" decoding="async" src={registerHeroImg} 
                 alt="Talent specialist smiling in bright modern office" 
                 className="jb-visual-img"
               />
@@ -170,7 +169,7 @@ export default function RegisterPage() {
                 </div>
                 <div className="jb-badge-labels">
                   <span className="jb-badge-sub">Verified</span>
-                  <span className="jb-badge-main">Top Employers</span>
+                  <span className="jb-badge-main">Employer profiles</span>
                 </div>
               </div>
 

@@ -12,7 +12,7 @@ export default function ProtectedRoute({ roles, children }) {
   }
 
   if (!auth.session) {
-    return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/sign-in" replace state={{ from: location.pathname + location.search }} />;
   }
 
   if (roles?.length && !roles.includes(auth.role)) {

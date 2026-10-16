@@ -1,3 +1,4 @@
+import RecordMetadata from '../../shared/components/RecordMetadata';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ExternalLink, MapPin, CheckCircle2, Globe, Briefcase } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
@@ -77,14 +78,15 @@ export default function CompanyDetailPage() {
   }
 
   // Safe checks for company properties
-  const isVerified = company.linkedinVerified || company.isVerified || false;
+  const isVerified = company.verificationStatus === 'verified';
+  let website=null;try{const url=new URL(company.website);if(['http:','https:'].includes(url.protocol)&&!url.username&&!url.password)website=url;}catch{}
 
   return (
     <PageSection className="detail-page" reveal={false}>
       {/* =========================================
           3. PREMIUM INJECTED CSS STYLES
       ========================================= */}
-      <style>{`
+      <RecordMetadata company={company}/>      <style>{`
         .detail-page-wrapper {
           max-width: 1100px;
           margin: 0 auto;
@@ -281,7 +283,7 @@ export default function CompanyDetailPage() {
         /* Jobs Grid (Matching JobsPage style) */
         .company-jobs-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
           gap: 20px;
           margin-top: 24px;
         }
@@ -333,9 +335,9 @@ export default function CompanyDetailPage() {
             </div>
           </div>
 
-          {company.website && (
+          {website && (
             <div className="job-detail-header__actions">
-              <a className="visit-btn" href={company.website} target="_blank" rel="noreferrer">
+              <a className="visit-btn" href={website.href} target="_blank" rel="noreferrer">
                 <Globe size={18} /> Visit Website
               </a>
             </div>
@@ -361,10 +363,10 @@ export default function CompanyDetailPage() {
           <Reveal as="aside" className="content-card-ui" direction="right" delay={80}>
             <h2>Company Overview</h2>
             
-            <SummaryRow label="Verification Status" value={company.name} isVerified={isVerified} hideText={true} />
+            <SummaryRow label="Verification Status" value={isVerified?null:'Not verified'} isVerified={isVerified} />
             <SummaryRow label="Industry" value={company.industry} />
             <SummaryRow label="Headquarters" value={company.location} />
-            <SummaryRow label="Website" value={company.website ? new URL(company.website).hostname : null} />
+            <SummaryRow label="Website" value={website?.hostname} />
           </Reveal>
         </div>
 
@@ -401,7 +403,7 @@ function SummaryRow({ label, value, isVerified, hideText }) {
       <strong>
         {!hideText && value}
         {isVerified && (
-          <span className="verified-badge" title="LinkedIn Verified" style={{ marginLeft: hideText ? '0' : '8px' }}>
+          <span className="verified-badge" title="Verified employer record" style={{ marginLeft: hideText ? '0' : '8px' }}>
             <CheckCircle2 size={14} /> Verified Employer
           </span>
         )}

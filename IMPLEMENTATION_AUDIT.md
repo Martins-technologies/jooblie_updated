@@ -1,0 +1,8 @@
+# Jooblie implementation audit — 17 October 2026
+React 18 / Vite 5 frontend; Express / Zod backend; Supabase Auth, Postgres and private PDF resume storage. Public routes live in src/public/pages; shared layouts and components in src/shared; role pages in admin, recruiter and seeker. Legacy src/pages and src/components duplicate active files; retained to avoid unrelated refactoring.
+
+Routes: / homepage; /jobs recent openings; /all-jobs full search; /jobs/:jobId; /companies and /companies/:companyId; /about /contact /terms /privacy. Protected role routes are configured in App.jsx; requireAuth/requireRole enforce backend boundaries. Network link previously went to recent jobs, not full jobs. Contact and legal pages were placeholders. Company verification was reading absent normalizer properties. Company openings already use shared JobCard and company-specific API, but minimum grid width can overflow small phones. No email delivery provider configured in the validated environment. API uses rate limiting, Zod validation, CORS, Helmet and site context. Existing frontend node tests and backend node tests/check scripts; no lint or TypeScript scripts.
+
+Privacy data: profiles, companies, jobs, applications, notification preferences, resumes and audit/security records; PDFs stored in Supabase resumes bucket with owner path checks and 5MB/PDF validation. Do not claim a retention period or hosting region without owner confirmation.
+
+Scope: preserve authenticated CRUD, permissions and existing database records. No production data cleanup. Live outbound contact delivery requires valid destination and provider credentials. Legal documents remain drafts pending owner/counsel review.

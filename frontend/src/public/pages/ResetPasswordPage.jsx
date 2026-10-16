@@ -103,8 +103,7 @@ export default function ResetPasswordPage() {
 
             {/* Photo Card */}
             <div className="jb-visual-frame">
-              <img 
-                src={resetHeroImg} 
+              <img width="960" height="1100" decoding="async" src={resetHeroImg} 
                 alt="Professional working in modern tech office" 
                 className="jb-visual-img"
               />

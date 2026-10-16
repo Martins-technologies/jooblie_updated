@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /account/
+Disallow: /settings
+Disallow: /my-jobs
+Disallow: /my-company
+Disallow: /candidates
+Disallow: /post-job

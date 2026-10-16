@@ -8,7 +8,7 @@ export default function CategoryCard({ category, count = 0, compact = false }) {
   const internal = `/categories/${category.key}`;
   const content = (
     <>
-      <div className="category-card__image"><img src={category.image} alt="" /></div>
+      <div className="category-card__image"><img src={category.image} alt="" width="480" height="320" loading="lazy" decoding="async"/></div>
       <div className="category-card__body">
         <span className="category-card__icon"><Icon size={20} /></span>
         <div>

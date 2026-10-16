@@ -119,7 +119,7 @@ export default function CompanyProfilePage() {
               </div>
               <label htmlFor="company-registration_number"><span style={labelStyle}><FileText size={18} />Registration / Tax Number *</span>
                 <input {...props('registration_number')} type="text" required minLength={2} maxLength={180} style={inputStyle} placeholder="e.g. TAX-123456" />{errorFor('registration_number')}</label>
-              <label htmlFor="company-description"><span style={labelStyle}><AlignLeft size={18} />Company Description</span>
+              <p className="company-profile-guidance">Help candidates understand your company with a clear description and an up-to-date website. Set location and remote-working options on each job posting.</p><label htmlFor="company-description"><span style={labelStyle}><AlignLeft size={18} />Company Description</span>
                 <textarea {...props('description')} maxLength={10000} rows={6} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} placeholder="Tell candidates about your company..." />{errorFor('description')}</label>
             </fieldset>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>

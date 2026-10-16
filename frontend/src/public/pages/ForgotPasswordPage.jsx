@@ -92,8 +92,7 @@ export default function ForgotPasswordPage() {
 
             {/* Photo Card */}
             <div className="jb-visual-frame">
-              <img 
-                src={forgotHeroImg} 
+              <img width="960" height="1100" decoding="async" src={forgotHeroImg} 
                 alt="Professional working securely in modern tech office" 
                 className="jb-visual-img"
               />
