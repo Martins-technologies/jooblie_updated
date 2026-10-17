@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
+import PageLoading from './PageLoading';
 import Header from './Header';
 import Footer from './Footer';
 import useScrollReveal from '../hooks/useScrollReveal';
@@ -18,7 +19,7 @@ export default function SiteLayout() {
     <div className="app-shell">
       <Header />
       <main className="site-main">
-        <Outlet />
+        <Suspense fallback={<PageLoading />}><Outlet /></Suspense>
       </main>
       <Footer />
     </div>

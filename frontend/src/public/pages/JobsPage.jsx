@@ -727,6 +727,10 @@ export default function JobsPage() {
           border-radius: 4px;
         }
 
+        @media (prefers-reduced-motion: reduce) {
+          .jb-shimmer { animation: none; background: #edf1f6; }
+        }
+
         /* PAGINATION - Flush with Container */
         .jb-pagination-wrap {
           display: flex;
@@ -841,7 +845,7 @@ export default function JobsPage() {
         </Reveal>
 
         {state.loading ? (
-          <div className="jb-jobs-grid">
+          <div className="jb-jobs-grid" role="status" aria-busy="true" aria-label="Loading available jobs">
             {[...Array(6)].map((_, i) => (
               <JobCardSkeleton key={`skeleton-${i}`} />
             ))}

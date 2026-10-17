@@ -1,5 +1,5 @@
 import {lazy,Suspense} from 'react';
-import SkeletonContent from './shared/components/Skeleton';
+import PageLoading from './shared/components/PageLoading';
 import RouteMetadata from './shared/components/RouteMetadata';
 import WorkspaceAccountPage from './shared/pages/WorkspaceAccountPage';
 import WorkspaceHelpPage from './shared/pages/WorkspaceHelpPage';
@@ -24,10 +24,10 @@ const CompanyDetailPage = lazy(()=>import('./public/pages/CompanyDetailPage'));
 const ResourcesPage = lazy(()=>import('./public/pages/ResourcesPage'));
 
 // --- Auth Pages ---
-const SignInPage = lazy(()=>import('./public/pages/SignInPage'));
-const RegisterPage = lazy(()=>import('./public/pages/RegisterPage'));
-const ForgotPasswordPage = lazy(()=>import('./public/pages/ForgotPasswordPage'));
-const ResetPasswordPage = lazy(()=>import('./public/pages/ResetPasswordPage'));
+import SignInPage from './public/pages/SignInPage';
+import RegisterPage from './public/pages/RegisterPage';
+import ForgotPasswordPage from './public/pages/ForgotPasswordPage';
+import ResetPasswordPage from './public/pages/ResetPasswordPage';
 
 // --- General Pages ---
 const AboutPage = lazy(()=>import('./public/pages/AboutPage'));
@@ -68,7 +68,7 @@ const NotFoundPage = lazy(()=>import('./public/pages/NotFoundPage'));
 export default function App() {
   return (
     <RouteErrorBoundary>
-    <><RouteMetadata/><Suspense fallback={<div className="route-loading" role="status"><SkeletonContent variant="cards" rows={3} label="Loading page"/></div>}><Routes>
+    <><RouteMetadata/><Suspense fallback={<PageLoading standalone />}><Routes>
 
       {/* =====================================================
           AUTH PAGES (STANDALONE - NO NAVBAR)
