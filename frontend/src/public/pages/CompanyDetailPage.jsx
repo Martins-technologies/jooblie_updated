@@ -378,7 +378,7 @@ export default function CompanyDetailPage() {
         {jobs && jobs.length > 0 ? (
           <Reveal className="company-jobs-grid" stagger>
             {jobs.map((job) => (
-              <JobCard key={job.id} job={job} />
+              <JobCard variant="grid" key={job.id} job={job} />
             ))}
           </Reveal>
         ) : (

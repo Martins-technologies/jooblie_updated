@@ -10,3 +10,13 @@ body .site-main .job-card--grid:hover,body .site-main .company-jobs-grid .job-ca
 @media(prefers-reduced-motion:reduce){.job-card,.category-card{transition:none!important}}
 
 .company-profile-guidance{font-size:13px!important;line-height:1.6!important;padding:14px 16px;background:#f4f8ff;border:1px solid #dce7f5;border-radius:10px;color:#64748b;margin:0}.job-card--grid .company-logo--placeholder{display:grid;place-items:center;background:#edf4ff;color:#315a97;font-size:15px;font-weight:600}
+
+/* Employer openings use the same vertical grid card as job search. */
+body .site-main .company-jobs-grid .job-card--grid .bookmark-button{position:absolute;top:23px;right:22px;align-self:auto}
+body .site-main .job-card--grid .job-card__main{padding-right:40px}
+body .site-main .job-card--grid .job-card__title{max-width:100%;overflow-wrap:anywhere;white-space:normal}
+body .site-main .job-card--grid .job-share{display:flex;flex-wrap:wrap;gap:10px;min-width:0}
+body .site-main .job-card--grid .job-share input{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+body .site-main .job-card--grid .job-share [role="status"]{overflow-wrap:anywhere}
+
+body .site-main .job-card--grid .job-card__side{align-items:flex-start;justify-items:start;justify-content:stretch;grid-template-columns:minmax(0,1fr);text-align:left}

@@ -3,6 +3,7 @@ import { ApiError, asyncHandler } from '../utils/http.js';
 import { writeAuditLog } from '../utils/audit.js';
 import { savePortalJob } from '../utils/portalJobs.js';
 import { changeApplicationStatus } from '../utils/applicationStatus.js';
+import { ensureCompanyOwnership } from '../utils/companyOwnership.js';
 
 async function recruiterCompanyIds(userId) {
   const { data, error } = await serviceDb
@@ -145,17 +146,15 @@ export const createCompany = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'The company could not be created.', 'COMPANY_CREATE_FAILED', error.message);
   }
 
-  const { error: memberError } = await serviceDb
-    .from('company_members')
-    .insert({
-      company_id: company.id,
-      user_id: req.user.id,
-      role: 'owner',
-    });
-
-  if (memberError) {
-    await serviceDb.from('companies').delete().eq('id', company.id);
-    throw new ApiError(400, 'Company ownership could not be created.', 'COMPANY_MEMBER_FAILED');
+  try {
+    await ensureCompanyOwnership(serviceDb, company.id, req.user.id);
+  } catch (ownershipError) {
+    // Only a definite failed membership insert is compensated. A trigger-created
+    // owner or an unavailable ownership check must never delete a valid company.
+    if (['COMPANY_MEMBER_FAILED', 'COMPANY_OWNER_CONFLICT'].includes(ownershipError.code)) {
+      await serviceDb.from('companies').delete().eq('id', company.id).eq('created_by', req.user.id);
+    }
+    throw ownershipError;
   }
 
   await writeAuditLog(req, {

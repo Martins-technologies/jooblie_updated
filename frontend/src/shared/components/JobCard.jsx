@@ -127,10 +127,10 @@ export default function JobCard({ job, variant = 'row' }) {
           <Link to={`/jobs/${job.id}`} className="job-card__title">
             {job.title}
           </Link>
-          <span className="job-card__badge-verified" title="Direct verified opening">
+          {job.company?.verificationStatus === 'verified' && <span className="job-card__badge-verified" title="Verified employer">
             <span className="job-card__badge-dot" aria-hidden="true" />
-            Verified
-          </span>
+            Verified employer
+          </span>}
         </div>
 
         <div className="job-card__company-row">

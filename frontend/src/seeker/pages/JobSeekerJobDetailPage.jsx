@@ -19,11 +19,12 @@ import {
   Mail,
   Phone,
   ExternalLink,
-  Share2,
   Bookmark,
   Linkedin,
 } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
+import useJobBookmark from '../../shared/hooks/useJobBookmark';
+import ShareJobButton from '../../shared/components/ShareJobButton';
 import { getJobById } from '../../shared/lib/data';
 import { apiRequest } from '../../shared/lib/api';
 import { formatSalary, formatDate } from '../../shared/lib/format';
@@ -37,7 +38,7 @@ export default function JobSeekerJobDetailPage() {
     error: '',
   });
   const [coverLetter, setCoverLetter] = useState('');
-  const [isSaved, setIsSaved] = useState(false);
+  const { saved: isSaved, loading: savingJob, error: saveError, toggleSaved } = useJobBookmark(jobId);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
@@ -517,8 +518,7 @@ export default function JobSeekerJobDetailPage() {
                     <div
                       style={{
                         display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: '8px',
+                          gap: '8px',
                       }}
                     >
                       {job.skills.slice(0, 8).map((skill) => (
@@ -732,10 +732,16 @@ export default function JobSeekerJobDetailPage() {
                       display: 'flex',
                       gap: '8px',
                       justifyContent: 'center',
+                      flexWrap: 'wrap',
                     }}
                   >
                     <button
-                      onClick={() => setIsSaved(!isSaved)}
+                      type="button"
+                      onClick={toggleSaved}
+                      disabled={savingJob || Boolean(saveError)}
+                      aria-pressed={isSaved}
+                      aria-label={isSaved ? 'Remove saved job' : 'Save job'}
+                      title={saveError ? 'Saved jobs could not be loaded. Reload to try again.' : undefined}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -764,35 +770,10 @@ export default function JobSeekerJobDetailPage() {
                       }}
                     >
                       <Bookmark size={16} fill={isSaved ? '#2557a7' : 'none'} />
-                      {isSaved ? 'Saved' : 'Save'}
+                      {savingJob ? 'Please wait…' : isSaved ? 'Saved' : 'Save'}
                     </button>
-                    <button
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 16px',
-                        borderRadius: '8px',
-                        border: '1px solid #e5e7eb',
-                        background: '#fff',
-                        color: '#4b5563',
-                        fontSize: '0.85rem',
-                        fontWeight: '500',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#f9fafb';
-                        e.currentTarget.style.borderColor = '#d1d5db';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#fff';
-                        e.currentTarget.style.borderColor = '#e5e7eb';
-                      }}
-                    >
-                      <Share2 size={16} />
-                      Share
-                    </button>
+                    <ShareJobButton key={job.id} job={job} />
+                    {saveError && <p role="status" style={{ width: '100%', color: '#b91c1c', fontSize: 13 }}>Saved jobs could not be loaded. Reload to try again.</p>}
                   </div>
                 </div>
 
@@ -848,8 +829,7 @@ export default function JobSeekerJobDetailPage() {
                           fontSize: '0.8rem',
                           color: '#6b7280',
                           display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: '8px',
+                              gap: '8px',
                           marginTop: '2px',
                         }}
                       >
