@@ -1,3 +1,4 @@
+import discoveryPhoto from '../../shared/assets/images/cta/05_for_job_seekers.webp';
 import SharedJobCard from '../../shared/components/JobCard';
 import ShareJobButton from '../../shared/components/ShareJobButton';
 import { useEffect, useState, useRef, useMemo } from 'react';
@@ -23,7 +24,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Bookmark
+  Bookmark,
+  ShieldCheck
 } from 'lucide-react';
 
 const PAGE_SIZE = 9; // 3x3 clean grid
@@ -779,9 +781,12 @@ export default function JobsPage() {
       {/* Hero Presentation */}
       <PageHero
         eyebrow={category ? 'Specialist category' : 'Current openings'}
-        title={category ? `${category.label} Jobs` : 'Find your next opportunity'}
+        title={category ? `${category.label} opportunities.` : 'Find a role.'}
+        accent={category ? 'Explore your next move.' : 'Move your story forward.'}
+        imageSrc={discoveryPhoto}
+        imageAlt="Professional exploring a new career opportunity"
         text={category
-          ? `Browse active ${category.label.toLowerCase()} openings from the shared Jooblie backend.`
+          ? `Browse active ${category.label.toLowerCase()} opportunities by location, work arrangement and job type.`
           : 'Search current jobs by title, location, job type, salary, and work arrangement.'}
       />
 
@@ -888,6 +893,13 @@ export default function JobsPage() {
             />
           </Reveal>
         )}
+
+        <div className="network-trust-banner" style={{ marginTop: '36px' }}>
+          <ShieldCheck size={18} className="network-trust-icon" />
+          <p>
+            Availability depends on openings published by employers. Jooblie supports platform integrity but does not promise placement or endorse every individual listing.
+          </p>
+        </div>
       </PageSection>
     </div>
   );

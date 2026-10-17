@@ -50,7 +50,9 @@ export function formatSalary(job) {
   const hasMin = Number.isFinite(min) && min > 0;
   const hasMax = Number.isFinite(max) && max > 0;
 
-  if (hasMin && hasMax) return `${formatter.format(min)} - ${formatter.format(max)}${period}`;
+  if (hasMin && hasMax) {
+    return min === max ? `${formatter.format(min)}${period}` : `${formatter.format(min)} - ${formatter.format(max)}${period}`;
+  }
   if (hasMin) return `From ${formatter.format(min)}${period}`;
   if (hasMax) return `Up to ${formatter.format(max)}${period}`;
 

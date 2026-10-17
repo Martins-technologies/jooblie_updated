@@ -1,5 +1,6 @@
 import SkeletonContent from '../../shared/components/Skeleton';
 import { useState, useEffect } from 'react';
+import { ShieldCheck } from 'lucide-react';
 import PageHero from '../../shared/components/PageHero';
 import PageSection from '../../shared/components/PageSection';
 import CategoryCard from '../../shared/components/CategoryCard';
@@ -15,20 +16,15 @@ export default function CategoriesPage() {
 
     const fetchAndCountJobs = async () => {
       try {
-        // 🔥 FIX: Ab hum real backend se sari live jobs mangwa rahe hain
         const result = await apiRequest('/public/jobs?limit=1000'); 
         const liveJobs = result?.jobs || result?.items || result?.results || (Array.isArray(result) ? result : []);
         
-        // Pehle focusCategories ki tamam keys ka count 0 set karte hain
         const newCounts = Object.fromEntries(focusCategories.map((item) => [item.key, 0]));
 
-        // Live jobs par loop chala kar check karte hain
         liveJobs.forEach((job) => {
-          // Backend ki field ka naam categorySlug, category_slug, ya direct categories.slug ho sakta hai
           const slug = job.categorySlug || job.category_slug || job.category || (job.categories && job.categories.slug);
           
           if (slug && Object.prototype.hasOwnProperty.call(newCounts, slug)) {
-            // Agar job ki isActive value false nahi hai, tabhi count barhao
             if (job.isActive !== false && job.is_active !== false) {
               newCounts[slug] += 1;
             }
@@ -60,19 +56,29 @@ export default function CategoriesPage() {
         text="Choose a specialist area and view its current openings. Job totals come from live backend data."
       />
       
-      {/* Loading Spinner during fetch */}
       {loading ? (
-        <div className="container" style={{ padding: 32 }}><SkeletonContent variant="cards" rows={6} label="Loading categories..." /></div>
+        <div className="container" style={{ padding: 32 }}>
+          <SkeletonContent variant="cards" rows={6} label="Loading categories..." />
+        </div>
       ) : (
-        <PageSection containerClassName="category-grid category-grid--large" stagger>
-          {focusCategories.map((category) => (
-            <CategoryCard
-              key={category.key}
-              category={category}
-              count={counts[category.key] || 0}
-              compact
-            />
-          ))}
+        <PageSection>
+          <div className="category-grid category-grid--large">
+            {focusCategories.map((category) => (
+              <CategoryCard
+                key={category.key}
+                category={category}
+                count={counts[category.key] || 0}
+                compact
+              />
+            ))}
+          </div>
+
+          <div className="network-trust-banner" style={{ marginTop: '36px' }}>
+            <ShieldCheck size={18} className="network-trust-icon" />
+            <p>
+              Availability depends on openings published by employers. Jooblie supports platform integrity but does not promise placement or endorse every individual listing.
+            </p>
+          </div>
         </PageSection>
       )}
     </>

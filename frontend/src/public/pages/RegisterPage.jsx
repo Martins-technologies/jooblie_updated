@@ -27,8 +27,8 @@ import registerHeroImg from '../../assets/images/register-hero.jpg';
 export default function RegisterPage() {
   const [params] = useSearchParams();
 
-  // Job Seeker is always the default checked tab
-  const [role, setRole] = useState('job_seeker');
+  // Employer entry points select the recruiter form; other values retain the seeker default.
+  const [role, setRole] = useState(() => params.get('role') === 'recruiter' ? 'recruiter' : 'job_seeker');
   const [step, setStep] = useState(1); // Step 1: Account credentials, Step 2: Company details (if recruiter)
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');

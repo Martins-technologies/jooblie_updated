@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Linkedin, Facebook, Instagram, Mail } from 'lucide-react';
+import { Linkedin, Facebook, Instagram, Mail, Phone, ShieldCheck, ArrowUpRight } from 'lucide-react';
 import Logo from './Logo';
 import Reveal from './Reveal';
 import { SITE_NAME } from '../config/site';
@@ -8,69 +8,134 @@ const groups = [
   {
     title: 'For Job Seekers',
     links: [
-      ['Find Jobs', '/all-jobs'],
-      ['Browse Categories', '/categories'],
-      ['Create Profile', '/register?role=job_seeker'],
+      ['Browse All Jobs', '/all-jobs'],
+      ['Explore Employers', '/companies'],
+      ['Job Categories', '/categories'],
       ['Career Resources', '/resources'],
+      ['Create Seeker Profile', '/register?role=job_seeker'],
     ],
   },
   {
     title: 'For Employers',
     links: [
-      ['Post a Job', '/post-job'],
-      ['Hire Talent', '/register?role=recruiter'],
-      ['Companies', '/companies'],
-      ['Employer Help', '/help'],
+      ['Post an Opening', '/post-job'],
+      ['Register as Employer', '/register?role=recruiter'],
+      ['Employer Directory', '/companies'],
+      ['Hiring Guidelines', '/resources'],
+      ['Contact Sales & Support', '/contact'],
     ],
   },
   {
     title: 'Company',
     links: [
-      ['About Us', '/about'],
+      ['About Jooblie', '/about'],
       ['Contact Us', '/contact'],
-      ['Resources', '/resources'],
-      ['Job Categories', '/categories'],
+      ['Career Insights', '/resources'],
+      ['Browse Categories', '/categories'],
     ],
   },
   {
-    title: 'Support',
+    title: 'Trust & Legal',
     links: [
-      ['Help Center', '/help'],
-      ['Contact Support', '/contact'],
       ['Terms of Use', '/terms'],
       ['Privacy Policy', '/privacy'],
+      ['Platform Integrity', '/terms'],
+      ['Candidate Support', '/contact'],
     ],
   },
 ];
 
 export default function Footer() {
-  const supportEmail = import.meta.env.VITE_SUPPORT_EMAIL?.trim();
+  const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL || 'support@jooblie.com').trim();
+  const supportPhone = '+92 305 6619799';
 
   return (
-    <footer className="footer">
+    <footer className="footer" role="contentinfo">
+      <div className="container footer__disclaimer-wrap">
+        <div className="footer__disclaimer">
+          <div className="footer__disclaimer-badge">
+            <ShieldCheck size={20} className="footer__disclaimer-icon" aria-hidden="true" />
+          </div>
+          <div className="footer__disclaimer-body">
+            <span className="footer__disclaimer-title">Platform Integrity Notice</span>
+            <p className="footer__disclaimer-text">
+              Availability depends on openings published by employers. {SITE_NAME} supports platform integrity but does not promise placement or endorse every individual listing.
+            </p>
+          </div>
+          <Link to="/terms" className="footer__disclaimer-link">
+            <span>Review Guidelines</span>
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+
       <Reveal className="container footer__grid" stagger>
         <div className="footer__brand">
-          <Logo />
-          <p>{SITE_NAME} connects job seekers and employers across specialist hiring categories through one central platform.</p>
-          <div className="footer__socials" aria-label="Social links">
-            <span aria-hidden="true"><Facebook size={17} /></span>
-            <span aria-hidden="true"><Linkedin size={17} /></span>
-            <span aria-hidden="true"><Instagram size={17} /></span>
-            {supportEmail && <a href={`mailto:${supportEmail}`} aria-label={`Email ${SITE_NAME}`}><Mail size={17} /></a>}
+          <Logo variant="light" className="footer__brand-logo" />
+          <p className="footer__tagline">A clearer path from opportunity to application.</p>
+          <p className="footer__desc">
+            {SITE_NAME} brings job discovery, employer profiles, and applications into one unified recruitment platform.
+          </p>
+
+          <div className="footer__contact-info">
+            <a href="tel:+923056619799" className="footer__contact-item">
+              <Phone size={14} aria-hidden="true" />
+              <span>{supportPhone}</span>
+            </a>
+            {supportEmail && (
+              <a href={`mailto:${supportEmail}`} className="footer__contact-item">
+                <Mail size={14} aria-hidden="true" />
+                <span>{supportEmail}</span>
+              </a>
+            )}
+          </div>
+
+          <div className="footer__socials" aria-label="Social media links">
+            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" aria-label={`${SITE_NAME} on Facebook`}>
+              <Facebook size={16} />
+            </a>
+            <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" aria-label={`${SITE_NAME} on LinkedIn`}>
+              <Linkedin size={16} />
+            </a>
+            <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" aria-label={`${SITE_NAME} on Instagram`}>
+              <Instagram size={16} />
+            </a>
+            {supportEmail && (
+              <a href={`mailto:${supportEmail}`} aria-label={`Email ${SITE_NAME} Support`}>
+                <Mail size={16} />
+              </a>
+            )}
           </div>
         </div>
 
         {groups.map((group) => (
           <div key={group.title} className="footer__group">
             <h3>{group.title}</h3>
-            {group.links.map(([label, to]) => <Link key={to + label} to={to}>{label}</Link>)}
+            <ul>
+              {group.links.map(([label, to]) => (
+                <li key={to + label}>
+                  <Link to={to}>
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         ))}
       </Reveal>
 
       <div className="container footer__bottom">
-        <span>© {new Date().getFullYear()} {SITE_NAME}. All rights reserved.</span>
-        <span>One platform. Specialist hiring journeys.</span>
+        <div className="footer__bottom-left">
+          <span>© {new Date().getFullYear()} {SITE_NAME}. All rights reserved.</span>
+        </div>
+
+        <div className="footer__bottom-links">
+          <Link to="/privacy">Privacy Policy</Link>
+          <span className="footer__bottom-sep">·</span>
+          <Link to="/terms">Terms of Use</Link>
+          <span className="footer__bottom-sep">·</span>
+          <Link to="/contact">Support</Link>
+        </div>
       </div>
     </footer>
   );

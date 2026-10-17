@@ -1,6 +1,6 @@
 import RecordMetadata from '../../shared/components/RecordMetadata';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ExternalLink, MapPin, CheckCircle2, Globe, Briefcase } from 'lucide-react';
+import { ArrowLeft, ExternalLink, MapPin, CheckCircle2, Globe, Briefcase, ShieldCheck } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { getCompanyById } from '../../shared/lib/data';
 import CompanyLogo from '../../shared/components/CompanyLogo';
@@ -389,6 +389,13 @@ export default function CompanyDetailPage() {
             />
           </Reveal>
         )}
+
+        <div className="network-trust-banner" style={{ marginTop: '36px' }}>
+          <ShieldCheck size={18} className="network-trust-icon" />
+          <p>
+            Availability depends on openings published by employers. Jooblie supports platform integrity but does not promise placement or endorse every individual listing.
+          </p>
+        </div>
       </div>
     </PageSection>
   );

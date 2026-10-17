@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Menu, X, ChevronDown, LayoutDashboard } from 'lucide-react';
+import { Menu, X, LayoutDashboard, ArrowRight, UserPlus } from 'lucide-react';
 import Logo from './Logo';
 import { useAuth } from '../context/AuthContext';
 
-const navItems = [
-  { to: '/all-jobs', label: 'Find Jobs' },
-  { to: '/post-job', label: 'Post a Job', roles: ['recruiter', 'admin'] },
-  { to: '/companies', label: 'Companies' },
-  { to: '/resources', label: 'Resources' },
+const publicNavItems = [
+  { to: '/all-jobs', label: 'Browse Jobs' },
+  { to: '/companies', label: 'Explore Employers' },
+  { to: '/contact', label: 'Contact' },
 ];
 
 export default function Header() {
@@ -20,10 +19,6 @@ export default function Header() {
     setOpen(false);
   }, [location.pathname, location.search]);
 
-  const visibleNavItems = navItems.filter(
-    (item) => !item.roles || (auth.role && item.roles.includes(auth.role)),
-  );
-
   const handleSignOut = async () => {
     await auth.signOut();
   };
@@ -34,7 +29,7 @@ export default function Header() {
         <Logo />
 
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {visibleNavItems.map((item) => (
+          {publicNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -43,16 +38,24 @@ export default function Header() {
               {item.label}
             </NavLink>
           ))}
+          {(auth.role === 'recruiter' || auth.role === 'admin') && (
+            <NavLink
+              to="/post-job"
+              className={({ isActive }) => `nav-link${isActive ? ' is-active' : ''}`}
+            >
+              Post a Job
+            </NavLink>
+          )}
         </nav>
 
         <div className="header__actions">
           {auth.session ? (
             <>
               <Link
-                className="nav-link desktop-only header-dashboard-link"
+                className="button button--secondary button--small desktop-only header-dashboard-btn"
                 to={auth.dashboardPath}
               >
-                <LayoutDashboard size={16} />
+                <LayoutDashboard size={15} />
                 Dashboard
               </Link>
 
@@ -65,26 +68,18 @@ export default function Header() {
               </button>
             </>
           ) : (
-            <Link className="nav-link desktop-only" to="/sign-in">
-              Sign In
-            </Link>
+            <>
+              <Link className="header-login-link desktop-only" to="/sign-in">
+                Login
+              </Link>
+              <Link
+                to="/register"
+                className="header-cta-btn desktop-only"
+              >
+                Sign Up Free <ArrowRight size={14} />
+              </Link>
+            </>
           )}
-
-          {auth.role === 'recruiter' || auth.role === 'admin' ? (
-            <Link
-              to="/post-job"
-              className="button button--primary button--small desktop-only"
-            >
-              Post a Job <ChevronDown size={15} />
-            </Link>
-          ) : !auth.session ? (
-            <Link
-              to="/register?role=recruiter"
-              className="button button--primary button--small desktop-only"
-            >
-              Hire Talent <ChevronDown size={15} />
-            </Link>
-          ) : null}
 
           <button
             type="button"
@@ -93,7 +88,7 @@ export default function Header() {
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
           >
-            {open ? <X /> : <Menu />}
+            {open ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </div>
@@ -101,26 +96,41 @@ export default function Header() {
       {open && (
         <div className="mobile-nav-wrap">
           <nav className="container mobile-nav" aria-label="Mobile navigation">
-            {visibleNavItems.map((item) => (
-              <Link key={item.to} to={item.to}>
+            {publicNavItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => `mobile-nav-link${isActive ? ' is-active' : ''}`}
+              >
                 {item.label}
-              </Link>
+              </NavLink>
             ))}
+            {(auth.role === 'recruiter' || auth.role === 'admin') && (
+              <NavLink to="/post-job" className="mobile-nav-link">
+                Post a Job
+              </NavLink>
+            )}
+
+            <div className="mobile-nav-divider" />
 
             {auth.session ? (
               <>
-                <Link to={auth.dashboardPath}>Dashboard</Link>
-                <button type="button" onClick={handleSignOut}>
+                <Link to={auth.dashboardPath} className="mobile-nav-link mobile-nav-link--highlight">
+                  <LayoutDashboard size={16} /> Open Dashboard
+                </Link>
+                <button type="button" className="mobile-nav-link" onClick={handleSignOut}>
                   Sign Out
                 </button>
               </>
             ) : (
-              <>
-                <Link to="/sign-in">Sign In</Link>
-                <Link to="/register?role=recruiter" className="button button--primary">
-                  Hire Talent
+              <div className="mobile-nav-auth">
+                <Link to="/sign-in" className="mobile-nav-link">
+                  Login
                 </Link>
-              </>
+                <Link to="/register" className="button button--primary mobile-auth-cta">
+                  <UserPlus size={16} /> Sign Up Free
+                </Link>
+              </div>
             )}
           </nav>
         </div>

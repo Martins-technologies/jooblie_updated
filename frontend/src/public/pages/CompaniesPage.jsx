@@ -1,277 +1,84 @@
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, MapPin } from 'lucide-react';
+import { ArrowRight, Building2, BriefcaseBusiness, MapPin, Search, ShieldCheck, X } from 'lucide-react';
 import PageHero from '../../shared/components/PageHero';
-import PageSection from '../../shared/components/PageSection';
 import CompanyLogo from '../../shared/components/CompanyLogo';
 import { EmptyState } from '../../shared/components/StatusMessage';
 import usePublicData from '../../shared/hooks/usePublicData';
-import Reveal from '../../shared/components/Reveal';
+import { stripHtml } from '../../shared/lib/format';
+import '../../shared/styles/companiesDiscovery.css';
 
-/* =========================================
-   1. SKELETON LOADER COMPONENT
-========================================= */
-const CompanyCardSkeleton = () => (
-  <div className="premium-company-card skeleton-card">
-    <div className="card-header">
-      <div className="skeleton-logo shimmer"></div>
-      <div className="header-text" style={{ width: '100%' }}>
-        <div className="skeleton-title shimmer"></div>
-        <div className="skeleton-subtitle shimmer"></div>
+function CompanyCardSkeleton() {
+  return <div className="employer-discovery-card employer-discovery-skeleton" aria-hidden="true"><div className="employer-discovery-card__top"><span className="employer-skeleton employer-skeleton--logo" /><span className="employer-skeleton employer-skeleton--tag" /></div><span className="employer-skeleton employer-skeleton--title" /><span className="employer-skeleton employer-skeleton--line" /><span className="employer-skeleton employer-skeleton--line employer-skeleton--short" /><span className="employer-skeleton employer-skeleton--footer" /></div>;
+}
+
+function EmployerCard({ company, jobs }) {
+  const description = stripHtml(company.description || '');
+  const categories = [...new Set(jobs.map(job => job.categoryName).filter(Boolean))].slice(0, 2);
+  const locations = [...new Set(jobs.map(job => job.location).filter(Boolean))];
+  const jobCount = jobs.length;
+  return <article className="employer-discovery-card">
+    <Link className="employer-discovery-card__link" to={'/companies/' + company.id}>
+      <div className="employer-discovery-card__top"><CompanyLogo company={company} size="lg" />{company.verificationStatus === 'verified' && <span className="employer-verified"><ShieldCheck size={13} aria-hidden="true" />Verified</span>}</div>
+      <div className="employer-discovery-card__identity"><h3>{company.name || 'Company profile'}</h3>{company.industry && <span className="employer-discovery-industry">{company.industry}</span>}</div>
+      <p className={'employer-discovery-description' + (!description ? ' employer-discovery-description--empty' : '')}>{description || 'Explore this employer’s profile and the opportunities they publish on Jooblie.'}</p>
+      <div className="employer-discovery-context">
+        {company.location ? <span><MapPin size={14} aria-hidden="true" />{company.location}</span> : locations.length > 0 ? <span><MapPin size={14} aria-hidden="true" /><span>Open roles: {locations[0]}{locations.length > 1 ? ' + ' + (locations.length - 1) + ' more' : ''}</span></span> : null}
+        {categories.length > 0 && <span><Building2 size={14} aria-hidden="true" /><span>Hiring in {categories.join(' · ')}</span></span>}
       </div>
-    </div>
-    <div className="skeleton-tags" style={{ marginTop: '16px' }}>
-      <div className="skeleton-tag shimmer"></div>
-    </div>
-    <div className="skeleton-footer shimmer" style={{ marginTop: 'auto' }}></div>
-  </div>
-);
+      <div className="employer-discovery-card__footer"><span className={'employer-opening-count' + (!jobCount ? ' employer-opening-count--quiet' : '')}><BriefcaseBusiness size={14} aria-hidden="true" />{jobCount ? jobCount + (jobCount === 1 ? ' open role' : ' open roles') : 'No current openings'}</span><span className="employer-profile-action">View profile<ArrowRight size={15} aria-hidden="true" /></span></div>
+    </Link>
+  </article>;
+}
 
-/* =========================================
-   2. MAIN COMPANIES PAGE COMPONENT
-========================================= */
 export default function CompaniesPage() {
   const { loading, data } = usePublicData();
+  const [query, setQuery] = useState('');
+  const [openingsOnly, setOpeningsOnly] = useState(false);
   const companies = data?.companies || [];
+  const jobsByCompany = useMemo(() => {
+    const result = new Map();
+    for (const job of data?.jobs || []) {
+      if (!job.isActive || job.companyId == null) continue;
+      const id = String(job.companyId);
+      if (!result.has(id)) result.set(id, []);
+      result.get(id).push(job);
+    }
+    return result;
+  }, [data?.jobs]);
+  const hiringCount = companies.filter(company => jobsByCompany.has(String(company.id))).length;
+  const visibleCompanies = companies.filter(company =>
+    (!openingsOnly || jobsByCompany.has(String(company.id))) &&
+    String(company.name || '').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+  );
+  const hasFilters = query.trim() || openingsOnly;
+  const clearFilters = () => { setQuery(''); setOpeningsOnly(false); };
 
   return (
-    <div className="companies-page-wrapper">
-      {/* =========================================
-          3. PREMIUM GRID & CARD STYLES
-      ========================================= */}
-      <style>{`
-        .companies-page-wrapper {
-          background-color: #f8f9fa;
-          min-height: 100vh;
-          padding-bottom: 60px;
-        }
+    <div className="employers-discovery-page">
+      <PageHero eyebrow="THE PEOPLE BEHIND THE OPPORTUNITY" title="Find a team." accent="See your next possibility." text="Get to know the employers behind the openings. Explore company profiles, understand their work and discover where your next step could lead." imageSrc="/images/about/collaboration-hero.webp" imageAlt="Two professionals exchanging ideas around a laptop in a bright workplace">
+        <div className="public-hero-actions"><a href="#employer-directory" className="button button--primary">Explore employers<ArrowRight size={17} aria-hidden="true" /></a><Link to="/all-jobs">Browse current jobs<ArrowRight size={16} aria-hidden="true" /></Link></div>
+      </PageHero>
 
-        /* Grid Layout */
-        .company-grid-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-          gap: 24px;
-        }
+      <section className="employer-directory" id="employer-directory" aria-labelledby="employer-directory-title">
+        <div className="container">
+          <div className="employer-directory-heading"><div><span className="employer-directory-eyebrow">EXPLORE THE DIRECTORY</span><h2 id="employer-directory-title">A little context. A better connection.</h2><p>Learn about a company before you take the next step.</p></div>{!loading && data?.configured && <span className="employer-directory-total"><Building2 size={15} aria-hidden="true" />{companies.length} {companies.length === 1 ? 'employer profile' : 'employer profiles'}</span>}</div>
 
-        .premium-card-wrapper {
-          text-decoration: none !important;
-          color: inherit !important;
-          display: flex;
-          height: 100%;
-        }
-
-        /* Card Styling */
-        .premium-company-card {
-          background: #ffffff;
-          border: 1px solid #e8e8e8;
-          border-radius: 12px;
-          padding: 24px;
-          transition: all 0.3s ease;
-          cursor: pointer;
-          display: flex;
-          flex-direction: column;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-          width: 100%;
-          height: 100%;
-        }
-
-        .premium-company-card:hover {
-          border-color: #2557a7;
-          box-shadow: 0 6px 16px -4px rgba(37, 87, 167, 0.1);
-          transform: translateY(-3px);
-        }
-
-        /* Header Area */
-        .card-header {
-          display: flex;
-          gap: 16px;
-          align-items: flex-start;
-          margin-bottom: 16px;
-        }
-
-        .company-logo-container {
-          flex-shrink: 0;
-          width: 60px;
-          height: 60px;
-          border-radius: 8px;
-          border: 1px solid #f0f0f0;
-          padding: 4px;
-          background: #fff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-        }
-        
-        .company-logo-container img {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-        }
-
-        .header-text {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .company-title {
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: #111827;
-          margin: 0;
-          line-height: 1.3;
-          transition: color 0.2s;
-        }
-
-        .premium-company-card:hover .company-title {
-          color: #2557a7;
-        }
-
-        .company-location {
-          font-size: 0.9rem;
-          color: #6b7280;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        /* Tags */
-        .company-tags {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-
-        .tag {
-          background: #eef2f9;
-          color: #1e3a8a;
-          padding: 4px 12px;
-          border-radius: 6px;
-          font-size: 0.85rem;
-          font-weight: 600;
-        }
-
-        /* Footer / Action Area */
-        .card-footer {
-          margin-top: auto; /* Pushes footer to the bottom */
-          padding-top: 20px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          font-weight: 600;
-          color: #0066cc;
-          font-size: 0.95rem;
-        }
-
-        .premium-company-card:hover .card-footer {
-          color: #004c99;
-        }
-
-        .card-footer-icon {
-          transition: transform 0.2s;
-        }
-        
-        .premium-company-card:hover .card-footer-icon {
-          transform: translateX(4px); /* Arrow moves right on hover */
-        }
-
-        /* --- Skeleton Animations --- */
-        .skeleton-card { pointer-events: none; }
-        .shimmer {
-          background: #f6f7f8;
-          background-image: linear-gradient(90deg, #f6f7f8 0px, #edeef1 40px, #f6f7f8 80px);
-          background-size: 600px;
-          animation: shimmer 1.5s infinite linear;
-          border-radius: 6px;
-        }
-        @keyframes shimmer {
-          0% { background-position: -300px 0; }
-          100% { background-position: 300px 0; }
-        }
-        
-        .skeleton-logo { width: 60px; height: 60px; border-radius: 8px; flex-shrink: 0; }
-        .skeleton-title { height: 20px; width: 80%; margin-bottom: 8px; margin-top: 4px; }
-        .skeleton-subtitle { height: 14px; width: 50%; }
-        .skeleton-tags { display: flex; gap: 8px; }
-        .skeleton-tag { height: 26px; width: 100px; border-radius: 6px; }
-        .skeleton-footer { height: 20px; width: 120px; margin-top: 24px; }
-
-        /* Responsive */
-        @media (max-width: 600px) {
-          .company-grid-container { grid-template-columns: 1fr; }
-          .premium-company-card { padding: 16px; }
-        }
-      `}</style>
-
-      <PageHero
-        eyebrow="Employer directory"
-        title="Companies hiring on Jooblie"
-        text="Explore employers with current openings in the Jooblie ecosystem."
-      />
-
-      <PageSection soft reveal={false}>
-        {loading ? (
-          /* SKELETON LOADING GRID */
-          <div className="company-grid-container">
-            {[...Array(6)].map((_, i) => (
-              <CompanyCardSkeleton key={`skeleton-${i}`} />
-            ))}
+          <div className="employer-directory-toolbar">
+            <div className="employer-directory-search"><Search size={18} aria-hidden="true" /><label className="employer-sr-only" htmlFor="employer-name-search">Search by company name</label><input id="employer-name-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by company name" aria-controls="employer-results" />{query && <button type="button" onClick={() => setQuery('')} aria-label="Clear company search"><X size={16} aria-hidden="true" /></button>}</div>
+            <div className="employer-directory-filters" role="group" aria-label="Employer availability"><button type="button" aria-pressed={!openingsOnly} onClick={() => setOpeningsOnly(false)}>All employers{!loading && <span>{companies.length}</span>}</button><button type="button" aria-pressed={openingsOnly} onClick={() => setOpeningsOnly(true)}>With openings{!loading && <span>{hiringCount}</span>}</button></div>
           </div>
-        ) : companies.length ? (
-          /* ACTUAL COMPANY GRID */
-          <Reveal className="company-grid-container" stagger>
-            {companies.map((company) => {
-              const jobCount = data?.jobs?.filter((job) => job.isActive && String(job.companyId) === String(company.id)).length || 0;
-              
-              return (
-                <Link className="premium-card-wrapper" to={`/companies/${company.id}`} key={company.id}>
-                  <div className="premium-company-card">
-                    
-                    {/* Header: Logo, Name, Location */}
-                    <div className="card-header">
-                      <div className="company-logo-container">
-                        <CompanyLogo company={company} size="xl" />
-                      </div>
-                      <div className="header-text">
-                        <h2 className="company-title">{company.name}</h2>
-                        {company.location && (
-                          <div className="company-location">
-                            <MapPin size={14} /> {company.location}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+          <div className="employer-directory-results-note" role="status" aria-live="polite">{loading ? 'Loading employer profiles…' : data?.configured === false ? 'Employer profiles are temporarily unavailable.' : 'Showing ' + visibleCompanies.length + (visibleCompanies.length === 1 ? ' employer' : ' employers') + (query.trim() ? ' matching “' + query.trim() + '”' : '')}{hasFilters && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>
 
-                    {/* Tags */}
-                    {company.industry && (
-                      <div className="company-tags">
-                        <span className="tag">{company.industry}</span>
-                      </div>
-                    )}
+          <div id="employer-results" aria-busy={loading}>
+            {loading ? <div className="employer-discovery-grid" role="status" aria-label="Loading employer profiles">{Array.from({ length: 6 }, (_, index) => <CompanyCardSkeleton key={index} />)}</div> : visibleCompanies.length ? <div className="employer-discovery-grid">{visibleCompanies.map(company => <EmployerCard key={company.id} company={company} jobs={jobsByCompany.get(String(company.id)) || []} />)}</div> : <div className="employer-directory-empty"><EmptyState backendMissing={data?.configured === false} title={data?.configured === false ? 'Employer directory unavailable' : hasFilters && companies.length ? 'No employers match this search' : 'No employer profiles yet'} text={hasFilters && companies.length ? 'Try another company name or include employers without current openings.' : 'Published employer profiles will appear here when available.'} />{hasFilters && <button type="button" className="button button--secondary" onClick={clearFilters}>Show all employers<ArrowRight size={16} aria-hidden="true" /></button>}</div>}
+          </div>
 
-                    {/* Footer: Open Jobs Count */}
-                    <div className="card-footer">
-                      <span>{jobCount} open {jobCount === 1 ? 'job' : 'jobs'}</span>
-                      <ArrowRight size={18} className="card-footer-icon" />
-                    </div>
-
-                  </div>
-                </Link>
-              );
-            })}
-          </Reveal>
-        ) : (
-          <Reveal>
-            <EmptyState
-              backendMissing={!data?.configured}
-              title="No employer profiles yet"
-              text="Companies with active openings will appear here when available."
-            />
-          </Reveal>
-        )}
-      </PageSection>
+          <div className="employer-directory-note"><ShieldCheck size={18} aria-hidden="true" /><p>Company information and openings are published by employers. A profile helps you understand the opportunity; it does not guarantee a placement or endorse every listing.</p></div>
+        </div>
+      </section>
+      <section className="employer-directory-closing"><div className="container"><div><span className="employer-directory-eyebrow">BUILDING YOUR NEXT TEAM?</span><h2>Give people a reason to get to know you.</h2><p>Introduce your business and publish clear opportunities through your recruiter workspace.</p></div><Link to="/register?role=recruiter" className="button button--primary">Get started as an employer<ArrowRight size={17} aria-hidden="true" /></Link></div></section>
     </div>
   );
 }
+

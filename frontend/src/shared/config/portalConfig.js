@@ -27,5 +27,5 @@ export function resolvePortalConfig(env = {}) {
     try { valid = ['http:', 'https:'].includes(new URL(apiBaseUrl).protocol); } catch { /* validation below */ }
     if (!valid) throw new Error('VITE_API_BASE_URL must be an absolute HTTP or HTTPS URL.');
   }
-  return { slug, name, description: `${name} — search jobs, connect with employers, and hire talent.` };
+  return { slug, name, description: `${name}: search jobs, connect with employers, and hire talent.` };
 }

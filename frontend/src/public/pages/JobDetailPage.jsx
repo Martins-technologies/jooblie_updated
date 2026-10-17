@@ -1,7 +1,7 @@
 import RecordMetadata from '../../shared/components/RecordMetadata';
 import ShareJobButton from '../../shared/components/ShareJobButton';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, CalendarDays, MapPin, MonitorSmartphone, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, CalendarDays, MapPin, MonitorSmartphone, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { getJobById } from '../../shared/lib/data';
 import { apiRequest } from '../../shared/lib/api';
@@ -285,6 +285,9 @@ export default function JobDetailPage() {
               </Link>
             ) : null}
             {application.error && <span className="inline-error">{application.error} {application.error.toLowerCase().includes('resume') && <><br /><Link to="/dashboard/job-seeker/profile" state={{ from: `/jobs/${job.id}` }}>Open My Profile to upload a PDF resume.</Link></>}</span>}
+            <p className="detail-app-disclaimer" style={{ fontSize: '12px', color: '#64748b', marginTop: '12px', lineHeight: '1.4', margin: '12px 0 0' }}>
+              An application does not guarantee an interview or employment.
+            </p>
           </div>
         </Reveal>
 
@@ -313,6 +316,11 @@ export default function JobDetailPage() {
             <SummaryRow label="Location" value={job.location} />
             <SummaryRow label="Pay / Salary" value={salary} />
             <SummaryRow label="Category" value={job.categoryName} />
+
+            <div className="detail-overview-trust" style={{ marginTop: '24px', padding: '14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '12px', color: '#64748b', lineHeight: '1.5' }}>
+              <ShieldCheck size={16} style={{ color: '#2563eb', marginBottom: '6px', display: 'block' }} />
+              Availability depends on openings published by employers. Jooblie supports platform integrity but does not promise placement or endorse every individual listing.
+            </div>
           </Reveal>
         </div>
       </div>
