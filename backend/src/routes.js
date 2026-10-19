@@ -18,6 +18,7 @@ import {
   notificationPreferencesSchema,
   adminJobStatusSchema,
   adminRoleSchema,
+  adminCompanyVerificationSchema,
   authSignInSchema,
   authSignUpSchema,
   resumeRegisterSchema,
@@ -84,9 +85,11 @@ seeker.get('/recommended-jobs', seekerController.recommendedJobs);
 seeker.get('/resumes', seekerController.listResumes);
 seeker.get('/resume-url', seekerController.getOwnResumeUrl);
 seeker.post('/resumes', writeLimiter, validate(resumeRegisterSchema), seekerController.registerResume);
+seeker.post('/parse-resume', writeLimiter, seekerController.parseResume);
 seeker.post('/jobs/:jobId/save', writeLimiter, seekerController.saveJob);
 seeker.delete('/jobs/:jobId/save', writeLimiter, seekerController.unsaveJob);
 seeker.post('/jobs/:jobId/apply', writeLimiter, validate(applicationSchema), seekerController.applyToJob);
+seeker.post('/applications/:applicationId/offer-decision', writeLimiter, seekerController.offerDecision);
 router.use('/job-seeker', seeker);
 
 const recruiter = Router();
@@ -116,7 +119,10 @@ admin.get('/jobs/:jobId', adminController.getJob);
 admin.patch('/jobs/:jobId', writeLimiter, validate(adminJobUpdateSchema), adminController.updateJob);
 admin.delete('/jobs/:jobId', writeLimiter, adminController.deleteJob);
 admin.get('/companies', adminController.listCompanies);
+admin.patch('/companies/:companyId/verification', writeLimiter, validate(adminCompanyVerificationSchema), adminController.updateCompanyVerification);
+admin.patch('/companies/:companyId', writeLimiter, validate(adminCompanyVerificationSchema), adminController.updateCompanyVerification);
 admin.get('/applications', adminController.listApplications);
+admin.patch('/applications/:applicationId', writeLimiter, validate(applicationStatusSchema), adminController.updateApplicationStatus);
 admin.get('/users', adminController.listUsers);
 admin.patch('/users/:userId/role', writeLimiter, validate(adminRoleSchema), adminController.changeUserRole);
 admin.patch('/jobs/:jobId/status', writeLimiter, validate(adminJobStatusSchema), adminController.moderateJob);

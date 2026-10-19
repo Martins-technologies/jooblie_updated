@@ -2,6 +2,8 @@ import { serviceDb } from '../config/supabase.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
 import { writeAuditLog } from '../utils/audit.js';
 import { loadSeekerHistory, loadSavedJobStatus } from '../utils/seekerHistory.js';
+import { extractTextFromBuffer, parseResumeText } from '../utils/resumeParser.js';
+import { changeApplicationStatus } from '../utils/applicationStatus.js';
 
 /* =========================================================
    COMMON JOB SELECT
@@ -29,7 +31,118 @@ const jobSelect = `
 `;
 
 export const listApplications = asyncHandler(async (req, res) => {
-  res.json(await loadSeekerHistory(serviceDb, { userId: req.user.id, query: req.query, kind: 'applications', jobSelect }));
+  const history = await loadSeekerHistory(serviceDb, { userId: req.user.id, query: req.query, kind: 'applications', jobSelect });
+  const items = history.items || [];
+  
+  if (!items.length) {
+    return res.json(history);
+  }
+
+  // Fetch sites for portal names
+  const { data: sites = [] } = await serviceDb.from('sites').select('id,name,slug');
+  const siteMap = new Map((sites || []).map((s) => [s.id, s]));
+
+  // Fetch recent activity log for stage details (interview, offer, feedback)
+  const appIds = items.map((a) => a.id);
+  const { data: logs = [] } = appIds.length
+    ? await serviceDb.from('activity_log')
+        .select('action,entity_id,data,created_at')
+        .eq('entity_type', 'application')
+        .in('entity_id', appIds)
+        .order('created_at', { ascending: false })
+    : { data: [] };
+
+  const enriched = items.map((app) => {
+    const site = siteMap.get(app.applied_via_site_id) || { id: 1, name: 'Jooblie Aggregator', slug: 'jooblie' };
+    const appLogs = logs.filter((l) => l.entity_id === app.id);
+    const latestInterview = appLogs.find((l) => l.action === 'application.interview' || l.data?.interview);
+    const latestOffer = appLogs.find((l) => l.action === 'application.offer' || l.data?.offer);
+    const latestReject = appLogs.find((l) => l.action === 'application.reject' || l.data?.feedback);
+
+    return {
+      ...app,
+      portal: site,
+      interview: latestInterview?.data?.interview || null,
+      offer: latestOffer?.data?.offer || null,
+      feedback: latestReject?.data?.feedback || null,
+    };
+  });
+
+  res.json({ ...history, items: enriched });
+});
+
+export const offerDecision = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const { decision, reason } = req.body; // 'accept' or 'decline'
+
+  if (!['accept', 'decline'].includes(decision)) {
+    throw new ApiError(400, 'Decision must be either "accept" or "decline".', 'INVALID_DECISION');
+  }
+
+  const { data: application, error: appError } = await serviceDb
+    .from('applications')
+    .select('id,status,job_id,applicant_id,applied_via_site_id')
+    .eq('id', applicationId)
+    .eq('applicant_id', req.user.id)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (appError || !application) {
+    throw new ApiError(404, 'Application not found.', 'APPLICATION_NOT_FOUND');
+  }
+
+  if (application.status !== 'offered') {
+    throw new ApiError(400, 'This application does not currently have a pending offer.', 'OFFER_NOT_PENDING');
+  }
+
+  const nextStatus = decision === 'accept' ? 'hired' : 'withdrawn';
+
+  const updated = await changeApplicationStatus(serviceDb, {
+    applicationId: application.id,
+    expectedStatus: 'offered',
+    status: nextStatus,
+  });
+
+  const { data: job } = await serviceDb.from('jobs').select('id,title,company_id').eq('id', application.job_id).maybeSingle();
+
+  await writeAuditLog(req, {
+    action: decision === 'accept' ? 'application.offer.accept' : 'application.offer.decline',
+    entityType: 'application',
+    entityId: application.id,
+    companyId: job?.company_id,
+    data: { decision, reason: reason || null, status: nextStatus },
+  });
+
+  // Notify recruiter members
+  if (job?.company_id) {
+    const { data: members = [] } = await serviceDb
+      .from('company_members')
+      .select('user_id')
+      .eq('company_id', job.company_id);
+
+    const seekerName = req.user?.full_name || 'Candidate';
+    for (const m of members) {
+      await serviceDb.from('notifications').insert({
+        user_id: m.user_id,
+        type: decision === 'accept' ? 'offer_accepted' : 'offer_declined',
+        entity_type: 'application',
+        entity_id: application.id,
+        site_id: application.applied_via_site_id || null,
+        data: {
+          title: decision === 'accept' ? `Offer Accepted: ${job.title}` : `Offer Declined: ${job.title}`,
+          message: decision === 'accept' 
+            ? `${seekerName} has accepted your job offer for ${job.title}!` 
+            : `${seekerName} has declined the job offer for ${job.title}.${reason ? ` Reason: "${reason}"` : ''}`,
+          status: nextStatus,
+          applicant_name: seekerName,
+          reason: reason || null,
+        },
+        created_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  res.json({ success: true, application: updated });
 });
 
 export const listSavedJobs = asyncHandler(async (req, res) => {
@@ -742,14 +855,20 @@ export const registerResume = asyncHandler(async (req, res) => {
   if (!path.startsWith(`${req.user.id}/`)) throw new ApiError(403, 'Invalid resume path.', 'RESUME_PATH_FORBIDDEN');
   const { data: blob, error: downloadError } = await serviceDb.storage.from('resumes').download(path);
   if (downloadError || !blob) throw new ApiError(400, 'Uploaded resume could not be verified.', 'RESUME_VERIFY_FAILED');
-  if (blob.size > 5 * 1024 * 1024) { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Resume must be 5 MB or smaller.', 'RESUME_TOO_LARGE'); }
+  if (blob.size > 10 * 1024 * 1024) { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Resume must be 10 MB or smaller.', 'RESUME_TOO_LARGE'); }
   const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
   const magic = String.fromCharCode(...head);
-  if (magic !== '%PDF-') { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Only valid PDF resumes are accepted.', 'RESUME_NOT_PDF'); }
+  const isPdf = magic === '%PDF-';
+  const isDocx = (head[0] === 0x50 && head[1] === 0x4B) || original_name.toLowerCase().endsWith('.docx');
+  if (!isPdf && !isDocx) {
+    await serviceDb.storage.from('resumes').remove([path]);
+    throw new ApiError(400, 'Only valid PDF or DOCX resumes are accepted.', 'RESUME_NOT_SUPPORTED');
+  }
+  const detectedType = isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf';
   if (Number(size_bytes) !== blob.size) { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Resume size verification failed.', 'RESUME_SIZE_MISMATCH'); }
-  const { data, error } = await serviceDb.from('resume_documents').insert({ user_id: req.user.id, storage_path: path, original_name, size_bytes: blob.size, content_type: 'application/pdf' }).select('id,storage_path,original_name,size_bytes,content_type,created_at').single();
+  const { data, error } = await serviceDb.from('resume_documents').insert({ user_id: req.user.id, storage_path: path, original_name, size_bytes: blob.size, content_type: detectedType }).select('id,storage_path,original_name,size_bytes,content_type,created_at').single();
   if (error) { if (error.code === '23505') throw new ApiError(409, 'This resume has already been registered.', 'RESUME_ALREADY_REGISTERED'); throw new ApiError(400, 'Resume could not be registered.', 'RESUME_REGISTER_FAILED'); }
-  await safeAudit(req, { action: 'resume.upload', entityType: 'resume', entityId: data.id, metadata: { size_bytes: blob.size } });
+  await safeAudit(req, { action: 'resume.upload', entityType: 'resume', entityId: data.id, metadata: { size_bytes: blob.size, content_type: detectedType } });
   res.status(201).json({ resume: data });
 });
 
@@ -1276,3 +1395,61 @@ export const applyToJob = asyncHandler(
       });
   },
 );
+
+export const parseResume = asyncHandler(async (req, res) => {
+  const { base64, path, filename = '', contentType = '' } = req.body || {};
+
+  let buffer = null;
+  let docName = filename;
+  let fileType = contentType;
+
+  if (base64) {
+    const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+    buffer = Buffer.from(cleanBase64, 'base64');
+  } else if (path) {
+    if (!path.startsWith(`${req.user.id}/`)) {
+      throw new ApiError(403, 'Invalid resume path.', 'RESUME_PATH_FORBIDDEN');
+    }
+    const { data: blob, error: downloadError } = await serviceDb.storage.from('resumes').download(path);
+    if (downloadError || !blob) {
+      throw new ApiError(400, 'Uploaded resume could not be retrieved.', 'RESUME_DOWNLOAD_FAILED');
+    }
+    buffer = Buffer.from(await blob.arrayBuffer());
+    docName = docName || path.split('/').pop() || '';
+  } else {
+    throw new ApiError(400, 'Either resume base64 content or storage path is required.', 'RESUME_PAYLOAD_REQUIRED');
+  }
+
+  if (!buffer || buffer.length === 0) {
+    throw new ApiError(400, 'Resume file is empty.', 'RESUME_EMPTY');
+  }
+
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw new ApiError(400, 'Resume file must be 10 MB or smaller.', 'RESUME_TOO_LARGE');
+  }
+
+  const rawText = await extractTextFromBuffer({ buffer, filename: docName, contentType: fileType });
+  if (!rawText || rawText.trim().length < 20) {
+    throw new ApiError(400, 'Could not extract readable text from the provided resume.', 'RESUME_UNREADABLE');
+  }
+
+  const parsed = parseResumeText(rawText);
+
+  await writeAuditLog(req, {
+    action: 'resume.parse',
+    entityType: 'profile',
+    entityId: req.user.id,
+    metadata: {
+      filename: docName,
+      extracted_skills_count: parsed.skills?.length || 0,
+      extracted_experience_count: parsed.experience?.length || 0,
+      extracted_education_count: parsed.education?.length || 0,
+    },
+  });
+
+  res.json({
+    success: true,
+    data: parsed,
+    message: 'Resume parsed successfully.',
+  });
+});

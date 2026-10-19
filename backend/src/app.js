@@ -66,7 +66,7 @@ app.use(
 
 app.use(compression());
 app.use(hpp());
-app.use(express.json({ limit: env.REQUEST_BODY_LIMIT, strict: true }));
+app.use(express.json({ limit: '10mb', strict: true }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
 app.use(generalLimiter);

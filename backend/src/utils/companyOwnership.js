@@ -8,7 +8,7 @@ export async function ensureCompanyOwnership(db, companyId, userId) {
   });
   if (!error) return;
   if (error.code !== '23505') {
-    throw new ApiError(400, 'Company ownership could not be created.', 'COMPANY_MEMBER_FAILED');
+    throw new ApiError(400, 'Company ownership could not be created.', 'COMPANY_MEMBER_FAILED', error?.message);
   }
   const { data: owner, error: lookupError } = await db.from('company_members')
     .select('company_id,user_id,role')

@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bookmark, BriefcaseBusiness, Building2, Check, ChevronLeft, ChevronRight, 
-  MapPin, Search, Layers, MonitorSmartphone, CheckCircle2 
+  MapPin, Search, Layers, MonitorSmartphone, CheckCircle2, DollarSign, Clock, ArrowRight, ShieldCheck 
 } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
+import { formatSalary, timeAgo } from '../../shared/lib/format';
 
 const EMPTY_FILTERS = { q: '', location: '', category: '', type: '', workplace: '' };
 
@@ -450,30 +451,30 @@ const premiumCSS = `
     to { transform: rotate(360deg); }
   }
 
-  /* ===== JOB CARDS ===== */
+  /* ===== ENHANCED AESTHETIC JOB CARDS ===== */
   .dash-job-grid { 
     display: grid; 
-    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); 
-    gap: 16px; 
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); 
+    gap: 20px; 
   }
 
   .dash-job-card { 
-    background: #fff; 
-    border: 1px solid #e5e7eb; 
-    border-radius: 12px; 
-    padding: 20px; 
-    transition: all 0.2s ease; 
+    background: #ffffff; 
+    border: 1.5px solid #e2e8f0; 
+    border-radius: 16px; 
+    padding: 22px; 
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); 
     display: flex; 
     flex-direction: column; 
     position: relative; 
+    box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.04);
   }
   .dash-job-card:hover { 
-    border-color: #2557a7; 
-    box-shadow: 0 4px 12px rgba(37, 87, 167, 0.08); 
-    transform: translateY(-2px); 
+    border-color: #3b82f6; 
+    box-shadow: 0 12px 28px -4px rgba(37, 99, 235, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.04); 
+    transform: translateY(-3px); 
   }
 
-  /* Top row: logo + save button */
   .dash-job-card-top { 
     display: flex; 
     justify-content: space-between; 
@@ -481,96 +482,204 @@ const premiumCSS = `
     margin-bottom: 14px; 
   }
 
-  .dash-logo-box { 
-    width: 44px; 
-    height: 44px; 
-    background: #f8fafc; 
-    border: 1px solid #f1f5f9; 
-    border-radius: 10px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    color: #94a3b8; 
+  .pro-company-avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
+    border: 1px solid #dbeafe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #2563eb;
+    font-size: 1.15rem;
     flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  }
+  .pro-logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
-  /* Save button */
   .save-btn { 
     width: 36px; 
     height: 36px; 
     border-radius: 50%; 
-    border: 1px solid #f3f4f6; 
+    border: 1px solid #e2e8f0; 
     display: flex; 
     align-items: center; 
     justify-content: center; 
-    background: #fff; 
-    color: #9ca3af; 
+    background: #ffffff; 
+    color: #94a3b8; 
     cursor: pointer; 
     transition: all 0.2s; 
     flex-shrink: 0;
-    margin-left: auto;
   }
   .save-btn:hover { 
-    background: #f9fafb; 
-    color: #4b5563; 
+    background: #f8fafc; 
+    color: #2563eb; 
+    border-color: #cbd5e1;
+    transform: scale(1.05);
   }
   .save-btn.saved { 
     background: #eff6ff; 
-    color: #2557a7; 
-    border-color: #bfdbfe; 
-  }
-  
-  /* Job title & company */
-  .dash-job-card h3 { 
-    margin: 0 0 4px 0; 
-    font-size: 1.05rem; 
-    font-weight: 700; 
-    line-height: 1.3; 
-  }
-  .dash-job-card h3 a { 
-    color: #111827; 
-    text-decoration: none; 
-  }
-  .dash-job-card h3 a:hover { 
-    color: #2557a7; 
-    text-decoration: underline; 
-  }
-  
-  .dash-company-name { 
-    color: #6b7280; 
-    font-size: 0.875rem; 
-    font-weight: 500; 
+    color: #2563eb; 
+    border-color: #93c5fd; 
   }
 
-  /* Meta badges */
-  .dash-job-meta { 
-    display: flex; 
-    flex-wrap: wrap; 
-    gap: 8px; 
-    margin-top: 16px; 
+  .pro-company-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 4px;
   }
-  .meta-badge { 
-    display: inline-flex; 
-    align-items: center; 
-    gap: 4px; 
-    background: #f3f4f6; 
-    color: #4b5563; 
-    padding: 4px 10px; 
-    border-radius: 6px; 
-    font-size: 0.75rem; 
-    font-weight: 600; 
+  .verified-badge-icon {
+    color: #2563eb;
   }
-  
-  /* APPLIED BADGE */
+
+  .dash-job-card h3 { 
+    margin: 0 0 12px 0; 
+    font-size: 1.12rem; 
+    font-weight: 700; 
+    line-height: 1.35; 
+  }
+  .dash-job-card h3 a { 
+    color: #0f172a; 
+    text-decoration: none; 
+    transition: color 0.15s;
+  }
+  .dash-job-card h3 a:hover { 
+    color: #2563eb; 
+  }
+
+  .pro-badges-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .pro-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .workplace-remote {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+  }
+  .workplace-hybrid {
+    background: #f5f3ff;
+    color: #7c3aed;
+    border: 1px solid #ddd6fe;
+  }
+  .workplace-on_site, .workplace-onsite {
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+  }
+  .pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .pill-type {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+  }
+  .pill-location {
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+  }
+
+  .pro-salary-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #15803d;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 14px;
+    align-self: flex-start;
+  }
+
+  .pro-skills-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .pro-skill-chip {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 2px 7px;
+  }
+
+  .pro-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .pro-time-ago {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+  .pro-view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #2563eb;
+    text-decoration: none;
+    transition: all 0.15s;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: #eff6ff;
+  }
+  .pro-view-btn:hover {
+    background: #2563eb;
+    color: #ffffff;
+    transform: translateX(2px);
+  }
+
   .applied-badge {
     position: absolute;
     top: 16px;
     right: 56px; 
     background: #ecfdf5;
     color: #059669;
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     font-weight: 700;
-    padding: 2px 10px;
+    padding: 3px 10px;
     border-radius: 12px;
     border: 1px solid #a7f3d0;
     display: flex;
@@ -663,6 +772,18 @@ function LoadingSpinner() {
 }
 
 function DashboardJobCard({ job, saved, onSave, applied }) { 
+  const company = getCompanyName(job);
+  const location = getLocation(job);
+  const salary = formatSalary(job);
+  const initial = company.charAt(0).toUpperCase() || 'J';
+  const workplace = (job.workplace_type || (job.is_remote ? 'remote' : 'on_site')).toLowerCase();
+  const time = timeAgo(job.created_at || job.published_at);
+
+  let skillsList = [];
+  if (Array.isArray(job.skills)) skillsList = job.skills.slice(0, 3);
+  else if (Array.isArray(job.tags)) skillsList = job.tags.slice(0, 3);
+  else if (job.category_name) skillsList = [job.category_name];
+
   return (
     <article className="dash-job-card">
       {applied && (
@@ -671,16 +792,67 @@ function DashboardJobCard({ job, saved, onSave, applied }) {
         </div>
       )}
       <div className="dash-job-card-top">
-        <div className="dash-logo-box"><Building2 size={20} /></div>
-        <button type="button" className={`save-btn ${saved ? 'saved' : ''}`} onClick={() => onSave(job.id)} title={saved ? "Unsave Job" : "Save Job"}>
+        <div className="pro-company-avatar">
+          {job.companies?.logo_path || job.company?.logo_path ? (
+            <img src={job.companies?.logo_path || job.company?.logo_path} alt={company} className="pro-logo-img" />
+          ) : (
+            <span>{initial}</span>
+          )}
+        </div>
+        <button
+          type="button"
+          className={`save-btn ${saved ? 'saved' : ''}`}
+          onClick={() => onSave(job.id)}
+          title={saved ? "Unsave Job" : "Save Job"}
+        >
           {saved ? <Check size={16} /> : <Bookmark size={16} />}
         </button>
       </div>
-      <h3><Link to={`/dashboard/job-seeker/jobs/${job.id}`}>{job.title}</Link></h3>
-      <span className="dash-company-name">{getCompanyName(job)}</span>
-      <div className="dash-job-meta">
-        <span className="meta-badge"><MapPin size={12} /> {getLocation(job)}</span>
-        <span className="meta-badge"><BriefcaseBusiness size={12} /> {formatType(job.employment_type)}</span>
+
+      <div className="pro-company-name">
+        <span>{company}</span>
+        <ShieldCheck size={14} className="verified-badge-icon" title="Verified Employer" />
+      </div>
+
+      <h3>
+        <Link to={`/dashboard/job-seeker/jobs/${job.id}`}>{job.title}</Link>
+      </h3>
+
+      <div className="pro-badges-row">
+        <span className={`pro-pill workplace-${workplace}`}>
+          <span className="pulse-dot" />
+          {workplace === 'remote' ? 'Remote' : workplace === 'hybrid' ? 'Hybrid' : 'On-site'}
+        </span>
+        <span className="pro-pill pill-type">
+          <BriefcaseBusiness size={12} /> {formatType(job.employment_type)}
+        </span>
+        <span className="pro-pill pill-location">
+          <MapPin size={12} /> {location}
+        </span>
+      </div>
+
+      {salary && (
+        <div className="pro-salary-pill">
+          <DollarSign size={13} />
+          <span>{salary}</span>
+        </div>
+      )}
+
+      {skillsList.length > 0 && (
+        <div className="pro-skills-chips">
+          {skillsList.map((skill, idx) => (
+            <span key={idx} className="pro-skill-chip">{typeof skill === 'string' ? skill : (skill?.name || String(skill))}</span>
+          ))}
+        </div>
+      )}
+
+      <div className="pro-card-footer">
+        <span className="pro-time-ago">
+          <Clock size={13} /> {time || 'Recently posted'}
+        </span>
+        <Link to={`/dashboard/job-seeker/jobs/${job.id}`} className="pro-view-btn">
+          View Job <ArrowRight size={14} />
+        </Link>
       </div>
     </article>
   ); 
@@ -700,6 +872,6 @@ function getLocation(job) {
 }
 
 function formatType(value) { 
-  if (!value) return 'Job'; 
+  if (!value) return 'Full-time'; 
   return String(value).replaceAll('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase()); 
 }

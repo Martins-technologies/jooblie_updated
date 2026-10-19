@@ -139,13 +139,17 @@ export const educationSchema = z.array(educationItem).max(20);
 export const resumeRegisterSchema = z.object({
   path: z.string().trim().min(5).max(1000),
   original_name: z.string().trim().min(1).max(255),
-  size_bytes: z.coerce.number().int().positive().max(5 * 1024 * 1024),
-  content_type: z.literal('application/pdf'),
+  size_bytes: z.coerce.number().int().positive().max(10 * 1024 * 1024),
+  content_type: z.string().trim().min(3).max(120),
 });
 
 export const applicationStatusSchema = z.object({
   status: z.enum(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected', 'withdrawn']),
-});
+  note: z.string().max(2000).optional(),
+  interview: z.any().optional(),
+  offer: z.any().optional(),
+  feedback: z.string().max(2000).optional(),
+}).passthrough();
 
 export const profileSchema = z.object({
   full_name: z.string().trim().min(2).max(160).optional(),
@@ -179,3 +183,9 @@ export const adminRoleSchema = z.object({
   previous_role: z.enum(['job_seeker', 'recruiter', 'admin']).optional(),
   role: z.enum(['job_seeker', 'recruiter', 'admin']),
 });
+
+export const adminCompanyVerificationSchema = z.object({
+  verification_status: z.enum(['pending', 'verified', 'rejected']),
+  rejection_reason: optionalText(500),
+});
+

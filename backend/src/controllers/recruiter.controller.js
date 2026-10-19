@@ -157,6 +157,12 @@ export const createCompany = asyncHandler(async (req, res) => {
     throw ownershipError;
   }
 
+  await serviceDb
+    .from('profiles')
+    .update({ recruiter_company_id: company.id })
+    .eq('id', req.user.id)
+    .is('recruiter_company_id', null);
+
   await writeAuditLog(req, {
     action: 'company.create',
     entityType: 'company',
@@ -406,13 +412,13 @@ export const updateJob = asyncHandler(async (req, res) => {
 });
 
 const recruiterAllowedTransitions = {
-  submitted: new Set(['submitted', 'viewed', 'shortlisted', 'rejected']),
-  viewed: new Set(['viewed', 'shortlisted', 'interviewing', 'rejected']),
-  shortlisted: new Set(['shortlisted', 'interviewing', 'rejected']),
-  interviewing: new Set(['interviewing', 'offered', 'rejected']),
-  offered: new Set(['offered', 'hired', 'rejected']),
-  hired: new Set(['hired']),
-  rejected: new Set(['rejected']),
+  submitted: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'rejected']),
+  viewed: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'rejected']),
+  shortlisted: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'rejected']),
+  interviewing: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected']),
+  offered: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected']),
+  hired: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected']),
+  rejected: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'rejected']),
   withdrawn: new Set(['withdrawn']),
 };
 
@@ -440,7 +446,7 @@ export const listApplications = asyncHandler(async (req, res) => {
   const { data: profiles = [] } = applicantIds.length
     ? await serviceDb
         .from('profiles')
-        .select('id,full_name,headline,location_city,location_province,skills,default_resume_path,experience,education')
+        .select('id,full_name,email,phone,headline,location_city,location_province,skills,default_resume_path,experience,education')
         .in('id', applicantIds)
     : { data: [] };
 
@@ -460,18 +466,54 @@ export const listAllApplications = asyncHandler(async (req, res) => {
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
   const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 25));
   const from = (page - 1) * pageSize;
-  let query = serviceDb.from('applications').select('id,status,cover_letter,resume_path,created_at,updated_at,applicant_id,job_id,jobs!inner(id,title,company_id)', { count: 'exact' })
+  let query = serviceDb.from('applications').select('id,status,cover_letter,resume_path,applied_via_site_id,created_at,updated_at,applicant_id,job_id,jobs!inner(id,title,company_id)', { count: 'exact' })
     .in('jobs.company_id', companyIds).is('deleted_at', null).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
   if (req.query.status && req.query.status !== 'all') query = query.eq('status', req.query.status);
+  if (req.query.jobId) query = query.eq('job_id', req.query.jobId);
   const { data, error, count } = await query;
   if (error) throw new ApiError(500, 'Candidates could not be loaded.', 'CANDIDATES_FAILED', error.message);
+
   const applicantIds = [...new Set((data || []).map((item) => item.applicant_id))];
-  const { data: profiles = [] } = applicantIds.length ? await serviceDb.from('profiles').select('id,full_name,headline,location_city,location_province,skills,experience,education,default_resume_path').in('id', applicantIds) : { data: [] };
+  const { data: profiles = [] } = applicantIds.length ? await serviceDb.from('profiles').select('id,full_name,email,phone,headline,location_city,location_province,skills,experience,education,default_resume_path').in('id', applicantIds) : { data: [] };
   const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
-  res.json({ items: (data || []).map((application) => ({ ...application, profiles: profileMap.get(application.applicant_id) || null })), page, pageSize, total: count || 0 });
+
+  // Fetch sites for cross-portal display
+  const { data: sites = [] } = await serviceDb.from('sites').select('id,name,slug');
+  const siteMap = new Map((sites || []).map((s) => [s.id, s]));
+
+  // Fetch recent activity log for stage details (interview, offer, feedback, notes)
+  const appIds = (data || []).map((a) => a.id);
+  const { data: logs = [] } = appIds.length
+    ? await serviceDb.from('activity_log')
+        .select('action,entity_id,data,created_at')
+        .eq('entity_type', 'application')
+        .in('entity_id', appIds)
+        .order('created_at', { ascending: false })
+    : { data: [] };
+
+  const items = (data || []).map((application) => {
+    const site = siteMap.get(application.applied_via_site_id) || { id: 1, name: 'Jooblie Aggregator', slug: 'jooblie' };
+    const appLogs = logs.filter((l) => l.entity_id === application.id);
+    const latestInterviewLog = appLogs.find((l) => l.action === 'application.interview' || l.data?.interview);
+    const latestOfferLog = appLogs.find((l) => l.action === 'application.offer' || l.data?.offer);
+    const latestRejectLog = appLogs.find((l) => l.action === 'application.reject' || l.data?.feedback);
+    const latestShortlistLog = appLogs.find((l) => l.action === 'application.shortlist' || l.data?.note);
+
+    return {
+      ...application,
+      portal: site,
+      interview: latestInterviewLog?.data?.interview || null,
+      offer: latestOfferLog?.data?.offer || null,
+      feedback: latestRejectLog?.data?.feedback || null,
+      internal_note: latestShortlistLog?.data?.note || null,
+      profiles: profileMap.get(application.applicant_id) || null,
+    };
+  });
+
+  res.json({ items, page, pageSize, total: count || 0 });
 });
 
-// 🔥 YAHAN FIX HAI: getApplicationResumeUrl updated to use req.db for update
+// 🔥 getApplicationResumeUrl
 export const getApplicationResumeUrl = asyncHandler(async (req, res) => {
   const { data: application } = await serviceDb
     .from('applications')
@@ -518,11 +560,11 @@ export const getApplicationResumeUrl = asyncHandler(async (req, res) => {
   res.json({ url: signed.signedUrl, expiresIn: 300 });
 });
 
-// 🔥 YAHAN BHI FIX HAI: updateApplication updated to use req.db
+// 🔥 updateApplication with stage progression action triggers
 export const updateApplication = asyncHandler(async (req, res) => {
   const { data: application } = await serviceDb
     .from('applications')
-    .select('id,job_id,status')
+    .select('id,job_id,status,applicant_id,applied_via_site_id')
     .eq('id', req.params.applicationId)
     .is('deleted_at', null)
     .maybeSingle();
@@ -531,7 +573,7 @@ export const updateApplication = asyncHandler(async (req, res) => {
 
   const { data: job } = await serviceDb
     .from('jobs')
-    .select('company_id')
+    .select('id,title,company_id')
     .eq('id', application.job_id)
     .maybeSingle();
 
@@ -543,19 +585,100 @@ export const updateApplication = asyncHandler(async (req, res) => {
     throw new ApiError(409, `Application cannot move from ${application.status} to ${req.body.status}.`, 'INVALID_APPLICATION_TRANSITION');
   }
 
+  // Handle offer document attachment if base64 provided
+  let offerPayload = req.body.offer || null;
+  if (offerPayload && offerPayload.documentBase64) {
+    try {
+      const match = String(offerPayload.documentBase64).match(/^data:([^;]+);base64,(.+)$/);
+      const rawBase64 = match ? match[2] : offerPayload.documentBase64;
+      const buffer = Buffer.from(rawBase64, 'base64');
+      const safeFilename = (offerPayload.documentName || 'Offer_Letter.pdf').replace(/[^a-zA-Z0-9._-]+/g, '-');
+      const storagePath = `offers/${application.id}/${Date.now()}-${safeFilename}`;
+      const { error: uploadErr } = await serviceDb.storage
+        .from('resumes')
+        .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: true });
+      if (!uploadErr) {
+        offerPayload.documentPath = storagePath;
+        delete offerPayload.documentBase64;
+      }
+    } catch (e) {
+      console.warn('Could not store offer attachment in storage:', e.message);
+    }
+  }
+
   const data = await changeApplicationStatus(req.db, {
     applicationId: application.id,
     expectedStatus: application.status,
     status: req.body.status,
   });
 
+  // Action name for audit log
+  let actionName = 'application.status.update';
+  if (req.body.status === 'shortlisted') actionName = 'application.shortlist';
+  else if (req.body.status === 'interviewing') actionName = 'application.interview';
+  else if (req.body.status === 'offered') actionName = 'application.offer';
+  else if (req.body.status === 'rejected') actionName = 'application.reject';
+
   await writeAuditLog(req, {
-    action: 'application.status.update',
+    action: actionName,
     entityType: 'application',
     entityId: application.id,
     companyId: job.company_id,
-    metadata: { status: req.body.status },
+    data: {
+      status: req.body.status,
+      note: req.body.note || null,
+      interview: req.body.interview || null,
+      offer: offerPayload,
+      feedback: req.body.feedback || null,
+    },
   });
 
-  res.json({ application: data });
+  // Send structured in-app and email notification to candidate
+  const { data: company } = await serviceDb.from('companies').select('name').eq('id', job.company_id).maybeSingle();
+  const companyNameStr = company?.name || 'The Employer';
+
+  let notifType = 'application_status';
+  let notifTitle = `Status update: ${job.title}`;
+  let notifMessage = `Your application for ${job.title} at ${companyNameStr} has moved to ${req.body.status}.`;
+
+  if (req.body.status === 'shortlisted') {
+    notifType = 'candidate_shortlisted';
+    notifTitle = `Shortlisted: ${job.title}`;
+    notifMessage = `Great news! You have been shortlisted for ${job.title} at ${companyNameStr}.${req.body.note ? ` Note: "${req.body.note}"` : ''}`;
+  } else if (req.body.status === 'interviewing') {
+    notifType = 'interview_scheduled';
+    notifTitle = `Interview Scheduled: ${job.title}`;
+    notifMessage = `${companyNameStr} has scheduled an interview for ${job.title}. Date: ${req.body.interview?.date || 'TBD'} ${req.body.interview?.time || ''}. Check your applications tab for full details.`;
+  } else if (req.body.status === 'offered') {
+    notifType = 'offer_extended';
+    notifTitle = `Official Job Offer: ${job.title}`;
+    notifMessage = `Congratulations! ${companyNameStr} has extended an official job offer for ${job.title}. Inspect your offer details and respond.`;
+  } else if (req.body.status === 'rejected') {
+    notifType = 'application_rejected';
+    notifTitle = `Application update: ${job.title}`;
+    notifMessage = `Thank you for taking the time to apply for ${job.title} at ${companyNameStr}.${req.body.feedback ? ` Feedback: "${req.body.feedback}"` : ' The team has decided to move forward with other candidates at this time.'}`;
+  }
+
+  await serviceDb.from('notifications').insert({
+    user_id: application.applicant_id,
+    type: notifType,
+    entity_type: 'application',
+    entity_id: application.id,
+    site_id: application.applied_via_site_id || null,
+    data: {
+      title: notifTitle,
+      message: notifMessage,
+      status: req.body.status,
+      job_id: job.id,
+      job_title: job.title,
+      company_name: companyNameStr,
+      note: req.body.note || null,
+      interview: req.body.interview || null,
+      offer: offerPayload,
+      feedback: req.body.feedback || null,
+    },
+    created_at: new Date().toISOString(),
+  });
+
+  res.json({ application: data, offer: offerPayload });
 });
