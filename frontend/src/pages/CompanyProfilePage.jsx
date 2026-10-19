@@ -91,7 +91,7 @@ export default function CompanyProfilePage() {
       title="Company Profile" 
       subtitle="Update your employer details to build trust with candidates."
     >
-      <div className="dashboard-panel" style={{ maxWidth: '900px', padding: '2.5rem', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+      <div className="dashboard-panel" style={{ width: '100%', padding: '2.5rem', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
         {fetching ? (
           <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
             Loading profile...

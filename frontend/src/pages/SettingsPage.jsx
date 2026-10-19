@@ -68,7 +68,7 @@ export default function SettingsPage() {
 
   return (
     <DashboardLayout title="Account Settings" subtitle="Manage your personal information, security, and preferences.">
-      <div className="dashboard-panel" style={{ maxWidth: '900px', padding: '0', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="dashboard-panel" style={{ width: '100%', padding: '0', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         
         {/* HORIZONTAL TABS (Scrollbar removed, FlexWrap added) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', padding: '0 1rem' }}>
