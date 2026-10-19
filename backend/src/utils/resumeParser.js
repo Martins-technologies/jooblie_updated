@@ -1,8 +1,6 @@
 import { createRequire } from 'node:module';
-import mammoth from 'mammoth';
 
 const require = createRequire(import.meta.url);
-const { PDFParse } = require('pdf-parse');
 
 const MONTH_MAP = {
   jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
@@ -52,6 +50,7 @@ export async function extractTextFromBuffer({ buffer, filename = '', contentType
 
   if (isDocx) {
     try {
+      const mammoth = (await import('mammoth')).default;
       const result = await mammoth.extractRawText({ buffer });
       return result.value || '';
     } catch (err) {
@@ -61,8 +60,9 @@ export async function extractTextFromBuffer({ buffer, filename = '', contentType
 
   // Treat as PDF by default or fallback
   try {
-    const parser = new PDFParse({ data: buffer });
-    const parsed = await parser.getText();
+    // Use the lib path: the package root runs a debug block that reads a test file.
+    const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+    const parsed = await pdfParse(buffer);
     return parsed?.text || '';
   } catch (pdfErr) {
     // If text fallback
