@@ -30,12 +30,13 @@ test('seeker validates hidden tab entries, limits and date order before saving',
   for (const key of ['experience.0.title', 'experience.0.company', 'experience.0.endDate', 'education.0.degree', 'education.0.institution', 'education.0.startDate', 'skills.0']) assert.ok(errors[key], key);
 });
 
-test('resume validation rejects empty, oversize and disguised non-PDF before upload', () => {
+test('resume validation rejects empty, oversize and non-PDF/DOCX files before upload', () => {
   const profile = { full_name: 'Alice' };
   assert.ok(validateSeekerProfile(profile, { name: 'resume.pdf', size: 0, type: 'application/pdf' }).resume);
-  assert.ok(validateSeekerProfile(profile, { name: 'resume.pdf', size: 5 * 1024 * 1024 + 1, type: 'application/pdf' }).resume);
-  assert.ok(validateSeekerProfile(profile, { name: 'resume.pdf', size: 10, type: 'image/png' }).resume);
+  assert.ok(validateSeekerProfile(profile, { name: 'resume.pdf', size: 10 * 1024 * 1024 + 1, type: 'application/pdf' }).resume);
+  assert.ok(validateSeekerProfile(profile, { name: 'resume.png', size: 10, type: 'image/png' }).resume);
   assert.deepEqual(validateSeekerProfile(profile, { name: 'resume.pdf', size: 10, type: '' }), {});
+  assert.deepEqual(validateSeekerProfile(profile, { name: 'resume.docx', size: 10, type: '' }), {});
 });
 
 test('server JSON experience and education hydrate into safe editable arrays', () => {
