@@ -17,7 +17,8 @@ import routes from './routes.js';
 const app = express();
 
 app.disable('x-powered-by');
-app.set('trust proxy', env.TRUST_PROXY);
+// Trust Vercel's proxy (exactly one hop). Never `true`: it lets clients spoof X-Forwarded-For and bypass rate limits.
+app.set('trust proxy', process.env.VERCEL && env.TRUST_PROXY === false ? 1 : env.TRUST_PROXY);
 
 app.use(requestContext);
 
