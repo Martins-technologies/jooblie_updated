@@ -315,11 +315,15 @@ export default function App() {
 
 
       {/* =====================================================
-          OLD /dashboard URL REDIRECT
+          DASHBOARD & WORKSPACE URL REDIRECTS
       ====================================================== */}
       <Route
         path="dashboard"
         element={<Navigate to="/dashboard/job-seeker" replace />}
+      />
+      <Route
+        path="workspace"
+        element={<Navigate to="/dashboard" replace />}
       />
 
 

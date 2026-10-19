@@ -53,7 +53,8 @@ export default function JobDetailPage() {
       ========================================= */}
       <style>{`
         .detail-page-wrapper {
-          max-width: 1100px;
+          max-width: 1360px;
+          width: 100%;
           margin: 0 auto;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }

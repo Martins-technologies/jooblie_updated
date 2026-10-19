@@ -7,7 +7,7 @@
 .workspace :is(
   .workspace-panel,.workspace-metric,.workspace-job,.workspace-callout,
   .dashboard-panel,.dashboard-table-panel,.admin-collection,.jobs-summary-card,
-  .profile-container,.profile-section-card,.dash-job-card,.settings-card,
+  .profile-section-card,.dash-job-card,.settings-card,
   .company-profile-card,.skeleton-card,.skeleton-overview-panel
 ){
   background:var(--dashboard-surface)!important;
