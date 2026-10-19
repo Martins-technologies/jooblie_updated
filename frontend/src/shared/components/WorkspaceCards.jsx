@@ -13,5 +13,9 @@ export function JobPreviewCard({ job, index, saved, saving, onSave }) {
   const name = companyName(job);
   return <article className="workspace-job"><div className="workspace-job__top"><Monogram name={name} index={index} /><span className="workspace-job__company">{name}</span><button type="button" className="workspace-save" aria-label={`${saved ? 'Unsave' : 'Save'} ${job.title}`} aria-pressed={saved} disabled={saving} onClick={() => onSave(job.id)}>{saved ? <Check size={15} /> : <Bookmark size={15} />}</button></div><h3><Link to={`/jobs/${job.id}`}>{job.title}</Link></h3><div className="workspace-job__meta"><span><MapPin size={12} />{jobLocation(job)}</span><span><BriefcaseBusiness size={12} />{humanize(job.employment_type) || 'Job'}</span></div><div className="workspace-job__footer"><strong>{salaryLabel(job)}</strong><Link to={`/jobs/${job.id}`} className="workspace-text-link">View job<ArrowRight size={13} /></Link></div></article>;
 }
-export function StatusBadge({ status }) { return <span className={`workspace-status workspace-status--${status || 'unknown'}`}>{humanize(status || 'submitted')}</span>; }
+export function StatusBadge({ status }) {
+  const displayLabel = status === 'viewed' ? 'In Progress' : status === 'shortlisted' ? 'Shortlisted' : humanize(status || 'submitted');
+  return <span className={`workspace-status workspace-status--${status || 'unknown'}`}>{displayLabel}</span>;
+}
 export function WorkspaceEmpty({ children, to, action }) { return <div className="workspace-empty"><Search size={25} /><span>{children}</span>{to && <div style={{ marginTop: 12 }}><Link to={to} className="workspace-text-link">{action || 'Explore jobs'}<ChevronRight size={13} /></Link></div>}</div>; }
+

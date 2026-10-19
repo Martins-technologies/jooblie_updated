@@ -1,6 +1,7 @@
 import SkeletonContent from '../../shared/components/Skeleton';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Award, BriefcaseBusiness, CheckCircle2, FileText, Plus, Trash2, UploadCloud, UserRound, X, GraduationCap, Save, Edit2, Eye } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Award, BriefcaseBusiness, CheckCircle2, FileText, Plus, Trash2, UploadCloud, UserRound, X, GraduationCap, Save, Edit2, Eye, Sparkles, ArrowRight, Check, RefreshCw } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
 import { supabase } from '../../shared/lib/supabase';
@@ -11,25 +12,50 @@ import { getFieldErrors } from '../../shared/lib/errors';
 
 const EMPTY_PROFILE = { full_name: '', phone: '', headline: '', location_city: '', location_province: '', skills: [], default_resume_path: '', experience: [], education: [] };
 
-// Aaj ki date nikalnay ke liye (YYYY-MM-DD format)
+// Current date (YYYY-MM-DD format)
 const todayStr = new Date().toISOString().split('T')[0];
 
 export default function JobSeekerProfilePage() {
   const auth = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab');
   const [dashboardState, setDashboardState] = useState({ loading: true, error: '', success: '', profile: null });
   const [profileForm, setProfileForm] = useState(EMPTY_PROFILE);
   const [resumeFile, setResumeFile] = useState(null);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [parsingResume, setParsingResume] = useState(false);
   const [profileBaseline, setProfileBaseline] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const pending = useRef(false);
   const uploadedResume = useRef(null);
+  const autoParseInputRef = useRef(null);
   const formRef = useRef(null);
   const focusField = useRef('');
   const profileDirty = Boolean(profileBaseline) && (Boolean(resumeFile) || !samePayload(seekerProfilePayload(profileForm), profileBaseline));
   
-  // 🔥 NAYA FEATURE: Active Tab State
-  const [activeTab, setActiveTab] = useState('basic');
+  const [activeTab, setActiveTab] = useState(urlTab && ['basic', 'experience', 'education', 'skills', 'resume'].includes(urlTab) ? urlTab : 'basic');
+
+  // Profile Completeness Calculations (Weighted Strength Meter)
+  const checks = [
+    { id: 'full_name', tab: 'basic', label: 'Full name & Contact', prompt: '+15% Full Name & Contact Info', weight: 15, done: Boolean(profileForm.full_name?.trim() && profileForm.phone?.trim()) },
+    { id: 'headline', tab: 'basic', label: 'Professional headline', prompt: '+15% Professional Headline & Summary', weight: 15, done: Boolean(profileForm.headline?.trim()) },
+    { id: 'location_city', tab: 'basic', label: 'City location', prompt: '+10% City Location', weight: 10, done: Boolean(profileForm.location_city?.trim()) },
+    { id: 'experience', tab: 'experience', label: 'Work experience', prompt: '+15% Add Work Experience', weight: 15, done: Array.isArray(profileForm.experience) && profileForm.experience.length > 0 },
+    { id: 'education', tab: 'education', label: 'Education', prompt: '+15% Add Education', weight: 15, done: Array.isArray(profileForm.education) && profileForm.education.length > 0 },
+    { id: 'skills', tab: 'skills', label: 'Skills', prompt: '+10% Add at least 5 Skills', weight: 10, done: Array.isArray(profileForm.skills) && profileForm.skills.filter(s => Boolean(typeof s === 'string' && s.trim())).length >= 5 },
+    { id: 'resume', tab: 'resume', label: 'Resume document', prompt: '+20% Upload Resume', weight: 20, done: Boolean(resumeFile || profileForm.default_resume_path?.trim()) },
+  ];
+  const completenessPercent = Math.min(100, checks.filter(c => c.done).reduce((acc, c) => acc + c.weight, 0));
+
+  const isTabDone = (tabId) => {
+    if (tabId === 'basic') return Boolean(profileForm.full_name?.trim() && profileForm.phone?.trim() && profileForm.headline?.trim() && profileForm.location_city?.trim());
+    if (tabId === 'experience') return Array.isArray(profileForm.experience) && profileForm.experience.length > 0;
+    if (tabId === 'education') return Array.isArray(profileForm.education) && profileForm.education.length > 0;
+    if (tabId === 'skills') return Array.isArray(profileForm.skills) && profileForm.skills.filter(s => Boolean(typeof s === 'string' && s.trim())).length >= 5;
+    if (tabId === 'resume') return Boolean(resumeFile || profileForm.default_resume_path?.trim());
+    return false;
+  };
 
   const loadProfile = useCallback(async (signal) => {
     try {
@@ -67,6 +93,100 @@ export default function JobSeekerProfilePage() {
     if (!name) return;
     setFieldErrors((current) => { const next = { ...current }; delete next[name]; delete next[name.split('.')[0]]; return next; });
   };
+  const handleParseResume = async (file) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      showErrorToast(new Error('Resume must be 10 MB or smaller.'));
+      return;
+    }
+    if (!/\.(pdf|docx)$/i.test(file.name)) {
+      showErrorToast(new Error('Please select a valid PDF or DOCX file.'));
+      return;
+    }
+
+    setParsingResume(true);
+    try {
+      let body = {};
+      if (file) {
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Could not read the selected resume file.'));
+          reader.readAsDataURL(file);
+        });
+
+        const isDocx = file.name.toLowerCase().endsWith('.docx');
+        const contentType = file.type || (isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf');
+
+        body = {
+          base64,
+          filename: file.name,
+          contentType,
+        };
+      } else if (profileForm.default_resume_path) {
+        body = {
+          path: profileForm.default_resume_path,
+        };
+      } else {
+        return;
+      }
+
+      const result = await apiRequest('/job-seeker/parse-resume', {
+        method: 'POST',
+        auth: true,
+        body,
+      });
+
+      const parsed = result?.data || {};
+
+      setProfileForm((prev) => {
+        const next = { ...prev };
+        if (parsed.full_name) next.full_name = parsed.full_name;
+        if (parsed.phone) next.phone = parsed.phone;
+        if (parsed.headline) {
+          next.headline = parsed.headline;
+        } else if (!next.headline && parsed.summary) {
+          next.headline = parsed.summary.slice(0, 200);
+        }
+        if (parsed.location_city) next.location_city = parsed.location_city;
+        if (parsed.location_province) next.location_province = parsed.location_province;
+
+        if (Array.isArray(parsed.skills) && parsed.skills.length > 0) {
+          const combined = Array.from(new Set([...(prev.skills || []), ...parsed.skills]));
+          next.skills = combined.slice(0, 50);
+        }
+
+        if (Array.isArray(parsed.experience) && parsed.experience.length > 0) {
+          next.experience = parsed.experience.map((item) => ({
+            ...item,
+            isEditing: false,
+          }));
+        }
+
+        if (Array.isArray(parsed.education) && parsed.education.length > 0) {
+          next.education = parsed.education.map((item) => ({
+            ...item,
+            isEditing: false,
+          }));
+        }
+
+        return next;
+      });
+
+      if (file) {
+        setResumeFile(file);
+        uploadedResume.current = null;
+      }
+      setFieldErrors({});
+
+      showSuccessToast('Resume parsed successfully! Structured details pre-filled. Review across tabs and click Save.');
+    } catch (err) {
+      showErrorToast(err, 'Failed to extract resume details.');
+    } finally {
+      setParsingResume(false);
+    }
+  };
+
   const chooseResume = (event) => {
     const file = event.target.files?.[0] || null;
     event.target.value = '';
@@ -76,6 +196,7 @@ export default function JobSeekerProfilePage() {
     uploadedResume.current = null;
     setResumeFile(file);
     setFieldErrors((current) => ({ ...current, resume: undefined }));
+    handleParseResume(file);
   };
 
   // --- Handlers ---
@@ -119,14 +240,17 @@ export default function JobSeekerProfilePage() {
       let resumePath = uploadedResume.current?.file === resumeFile ? uploadedResume.current.path : submitted.default_resume_path;
       if (resumeFile && uploadedResume.current?.file !== resumeFile) {
         if (!supabase || !auth.user?.id) throw new Error('Resume upload is not available.');
-        if (resumeFile.size > 5 * 1024 * 1024) throw new Error('Resume must be 5 MB or smaller.');
-        if (resumeFile.type !== 'application/pdf' && !resumeFile.name.toLowerCase().endsWith('.pdf')) throw new Error('Only PDF resumes are accepted.');
+        if (resumeFile.size > 10 * 1024 * 1024) throw new Error('Resume must be 10 MB or smaller.');
+        const isDocx = resumeFile.name.toLowerCase().endsWith('.docx');
+        const isPdf = resumeFile.name.toLowerCase().endsWith('.pdf') || resumeFile.type === 'application/pdf';
+        if (!isPdf && !isDocx) throw new Error('Only PDF and DOCX resumes are accepted.');
+        const contentType = isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf';
         const safeName = resumeFile.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(-180);
         const path = `${auth.user.id}/${crypto.randomUUID()}-${safeName}`;
-        const { error: uploadError } = await supabase.storage.from('resumes').upload(path, resumeFile, { upsert: false, contentType: 'application/pdf', cacheControl: '3600' });
+        const { error: uploadError } = await supabase.storage.from('resumes').upload(path, resumeFile, { upsert: false, contentType, cacheControl: '3600' });
         if (uploadError) throw uploadError;
         try {
-          await apiRequest('/job-seeker/resumes', { method: 'POST', auth: true, body: { path, original_name: resumeFile.name, size_bytes: resumeFile.size, content_type: 'application/pdf' } });
+          await apiRequest('/job-seeker/resumes', { method: 'POST', auth: true, body: { path, original_name: resumeFile.name, size_bytes: resumeFile.size, content_type: contentType } });
         } catch (registrationError) {
           try { await supabase.storage.from('resumes').remove([path]); } catch { /* preserve the registration error */ }
           throw registrationError;
@@ -142,10 +266,26 @@ export default function JobSeekerProfilePage() {
       const saved = seekerProfilePayload(result?.profile || submitted);
       setProfileBaseline(saved);
       setProfileForm(seekerProfileForm(saved));
-      showSuccessToast('Profile updated successfully.');
       setResumeFile(null);
       uploadedResume.current = null;
       auth.updateCachedProfile?.(result.profile);
+
+      // Same completion rules for manual entry and resume auto-fill: all sections must be filled.
+      const isComplete = Boolean(
+        saved.full_name?.trim() && saved.phone?.trim() &&
+        saved.headline?.trim() &&
+        saved.location_city?.trim() &&
+        saved.experience?.length > 0 &&
+        saved.education?.length > 0 &&
+        saved.skills?.filter(Boolean).length >= 5 &&
+        (saved.default_resume_path || '').trim()
+      );
+      if (isComplete) {
+        showSuccessToast('Your profile is 100% complete! Redirecting to browse jobs...');
+        setTimeout(() => navigate('/dashboard/job-seeker/jobs'), 700);
+      } else {
+        showSuccessToast('Profile updated. Complete the remaining sections to reach 100% and start applying.');
+      }
     } catch (error) {
       const fields = getFieldErrors(error);
       if (Object.keys(fields).length) { showFieldErrors(fields); return; }
@@ -170,22 +310,99 @@ export default function JobSeekerProfilePage() {
 
       <div className="profile-container">
         
+        {/* Profile Completion Tracker (Shown only when profile is not yet 100%) */}
+        {completenessPercent < 100 && (
+          <div className="profile-completion-tracker fade-in">
+            <div className="tracker-header">
+              <div>
+                <span className="tracker-badge">Profile Completion Strength Meter</span>
+                <h4>Complete your profile to 100% to apply for jobs ({completenessPercent}%)</h4>
+              </div>
+              <div className="tracker-percentage-pill">{completenessPercent}%</div>
+            </div>
+            <div className="tracker-bar-bg">
+              <div className="tracker-bar-fill" style={{ width: `${completenessPercent}%` }} />
+            </div>
+            <div className="tracker-missing-box">
+              <span className="tracker-missing-label">Still required for 100%:</span>
+              <div className="tracker-tags-list">
+                {checks.filter(c => !c.done).map(c => (
+                  <button key={c.id} type="button" className="tracker-tag-btn" onClick={() => setActiveTab(c.tab)} title={`Go to ${c.tab} tab`}>
+                    {c.prompt || `+ ${c.label}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 Resume-Driven Auto-Profile Banner */}
+        <div className="resume-autofill-banner fade-in">
+          <div className="autofill-content">
+            <div className="autofill-icon-wrap">
+              <Sparkles size={24} color="#2563eb" />
+            </div>
+            <div>
+              <h4 className="autofill-title">Resume-Driven Auto-Profile Completion</h4>
+              <p className="autofill-desc">
+                Upload your resume (.pdf or .docx). Our smart parser extracts your Full Name, Contact info, Headline, Summary, Work History, Education, and Skills so you can review and confirm before saving.
+              </p>
+            </div>
+          </div>
+          <div className="autofill-action">
+            <input
+              ref={autoParseInputRef}
+              type="file"
+              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              style={{ display: 'none' }}
+              onChange={chooseResume}
+            />
+            <button
+              type="button"
+              className="btn-autofill"
+              onClick={() => autoParseInputRef.current?.click()}
+              disabled={parsingResume || savingProfile}
+            >
+              {parsingResume ? (
+                <>
+                  <RefreshCw size={18} className="spin-icon" /> Parsing Resume...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={18} /> Upload Resume & Auto-Fill
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
         {/* 🔥 THE PREMIUM TABS HEADER */}
         <div className="profile-tabs-header">
-          {TABS.map(tab => (
-            <button 
-              key={tab.id} 
-              type="button" 
-              className={`profile-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <tab.icon size={18} className="tab-icon" />
-              <span>{tab.label}</span>
-            </button>
-          ))}
+          {TABS.map(tab => {
+            const done = isTabDone(tab.id);
+            return (
+              <button 
+                key={tab.id} 
+                type="button" 
+                className={`profile-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <tab.icon size={18} className="tab-icon" />
+                <span>{tab.label}</span>
+                {done ? (
+                  <span className="tab-status-check" title="Section complete">
+                    <Check size={12} strokeWidth={3} />
+                  </span>
+                ) : (
+                  <span className="tab-status-dot" title="Incomplete requirement" />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <form ref={formRef} onSubmit={saveProfile} onChangeCapture={clearFieldError} className="profile-tab-content-area">
+
           <fieldset disabled={savingProfile || !profileBaseline} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           
           {/* 1. BASIC INFO TAB */}
@@ -379,9 +596,9 @@ export default function JobSeekerProfilePage() {
                     <div className="resume-upload-box" style={{ padding: '30px 20px' }}>
                       <label className="resume-upload-label">
                         <UploadCloud size={36} className="icon" style={{marginBottom: '8px'}} />
-                        <span style={{fontWeight: '600', color: '#111827', fontSize: '1rem'}}>Click to Upload Resume</span>
-                        <span style={{fontSize: '0.85rem'}}>PDF up to 5MB</span>
-                        <input name="resume" type="file" accept="application/pdf,.pdf" onChange={chooseResume} />
+                        <span style={{fontWeight: '600', color: '#111827', fontSize: '1rem'}}>Click to Upload Resume & Auto-Fill</span>
+                        <span style={{fontSize: '0.85rem'}}>PDF or DOCX up to 10MB</span>
+                        <input name="resume" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={chooseResume} />
                       </label>
                     </div>
                   ) : (
@@ -389,8 +606,8 @@ export default function JobSeekerProfilePage() {
                       <div className="file-info">
                         <div style={{background: '#fee2e2', padding: '10px', borderRadius: '8px'}}><FileText size={20} color="#e11d48" /></div>
                         <div className="file-details">
-                          <span className="file-name" style={{fontSize: '1rem', maxWidth: '250px'}} title={resumeFile ? resumeFile.name : 'Existing Resume.pdf'}>
-                            {resumeFile ? resumeFile.name : 'Existing_Resume.pdf'}
+                          <span className="file-name" style={{fontSize: '1rem', maxWidth: '250px'}} title={resumeFile ? resumeFile.name : (profileForm.default_resume_path?.split('/').pop() || 'Existing Resume')}>
+                            {resumeFile ? resumeFile.name : (profileForm.default_resume_path?.split('/').pop() || 'Existing_Resume.pdf')}
                           </span>
                           <span className="file-size" style={{fontSize: '0.85rem'}}>
                             {resumeFile ? `${(resumeFile.size / 1024 / 1024).toFixed(2)} MB` : 'Securely stored on Jooblie'}
@@ -398,13 +615,31 @@ export default function JobSeekerProfilePage() {
                         </div>
                       </div>
                       
-                      <div className="file-actions">
+                      <div className="file-actions" style={{ flexWrap: 'wrap', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => handleParseResume(resumeFile || null)}
+                          disabled={parsingResume}
+                          style={{ padding: '6px 12px', fontSize: '0.85rem', color: '#2563eb', borderColor: '#bfdbfe', background: '#eff6ff' }}
+                          title="Extract structured data to fill your profile"
+                        >
+                          {parsingResume ? (
+                            <>
+                              <RefreshCw size={14} className="spin-icon" /> Parsing...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={14} /> Parse & Pre-fill
+                            </>
+                          )}
+                        </button>
                         <button type="button" className="btn-secondary" onClick={handleViewResume} style={{padding: '6px 12px', fontSize: '0.85rem'}}>
                           <Eye size={16} /> View
                         </button>
                         <label className="btn-icon-small" title="Replace Resume" style={{ width: '34px', height: '34px' }}>
                           <UploadCloud size={16} />
-                          <input name="resume" type="file" accept="application/pdf,.pdf" style={{display: 'none'}} onChange={chooseResume} />
+                          <input name="resume" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{display: 'none'}} onChange={chooseResume} />
                         </label>
                         {resumeFile && (
                           <button type="button" className="btn-icon-small" onClick={() => { setResumeFile(null); uploadedResume.current = null; }} title="Cancel upload" style={{ width: '34px', height: '34px', color: '#e11d48', borderColor: '#fecaca' }}>
@@ -436,16 +671,87 @@ export default function JobSeekerProfilePage() {
 
 /* --- REUSABLE COMPONENTS & CSS --- */
 const premiumCSS = `
+  /* AUTOFILL BANNER */
+  .resume-autofill-banner {
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+    border: 1.5px solid #bfdbfe;
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+  }
+  .autofill-content { display: flex; align-items: flex-start; gap: 16px; }
+  .autofill-icon-wrap { background: #dbeafe; border-radius: 10px; padding: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .autofill-title { margin: 0 0 4px 0; font-size: 1.05rem; font-weight: 700; color: #1e3a8a; }
+  .autofill-desc { margin: 0; font-size: 0.88rem; color: #334155; line-height: 1.45; }
+  .autofill-action { flex-shrink: 0; }
+  .btn-autofill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #2563eb;
+    color: #ffffff !important;
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-autofill:hover { background: #1d4ed8; transform: translateY(-1px); }
+  .btn-autofill:disabled { opacity: 0.7; cursor: not-allowed; }
+  .spin-icon { animation: spin 1s linear infinite; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+  @media (max-width: 768px) {
+    .resume-autofill-banner { flex-direction: column; align-items: flex-start; }
+    .autofill-action { width: 100%; }
+    .btn-autofill { width: 100%; justify-content: center; }
+  }
+
   /* TABS HEADER DESIGN */
   .profile-container { max-width: 900px; margin: 0 auto; padding-bottom: 40px; }
   .profile-tabs-header { display: flex; gap: 8px; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 2px solid #f3f4f6; overflow-x: auto; scrollbar-width: none; }
   .profile-tabs-header::-webkit-scrollbar { display: none; }
-  .profile-tab-btn { display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: transparent; border: none; color: #6b7280; font-weight: 600; font-size: 0.95rem; cursor: pointer; border-radius: 8px; transition: all 0.2s; white-space: nowrap; outline: none; }
+  .profile-tab-btn { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px 18px; background: transparent; border: none; color: #6b7280; font-weight: 600; font-size: 0.95rem; cursor: pointer; border-radius: 8px; transition: all 0.2s; white-space: nowrap; outline: none; }
   .profile-tab-btn:hover { background: #f9fafb; color: #374151; }
   .profile-tab-btn.active { background: #eff6ff; color: #2557a7; box-shadow: inset 0 -3px 0 0 #2557a7; border-radius: 8px 8px 0 0; }
   .tab-icon { opacity: 0.7; }
   .profile-tab-btn.active .tab-icon { opacity: 1; }
-  
+  .tab-status-check { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #dcfce7; color: #16a34a; margin-left: 2px; }
+  .tab-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #cbd5e1; margin-left: 2px; }
+
+  /* 100% SUCCESS BANNER */
+  .profile-100-success-banner { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; border-radius: 14px; padding: 22px 24px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; box-shadow: 0 4px 14px rgba(34, 197, 94, 0.12); }
+  .profile-100-success-banner__content { display: flex; align-items: center; gap: 16px; }
+  .profile-100-success-banner__icon { font-size: 2.2rem; line-height: 1; }
+  .profile-100-badge { display: inline-flex; align-items: center; font-size: 0.75rem; font-weight: 700; color: #15803d; background: #dcfce7; padding: 2px 8px; border-radius: 12px; border: 1px solid #bbf7d0; text-transform: uppercase; letter-spacing: 0.05em; }
+  .profile-100-success-banner h3 { margin: 0 0 4px 0; font-size: 1.15rem; color: #14532d; font-weight: 700; }
+  .profile-100-success-banner p { margin: 0; font-size: 0.9rem; color: #166534; }
+  .btn-success-apply { display: inline-flex; align-items: center; gap: 8px; background: #16a34a; color: #ffffff !important; font-weight: 600; font-size: 0.95rem; padding: 12px 20px; border-radius: 8px; text-decoration: none; white-space: nowrap; transition: all 0.2s; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25); flex-shrink: 0; }
+  .btn-success-apply:hover { background: #15803d; transform: translateY(-1px); }
+
+  /* COMPLETION TRACKER */
+  .profile-completion-tracker { background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+  .tracker-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .tracker-badge { display: inline-block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #2563eb; background: #eff6ff; padding: 2px 8px; border-radius: 6px; margin-bottom: 4px; }
+  .tracker-header h4 { margin: 0; font-size: 1.05rem; font-weight: 700; color: #0f172a; }
+  .tracker-percentage-pill { font-size: 1.1rem; font-weight: 800; color: #2563eb; background: #eff6ff; padding: 4px 12px; border-radius: 20px; border: 1px solid #bfdbfe; }
+  .tracker-bar-bg { width: 100%; height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
+  .tracker-bar-fill { height: 100%; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); border-radius: 999px; transition: width 0.4s ease; }
+  .tracker-missing-box { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tracker-missing-label { font-size: 0.85rem; font-weight: 600; color: #64748b; }
+  .tracker-tags-list { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tracker-tag-btn { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; font-weight: 600; color: #334155; cursor: pointer; transition: all 0.2s; }
+  .tracker-tag-btn:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+
+
   /* ANIMATION FOR TAB SWITCHING */
   .fade-in { animation: fadeIn 0.3s ease-in-out; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

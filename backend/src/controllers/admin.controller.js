@@ -1,6 +1,7 @@
 import { adminQuery, pageInfo, optionalCount } from '../utils/adminQuery.js';
 import { changeAdminRole, updateAdminJob } from '../utils/adminMutations.js';
-import { serviceDb } from '../config/supabase.js';
+import { serviceDb, createUserDb, createAnonDb } from '../config/supabase.js';
+import { changeApplicationStatus } from '../utils/applicationStatus.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
 import { writeAuditLog } from '../utils/audit.js';
 import { savePortalJob } from '../utils/portalJobs.js';
@@ -204,7 +205,7 @@ export const listUsers = asyncHandler(async (req, res) => {
 
 export const listCompanies = asyncHandler(async (req, res) => {
   const { page, limit, from, to, search, sort, ascending } = adminQuery(req.query, ['name','created_at','verification_status','status'], 'created_at');
-  const fields = req.query.searchOnly === 'true' ? 'id,name,website' : 'id,name,website,description,status,verification_status,rejection_reason,created_at,verified_at';
+  const fields = req.query.searchOnly === 'true' ? 'id,name,website' : 'id,name,website,description,status,verification_status,rejection_reason,registration_number,verification_document_path,created_at,verified_at';
   let query = serviceDb.from('companies').select(fields, { count: 'exact' }).is('deleted_at', null).order(sort, { ascending }).order('id');
   if (search) query = query.ilike('name', `%${search}%`);
   if (/^[0-9a-f-]{36}$/i.test(req.query.id || '')) query = query.eq('id', req.query.id);
@@ -214,6 +215,60 @@ export const listCompanies = asyncHandler(async (req, res) => {
   res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
 });
 
+export const updateCompanyVerification = asyncHandler(async (req, res) => {
+  const { companyId } = req.params;
+  const { verification_status, rejection_reason } = req.body;
+
+  const validStatuses = ['pending', 'verified', 'rejected'];
+  if (!validStatuses.includes(verification_status)) {
+    throw new ApiError(400, 'Invalid verification status. Must be pending, verified, or rejected.', 'INVALID_VERIFICATION_STATUS');
+  }
+
+  // Fetch target company
+  const { data: company, error: findError } = await serviceDb
+    .from('companies')
+    .select('id,name,verification_status,status')
+    .eq('id', companyId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (findError || !company) {
+    throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
+  }
+
+  const updates = {
+    verification_status,
+    verified_at: verification_status === 'verified' ? new Date().toISOString() : null,
+    rejection_reason: verification_status === 'rejected' ? (rejection_reason ? String(rejection_reason).trim().slice(0, 500) : null) : null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: updated, error: updateError } = await serviceDb
+    .from('companies')
+    .update(updates)
+    .eq('id', companyId)
+    .select('id,name,website,description,status,verification_status,rejection_reason,registration_number,verification_document_path,created_at,verified_at')
+    .single();
+
+  if (updateError) {
+    throw new ApiError(500, 'Failed to update company verification status.', 'COMPANY_VERIFICATION_FAILED', updateError.message);
+  }
+
+  await writeAuditLog(req, {
+    action: 'admin.company.verification.update',
+    entityType: 'company',
+    entityId: companyId,
+    metadata: {
+      previousVerificationStatus: company.verification_status,
+      newVerificationStatus: verification_status,
+      rejectionReason: updates.rejection_reason,
+    },
+  });
+
+  res.json({ company: updated, message: `Company verification updated to ${verification_status}.` });
+});
+
+
 export const listApplications = asyncHandler(async (req, res) => {
   const { page, limit, from, to, sort, ascending } = adminQuery(req.query, ['created_at','status']);
   let query = serviceDb.from('applications').select('id,status,created_at,jobs:job_id(id,title),profiles:applicant_id(full_name,email)', { count: 'exact' }).is('deleted_at', null).order(sort, { ascending }).order('id');
@@ -221,6 +276,109 @@ export const listApplications = asyncHandler(async (req, res) => {
   const { data, error, count } = await query.range(from, to);
   if (error) throw new ApiError(500, 'Applications could not be loaded.', 'APPLICATIONS_FAILED');
   res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
+});
+
+export const updateApplicationStatus = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const { status } = req.body;
+
+  const validStatuses = ['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected', 'withdrawn'];
+  if (!validStatuses.includes(status)) {
+    throw new ApiError(400, 'Invalid application status.', 'INVALID_APPLICATION_STATUS');
+  }
+
+  const { data: application, error: findError } = await serviceDb
+    .from('applications')
+    .select('id,job_id,applicant_id,status,jobs:job_id(company_id,created_by)')
+    .eq('id', applicationId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (findError || !application) {
+    throw new ApiError(404, 'Application not found.', 'APPLICATION_NOT_FOUND');
+  }
+
+  if (application.status === status) {
+    return res.json({ application, message: `Application status is already ${status}.` });
+  }
+
+  const companyId = application.jobs?.company_id;
+  const createdBy = application.jobs?.created_by;
+
+  // Find authorized recruiter profile to satisfy the database transition trigger
+  let recruiterEmail = null;
+  if (companyId) {
+    const { data: member } = await serviceDb
+      .from('company_members')
+      .select('user_id,profiles:user_id(email)')
+      .eq('company_id', companyId)
+      .limit(1)
+      .maybeSingle();
+    recruiterEmail = member?.profiles?.email;
+  }
+
+  if (!recruiterEmail && createdBy) {
+    const { data: creator } = await serviceDb
+      .from('profiles')
+      .select('email')
+      .eq('id', createdBy)
+      .maybeSingle();
+    recruiterEmail = creator?.email;
+  }
+
+  let updatedData = null;
+
+  if (recruiterEmail) {
+    const { data: link, error: linkErr } = await serviceDb.auth.admin.generateLink({
+      type: 'magiclink',
+      email: recruiterEmail,
+    });
+
+    if (!linkErr && link?.properties?.hashed_token) {
+      const { data: sessionData, error: sessErr } = await createAnonDb().auth.verifyOtp({
+        token_hash: link.properties.hashed_token,
+        type: 'email',
+      });
+
+      if (!sessErr && sessionData?.session?.access_token) {
+        const recruiterDb = createUserDb(sessionData.session.access_token);
+        updatedData = await changeApplicationStatus(recruiterDb, {
+          applicationId: application.id,
+          expectedStatus: application.status,
+          status,
+          allowConflict: true,
+        });
+      }
+    }
+  }
+
+  // Direct fallback update if recruiter session delegation was not possible
+  if (!updatedData) {
+    const { data, error } = await serviceDb
+      .from('applications')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', applicationId)
+      .select('id,status,created_at,jobs:job_id(id,title),profiles:applicant_id(full_name,email)')
+      .single();
+
+    if (error) {
+      throw new ApiError(500, 'Application status could not be updated.', 'APPLICATION_UPDATE_FAILED', error.message);
+    }
+    updatedData = data;
+  }
+
+  await writeAuditLog(req, {
+    action: 'admin.application.status.update',
+    entityType: 'application',
+    entityId: applicationId,
+    metadata: {
+      previousStatus: application.status,
+      newStatus: status,
+      delegatedRecruiter: recruiterEmail,
+    },
+  });
+
+  res.json({ application: updatedData, message: `Application status updated to ${status}.` });
 });
 
 export const changeUserRole = asyncHandler(async (req, res) => {

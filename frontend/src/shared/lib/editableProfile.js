@@ -81,9 +81,9 @@ export function validateSeekerProfile(value, resumeFile, today = new Date().toIS
     });
   }
   if (resumeFile) {
-    if (!resumeFile.size) errors.resume = 'Choose a PDF that is not empty.';
-    else if (resumeFile.size > 5 * 1024 * 1024) errors.resume = 'Choose a PDF of 5 MB or smaller.';
-    else if ((resumeFile.type && resumeFile.type !== 'application/pdf') || !/\.pdf$/i.test(resumeFile.name)) errors.resume = 'Choose a PDF file.';
+    if (!resumeFile.size) errors.resume = 'Choose a resume file that is not empty.';
+    else if (resumeFile.size > 10 * 1024 * 1024) errors.resume = 'Choose a resume file of 10 MB or smaller.';
+    else if (!/\.(pdf|docx)$/i.test(resumeFile.name)) errors.resume = 'Choose a PDF or DOCX file.';
     else if (resumeFile.name.length > 255) errors.resume = 'Use a file name of 255 characters or fewer.';
   }
   return errors;
