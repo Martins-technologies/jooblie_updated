@@ -141,7 +141,7 @@ export default function JobSeekerProfilePage() {
 
       setProfileForm((prev) => {
         const next = { ...prev };
-        if (parsed.full_name) next.full_name = parsed.full_name;
+        if (parsed.full_name && !prev.full_name?.trim()) next.full_name = parsed.full_name;
         if (parsed.phone) next.phone = parsed.phone;
         if (parsed.headline) {
           next.headline = parsed.headline;
