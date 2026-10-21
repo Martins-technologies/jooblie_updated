@@ -711,7 +711,7 @@ export default function JobSeekerProfilePage() {
                       error={fieldErrors.phone}
                       maxLength={50}
                       label="Phone Number *"
-                      placeholder="e.g. +1 (403) 555-0123"
+                      placeholder="e.g. +1(403) 000-0000"
                       value={profileForm.phone}
                       onChange={(val) => setProfileForm(c => ({ ...c, phone: val }))}
                     />

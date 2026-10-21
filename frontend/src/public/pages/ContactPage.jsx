@@ -79,9 +79,9 @@ export default function ContactPage() {
               </a>
             )}
 
-            <a className="contact-method" href="tel:+923056619799">
+            <a className="contact-method" href="tel:+14030000000">
               <Phone size={19} />
-              <span>+923056619799</span>
+              <span>+1(403) 000-0000</span>
             </a>
 
             <div className="contact-topic-links"><Link to="/resources">Application & profile guidance →</Link><Link to="/companies">Explore employer information →</Link><Link to="/account/help">Account help →</Link></div>

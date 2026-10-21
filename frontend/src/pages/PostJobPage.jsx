@@ -148,7 +148,7 @@ export default function PostJobPage() {
               </span>
               <input 
                 type="text" name="city" value={form.city} onChange={handleChange} 
-                placeholder={form.workplace_type === 'remote' ? "N/A (Remote)" : "e.g. Lahore"} 
+                placeholder={form.workplace_type === 'remote' ? "N/A (Remote)" : "e.g. Calgary"}
                 disabled={form.workplace_type === 'remote'}
                 style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db', opacity: form.workplace_type === 'remote' ? 0.5 : 1 }}
               />
@@ -160,7 +160,7 @@ export default function PostJobPage() {
               </span>
               <input 
                 type="text" name="province" value={form.province} onChange={handleChange} 
-                placeholder={form.workplace_type === 'remote' ? "N/A (Remote)" : "e.g. Punjab"} 
+                placeholder={form.workplace_type === 'remote' ? "N/A (Remote)" : "e.g. Alberta"}
                 disabled={form.workplace_type === 'remote'}
                 style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #d1d5db', opacity: form.workplace_type === 'remote' ? 0.5 : 1 }}
               />

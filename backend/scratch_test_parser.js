@@ -1,7 +1,7 @@
 const sampleResumeText = `
 Johnathan Doe
 Senior Full Stack Developer
-johnathan.doe@example.com | +1 (555) 234-5678 | Toronto, ON
+johnathan.doe@example.com | +1(403) 000-0000 | Toronto, ON
 linkedin.com/in/johndoe | github.com/johndoe
 
 PROFESSIONAL SUMMARY

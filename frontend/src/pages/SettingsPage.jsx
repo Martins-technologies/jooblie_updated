@@ -97,7 +97,7 @@ export default function SettingsPage() {
                 </label>
                 <label style={labelStyle}>
                   Phone Number
-                  <input type="tel" value={accountForm.phone} onChange={(e) => setAccountForm({ ...accountForm, phone: e.target.value })} style={inputStyle} placeholder="+92 300 1234567" />
+                  <input type="tel" value={accountForm.phone} onChange={(e) => setAccountForm({ ...accountForm, phone: e.target.value })} style={inputStyle} placeholder="+1(403) 000-0000" />
                 </label>
               </div>
 

@@ -47,7 +47,7 @@ const groups = [
 
 export default function Footer() {
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL || 'support@jooblie.com').trim();
-  const supportPhone = '+92 305 6619799';
+  const supportPhone = '+1(403) 000-0000';
 
   return (
     <footer className="footer" role="contentinfo">
@@ -78,7 +78,7 @@ export default function Footer() {
           </p>
 
           <div className="footer__contact-info">
-            <a href="tel:+923056619799" className="footer__contact-item">
+            <a href="tel:+14030000000" className="footer__contact-item">
               <Phone size={14} aria-hidden="true" />
               <span>{supportPhone}</span>
             </a>

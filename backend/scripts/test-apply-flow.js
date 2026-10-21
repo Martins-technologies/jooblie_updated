@@ -72,7 +72,7 @@ async function main() {
     .from('profiles')
     .update({
       full_name: 'Alex Morgan',
-      phone: '+1 (416) 555-0199',
+      phone: '+1(403) 000-0000',
       headline: 'Senior Full-Stack Software Engineer',
       location_city: 'Toronto',
       location_province: 'ON',

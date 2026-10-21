@@ -89,7 +89,7 @@ async function main() {
       role: 'job_seeker',
       status: 'active',
       full_name: 'Jordan Lee',
-      phone: '+1 (416) 555-8921',
+      phone: '+1(403) 000-0000',
       headline: 'Senior Full-Stack Software Engineer (React, Node.js, TypeScript)',
       location_city: 'Toronto',
       location_province: 'ON',

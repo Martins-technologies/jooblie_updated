@@ -216,7 +216,7 @@ export default function SettingsPage() {
                 </label>
                 <label style={labelStyle}>
                   Phone Number
-                  <input name="phone" type="tel" value={accountForm.phone} onChange={(e) => updateAccount('phone', e.target.value)} style={inputStyle} maxLength={50} disabled={loading || !accountBaseline} aria-invalid={Boolean(accountErrors.phone)} aria-describedby={accountErrors.phone ? 'account-phone-error' : undefined} placeholder="+1 (403) 555-0123" />
+                  <input name="phone" type="tel" value={accountForm.phone} onChange={(e) => updateAccount('phone', e.target.value)} style={inputStyle} maxLength={50} disabled={loading || !accountBaseline} aria-invalid={Boolean(accountErrors.phone)} aria-describedby={accountErrors.phone ? 'account-phone-error' : undefined} placeholder="+1(403) 000-0000" />
                   {accountErrors.phone && <span className="field-error" id="account-phone-error">{accountErrors.phone}</span>}
                 </label>
               </div>
