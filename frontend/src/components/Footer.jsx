@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Linkedin, Facebook, Instagram, Mail } from 'lucide-react';
+import { Facebook, Instagram, Mail } from 'lucide-react';
 import Logo from './Logo';
 import Reveal from './Reveal';
 
@@ -52,9 +52,12 @@ export default function Footer() {
           <Logo />
           <p>Jooblie connects job seekers and employers across specialist hiring categories through one central platform.</p>
           <div className="footer__socials" aria-label="Social links">
-            <span aria-hidden="true"><Facebook size={17} /></span>
-            <span aria-hidden="true"><Linkedin size={17} /></span>
-            <span aria-hidden="true"><Instagram size={17} /></span>
+            <a href="https://www.facebook.com/profile.php?id=61595095425308" target="_blank" rel="noopener noreferrer" aria-label="Jooblie on Facebook">
+              <Facebook size={17} />
+            </a>
+            <a href="https://www.instagram.com/joob_lie/" target="_blank" rel="noopener noreferrer" aria-label="Jooblie on Instagram">
+              <Instagram size={17} />
+            </a>
             {supportEmail && <a href={`mailto:${supportEmail}`} aria-label="Email Jooblie"><Mail size={17} /></a>}
           </div>
         </div>

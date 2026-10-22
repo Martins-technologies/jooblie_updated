@@ -47,7 +47,7 @@ const groups = [
 
 export default function Footer() {
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL || 'support@jooblie.com').trim();
-  const supportPhone = '+1(403) 000-0000';
+  const supportPhone = '+1 833-962-1150';
 
   return (
     <footer className="footer" role="contentinfo">
@@ -78,7 +78,7 @@ export default function Footer() {
           </p>
 
           <div className="footer__contact-info">
-            <a href="tel:+14030000000" className="footer__contact-item">
+            <a href="tel:+18339621150" className="footer__contact-item">
               <Phone size={14} aria-hidden="true" />
               <span>{supportPhone}</span>
             </a>
@@ -91,17 +91,17 @@ export default function Footer() {
           </div>
 
           <div className="footer__socials" aria-label="Social media links">
-            <a href="https://www.facebook.com/jooblie" target="_blank" rel="noopener noreferrer" aria-label={`${SITE_NAME} on Facebook`}>
+            <a href="https://www.facebook.com/profile.php?id=61595095425308" target="_blank" rel="noopener noreferrer" aria-label={`${SITE_NAME} on Facebook`}>
               <Facebook size={16} />
             </a>
-            <a href="https://www.instagram.com/joobliejooblie/" target="_blank" rel="noopener noreferrer" aria-label={`${SITE_NAME} on Instagram`}>
+            <a href="https://www.instagram.com/joob_lie/" target="_blank" rel="noopener noreferrer" aria-label={`${SITE_NAME} on Instagram`}>
               <Instagram size={16} />
             </a>
-            <a href="https://x.com/Jooblie01" target="_blank" rel="noopener noreferrer" aria-label={`${SITE_NAME} on X`}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.64 7.584H.47l8.6-9.835L0 1.154h7.594l5.243 6.932 6.064-6.933ZM17.61 20.644h2.039L6.486 3.24H4.298L17.61 20.644Z" />
-              </svg>
-            </a>
+            {supportEmail && (
+              <a href={`mailto:${supportEmail}`} aria-label={`Email ${SITE_NAME} Support`}>
+                <Mail size={16} />
+              </a>
+            )}
           </div>
         </div>
 

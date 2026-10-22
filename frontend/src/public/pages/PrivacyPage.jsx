@@ -184,9 +184,9 @@ export default function PrivacyPage() {
                 <Mail size={13} aria-hidden="true" />
                 <span>privacy@jooblie.com</span>
               </a>
-              <a href="tel:+14030000000" className="terms-toc__support-item">
+              <a href="tel:+18339621150" className="terms-toc__support-item">
                 <Phone size={13} aria-hidden="true" />
-                <span>+1(403) 000-0000</span>
+                <span>+1 833-962-1150</span>
               </a>
               <Link to="/contact" className="terms-toc__support-btn">
                 <span>Privacy Request Form</span>
@@ -819,7 +819,7 @@ export default function PrivacyPage() {
                 </div>
                 <div className="terms-contact-card__item">
                   <strong>Telephone Assistance</strong>
-                  <a href="tel:+14030000000">+1(403) 000-0000</a>
+                  <a href="tel:+18339621150">+1 833-962-1150</a>
                 </div>
                 <div className="terms-contact-card__item">
                   <strong>ICO Reference</strong>
