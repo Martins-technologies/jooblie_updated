@@ -33,7 +33,7 @@ import { z } from 'zod';
 import { serviceDb, publicDb } from './config/supabase.js';
 
 const router = Router();
-router.post('/public/contact',rateLimit({windowMs:900000,max:5,standardHeaders:true,legacyHeaders:false}),validate(contactSchema),asyncHandler(async(req,res)=>{await deliverContact(req.body,{key:process.env.RESEND_API_KEY,from:process.env.CONTACT_FROM_EMAIL,to:process.env.CONTACT_TO_EMAIL});res.status(202).json({accepted:true});}));
+router.post('/public/contact',rateLimit({windowMs:900000,max:5,standardHeaders:true,legacyHeaders:false}),validate(contactSchema),asyncHandler(async(req,res)=>{await deliverContact(req.body,{key:process.env.RESEND_API_KEY,from:process.env.CONTACT_FROM_EMAIL,to:process.env.CONTACT_TO_EMAIL||'Info@jooblie.com'});res.status(202).json({accepted:true});}));
 const notifications = createNotificationHandlers(serviceDb);
 router.get('/notifications', requireAuth, notifications.list);
 router.patch('/notifications/read-all', requireAuth, writeLimiter, validate(z.object({ before: z.string().datetime() }).strict()), notifications.readAll);

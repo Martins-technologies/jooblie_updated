@@ -13,8 +13,8 @@ export default function ContactPage() {
   const [status, setStatus] = useState('');
   const pending = useRef(false);
   const form = useRef(null);
-  const email = import.meta.env.VITE_SUPPORT_EMAIL?.trim();
-  const validEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const email = (import.meta.env.VITE_SUPPORT_EMAIL || 'Info@jooblie.com').trim();
+  const validEmail = Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
 
   async function submit(event) {
     event.preventDefault();
@@ -45,10 +45,15 @@ export default function ContactPage() {
         notifyError: false,
       });
       if (!result.accepted) throw new Error('Message was not accepted. Please try again.');
-      setStatus('Your message was accepted for delivery. Thank you for contacting Jooblie.');
+      setStatus(`Your message was accepted for delivery to ${email}. Thank you for contacting Jooblie.`);
       form.current.reset();
-    } catch (error) {
-      setErrors({ submit: error.message });
+    } catch {
+      // Direct redirect to Info@jooblie.com via email client
+      const subject = encodeURIComponent(data.subject);
+      const body = encodeURIComponent(`From: ${data.name} <${data.email}>\n\n${data.message}`);
+      const mailtoUrl = `mailto:${email}?subject=${subject}&body=${body}`;
+      setStatus(`Redirecting to email (${email}). If your email client does not open, please use the email link below.`);
+      window.location.href = mailtoUrl;
     } finally {
       pending.current = false;
       setBusy(false);
@@ -169,9 +174,14 @@ export default function ContactPage() {
             )}
 
             {status && (
-              <p role="status" style={{ color: '#059669', fontWeight: 600, margin: 0 }}>
-                {status}
-              </p>
+              <div role="status" style={{ color: '#059669', fontWeight: 600, margin: '6px 0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <p style={{ margin: 0 }}>{status}</p>
+                {status.includes('Redirecting') && (
+                  <a href={`mailto:${email}`} style={{ fontSize: '13px', color: '#0769fd', textDecoration: 'underline' }}>
+                    Click here to send email directly to {email}
+                  </a>
+                )}
+              </div>
             )}
 
             <button type="submit" className="button button--primary" disabled={busy} style={{ justifySelf: 'start', minWidth: '160px' }}>

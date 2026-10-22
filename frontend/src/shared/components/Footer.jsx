@@ -46,7 +46,7 @@ const groups = [
 ];
 
 export default function Footer() {
-  const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL || 'support@jooblie.com').trim();
+  const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL || 'Info@jooblie.com').trim();
   const supportPhone = '+1 833-962-1150';
 
   return (

@@ -554,7 +554,7 @@ export default function TermsPage() {
                 </div>
                 <div className="terms-contact-card__item">
                   <strong>Support Helpdesk</strong>
-                  <a href="mailto:support@jooblie.com">support@jooblie.com</a>
+                  <a href="mailto:Info@jooblie.com">Info@jooblie.com</a>
                 </div>
                 <div className="terms-contact-card__item">
                   <strong>Telephone Assistance</strong>
