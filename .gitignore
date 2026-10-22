@@ -4,3 +4,6 @@
 **/.env.local
 *.log
 .DS_Store
+
+# Private project records and local backups (never commit).
+/local-data/
