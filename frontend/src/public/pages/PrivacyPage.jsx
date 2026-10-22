@@ -20,6 +20,7 @@ import {
   Phone,
   ArrowUpRight,
   ExternalLink,
+  Search,
 } from 'lucide-react';
 import Reveal from '../../shared/components/Reveal';
 import { SITE_NAME } from '../../shared/config/site';
@@ -298,17 +299,270 @@ export default function PrivacyPage() {
             </div>
             <div className="terms-section__content">
               <p>
-                We process your personal information strictly for legitimate operational purposes:
+                At {SITE_NAME}, data processing is grounded in transparency, strict purpose limitation, and data minimization. We collect and process personal data exclusively to power the end-to-end recruitment lifecycle, facilitate trusted connections between candidates and employers, verify credentials, and guarantee the technical security and integrity of our marketplace.
+              </p>
+
+              {/* CORE PURPOSE PILLARS */}
+              <div className="terms-card-grid-3">
+                <div className="terms-feature-card">
+                  <div className="terms-feature-card__header">
+                    <div className="terms-feature-card__icon">
+                      <Search size={18} aria-hidden="true" />
+                    </div>
+                    <h4 className="terms-feature-card__title">Talent &amp; Job Matching</h4>
+                  </div>
+                  <p className="terms-feature-card__text">
+                    Connecting candidates with active job postings based on skills, location, work arrangements, and recruiter criteria.
+                  </p>
+                </div>
+
+                <div className="terms-feature-card">
+                  <div className="terms-feature-card__header">
+                    <div className="terms-feature-card__icon">
+                      <ShieldCheck size={18} aria-hidden="true" />
+                    </div>
+                    <h4 className="terms-feature-card__title">Verification &amp; Trust</h4>
+                  </div>
+                  <p className="terms-feature-card__text">
+                    Validating right-to-work status, trade accreditations, and employer legitimacy to eliminate fraudulent listings and spam.
+                  </p>
+                </div>
+
+                <div className="terms-feature-card">
+                  <div className="terms-feature-card__header">
+                    <div className="terms-feature-card__icon">
+                      <Lock size={18} aria-hidden="true" />
+                    </div>
+                    <h4 className="terms-feature-card__title">Platform Security</h4>
+                  </div>
+                  <p className="terms-feature-card__text">
+                    Preventing unauthorized access, enforcing session encryption, rate-limiting APIs, and protecting account confidentiality.
+                  </p>
+                </div>
+              </div>
+
+              <h3>
+                <span className="terms-purpose-badge">1</span>
+                Recruitment, Applications &amp; Job Matching
+              </h3>
+              <p>
+                We use candidate profile information, resumes, and search history to operate our marketplace:
               </p>
               <ul className="terms-list">
-                <li>To operate the recruitment infrastructure, authenticate sessions, and manage your account.</li>
-                <li>To perform right-to-work, identity, and professional qualification verification checks.</li>
-                <li>To record hours, verify shift participation, and generate structured timesheets, application records, and audit trails.</li>
-                <li>To safeguard platform security, prevent fraudulent listings, and detect unauthorized access attempts.</li>
-                <li>To deliver essential service updates, security alerts, and administrative communications.</li>
+                <li>
+                  <strong>Application Delivery:</strong> When you apply for a position on {SITE_NAME}, your resume, contact information, cover notes, and relevant qualification documents are transmitted directly to the verified employer or recruiter managing that posting.
+                </li>
+                <li>
+                  <strong>Skill &amp; Preference Alignment:</strong> We index skills, employment history, trade qualifications (such as CSCS cards or licenses), and compensation expectations to suggest relevant job postings to candidates and showcase qualified profiles to hiring organizations.
+                </li>
+                <li>
+                  <strong>Application Lifecycle Tracking:</strong> We maintain structured records of application milestones (submitted, viewed, shortlisted, scheduled, offered, or declined) so both job seekers and recruiters can monitor progress transparently.
+                </li>
+                <li>
+                  <strong>Candidate-Recruiter In-App Messaging:</strong> When candidates and employers communicate via platform tools, messages are stored securely to maintain audit history, prevent harassment, and assist in interview scheduling.
+                </li>
               </ul>
-              <div className="terms-callout terms-callout--info">
-                <strong>Guaranteed Principles:</strong> We do not sell your personal data. We do not make automated decisions producing legal effects or similarly significant effects regarding your employment status.
+
+              <h3>
+                <span className="terms-purpose-badge">2</span>
+                Account Administration &amp; Authentication Security
+              </h3>
+              <p>
+                We process credentials and profile attributes to ensure secure account operations:
+              </p>
+              <ul className="terms-list">
+                <li>
+                  <strong>Session Management:</strong> Authenticating user logins, managing role-based access controls (Job Seeker, Employer/Recruiter, Portal Admin), and issuing secure, encrypted session tokens via Supabase Auth.
+                </li>
+                <li>
+                  <strong>Security Verification:</strong> Delivering multi-factor authentication (MFA) codes, password reset verification links, and critical security notifications.
+                </li>
+                <li>
+                  <strong>Profile Customization:</strong> Saving search preferences, bookmarking job opportunities, and preserving customized recruiter filter presets across sessions.
+                </li>
+              </ul>
+
+              <h3>
+                <span className="terms-purpose-badge">3</span>
+                Identity Verification, Compliance &amp; Quality Standards
+              </h3>
+              <p>
+                To maintain workplace safety, legal compliance, and community trust, we process verification records under strict safeguards:
+              </p>
+              <ul className="terms-list">
+                <li>
+                  <strong>Statutory Right-to-Work Checks:</strong> Where required by applicable labor legislation or hiring companies, we facilitate identity and work authorization checks through certified identity verification partners (e.g., Didit). We verify documents without retaining permanent biometric copies.
+                </li>
+                <li>
+                  <strong>Trade &amp; Professional Certifications:</strong> Verifying validity dates for trade cards, safety credentials, and professional licenses to confirm compliance before candidates are deployed to specialized job sites.
+                </li>
+                <li>
+                  <strong>Employer Entity Vetting:</strong> Verifying company registration numbers, official corporate domains, and hiring representative credentials to ensure all posted vacancies represent bona fide employment opportunities.
+                </li>
+              </ul>
+
+              <h3>
+                <span className="terms-purpose-badge">4</span>
+                Shift Verification, Attendance &amp; Geofenced Moments
+              </h3>
+              <p>
+                For shift-based and field-placement opportunities, {SITE_NAME} processes location coordinates strictly at designated verification moments:
+              </p>
+              <ul className="terms-list">
+                <li>
+                  <strong>Point-in-Time Check-In/Check-Out:</strong> Geographic coordinates are recorded solely when a worker clicks to clock in or clock out to confirm physical presence within the employer&rsquo;s designated job site perimeter.
+                </li>
+                <li>
+                  <strong>No Continuous Tracking:</strong> We never track user locations continuously between shifts or in the background. Once a shift verification event is recorded, location sensors are immediately disengaged.
+                </li>
+                <li>
+                  <strong>Automatic EXIF Metadata Removal:</strong> When photos or workplace documents are uploaded, our ingestion pipeline automatically scrubs embedded camera EXIF coordinates to protect residential and workplace privacy.
+                </li>
+              </ul>
+
+              <h3>
+                <span className="terms-purpose-badge">5</span>
+                Communications, Notifications &amp; Service Updates
+              </h3>
+              <p>
+                We use your contact details to keep you informed of critical milestones and optional platform opportunities:
+              </p>
+              <ul className="terms-list">
+                <li>
+                  <strong>Transactional Notifications:</strong> Automated notifications for application submissions, recruiter interview requests, subscription renewals, and security incident alerts. These essential operational notices cannot be opted out of while maintaining an active account.
+                </li>
+                <li>
+                  <strong>Tailored Job Alerts:</strong> Optional email digests matching your search criteria, newly posted opportunities in your sector, and career advice dispatches. You can customize frequency or unsubscribe with a single click at any time.
+                </li>
+                <li>
+                  <strong>Customer Support &amp; Inquiries:</strong> Resolving user support requests, handling feedback, and investigating technical issue tickets.
+                </li>
+              </ul>
+
+              <h3>
+                <span className="terms-purpose-badge">6</span>
+                Platform Reliability, Analytics &amp; Fraud Prevention
+              </h3>
+              <p>
+                To maintain high availability, detect vulnerabilities, and enhance platform experience:
+              </p>
+              <ul className="terms-list">
+                <li>
+                  <strong>Privacy-Preserving Telemetry:</strong> Aggregated page view analytics and job discovery metrics use de-identified fingerprinting to count listing views without persistently profiling individual visitors.
+                </li>
+                <li>
+                  <strong>Automated Log Redaction:</strong> Application log pipelines (powered by Pino redaction standards) sanitize database queries and error dumps, ensuring authorization tokens, passwords, and sensitive PII are never written to diagnostic log files.
+                </li>
+                <li>
+                  <strong>Abuse &amp; Scraping Prevention:</strong> Monitoring traffic patterns, IP reputation, and request velocity to mitigate DDoS attacks, prevent unauthorized web scraping of candidate information, and block brute-force password attempts.
+                </li>
+              </ul>
+
+              <h3>
+                <span className="terms-purpose-badge">7</span>
+                Billing, Invoicing &amp; Subscription Fulfillment
+              </h3>
+              <p>
+                For hiring organizations purchasing job listing packages or premium employer portals:
+              </p>
+              <ul className="terms-list">
+                <li>
+                  <strong>Secure Transaction Processing:</strong> Payment details are transmitted directly to PCI-DSS Level 1 certified processors (such as Stripe). {SITE_NAME} never sees or stores full credit card numbers or security CVVs on our databases.
+                </li>
+                <li>
+                  <strong>Tax &amp; Accounting Compliance:</strong> Generating VAT/GST invoices, maintaining transaction records for statutory accounting periods (7 years), and managing corporate billing accounts.
+                </li>
+              </ul>
+
+              {/* SUMMARY PROCESSING MATRIX TABLE */}
+              <h3>Summary Matrix: How We Process Your Data Categories</h3>
+              <div className="terms-table-wrapper">
+                <table className="terms-table">
+                  <thead>
+                    <tr>
+                      <th>Data Category</th>
+                      <th>Primary Use &amp; Purpose</th>
+                      <th>UK GDPR Lawful Basis</th>
+                      <th>Privacy Safeguard</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Candidate Profile &amp; CV</strong></td>
+                      <td>Job applications, recruiter matching, skills index</td>
+                      <td><span className="terms-table-badge">Contract / Consent</span></td>
+                      <td>Visible only to employers for applied roles or active search</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Identity &amp; Right-to-Work</strong></td>
+                      <td>Statutory worker compliance and credential verification</td>
+                      <td><span className="terms-table-badge">Legal Obligation</span></td>
+                      <td>Encrypted transit &amp; storage; no biometric retention</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Shift Coordinates</strong></td>
+                      <td>Confirming on-site presence at clock-in/out moments</td>
+                      <td><span className="terms-table-badge">Contractual Necessity</span></td>
+                      <td>Point-in-time check only; no background tracking</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Communications &amp; Messages</strong></td>
+                      <td>Interview coordination, customer support, audit trail</td>
+                      <td><span className="terms-table-badge">Legitimate Interests</span></td>
+                      <td>Encrypted in transit (TLS 1.3); restricted staff access</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Technical &amp; Log Data</strong></td>
+                      <td>Bot defense, platform stability, fraud detection</td>
+                      <td><span className="terms-table-badge">Legitimate Interests</span></td>
+                      <td>Automated PII redaction (Pino); rolling 1-2 year retention</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Payment &amp; Billing Info</strong></td>
+                      <td>Subscription processing, VAT invoicing, accounting</td>
+                      <td><span className="terms-table-badge">Contract / Legal Duty</span></td>
+                      <td>Tokenized via PCI-DSS Level 1 provider (Stripe)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* NEGATIVE COMMITMENTS: WHAT WE NEVER DO */}
+              <div className="terms-never-box">
+                <div className="terms-never-box__title">
+                  <ShieldCheck size={20} aria-hidden="true" />
+                  <span>Our Data Integrity Commitments: What {SITE_NAME} NEVER Does</span>
+                </div>
+                <div className="terms-never-grid">
+                  <div className="terms-never-item">
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                    <div>
+                      <strong>We Never Sell Your Personal Data</strong>
+                      <span>We do not sell, rent, monetize, or trade candidate profiles, contact numbers, or resume files to third-party data aggregators or advertisers.</span>
+                    </div>
+                  </div>
+                  <div className="terms-never-item">
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                    <div>
+                      <strong>No Automated Rejection Decisions</strong>
+                      <span>We do not use automated algorithms that produce binding legal effects or reject applicants without human review. Final hiring choices always rest with real hiring teams.</span>
+                    </div>
+                  </div>
+                  <div className="terms-never-item">
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                    <div>
+                      <strong>No Continuous Background Tracking</strong>
+                      <span>We never monitor your location in the background or track off-platform browsing behavior. Geolocation is restricted to explicit verification moments.</span>
+                    </div>
+                  </div>
+                  <div className="terms-never-item">
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                    <div>
+                      <strong>No Unsolicited Third-Party Cross-Marketing</strong>
+                      <span>Your contact details are strictly reserved for platform service delivery and verified employer communications. We do not share emails with third-party marketing brokers.</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </article>

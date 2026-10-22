@@ -111,6 +111,7 @@ export default function App() {
         <Route path="contact" element={<ContactPage />} />
         <Route path="help" element={<HelpPage />} />
         <Route path="privacy" element={<PrivacyPage />} />
+        <Route path="privacy-policy" element={<PrivacyPage />} />
         <Route path="terms" element={<TermsPage />} />
       </Route>
 
