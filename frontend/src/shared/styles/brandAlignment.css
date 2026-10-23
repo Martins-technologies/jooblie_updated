@@ -189,7 +189,49 @@ body .admin-summary-card,
 body .admin-summary-card:nth-child(n) { --summary-accent: #1498ff; --summary-soft: #eaf6ff; }
 body .admin-summary-card:nth-child(3n) { --summary-accent: #557d11; --summary-soft: #f1ffd0; }
 
+/* Keep page titles, section headings, and card titles on one responsive scale. */
+:root {
+  --jooblie-page-title: clamp(27px, 1.15vw + 19px, 36px);
+  --jooblie-section-title: clamp(22px, .7vw + 18px, 28px);
+  --jooblie-card-title: clamp(16px, .2vw + 15px, 18px);
+  --jooblie-body-copy: clamp(14px, .15vw + 13px, 16px);
+}
+
+body .site-main h1,
+body .workspace .jd-page-heading h1,
+body .auth-card h1 {
+  font-size: var(--jooblie-page-title) !important;
+  line-height: 1.18 !important;
+}
+
+body .site-main h2,
+body .auth-card h2 {
+  font-size: var(--jooblie-section-title) !important;
+  line-height: 1.24 !important;
+}
+
+body .site-main h3,
+body .workspace .workspace-panel__heading h2,
+body .workspace .analytics-heading h2,
+body .workspace .admin-dialog__header h2 {
+  font-size: var(--jooblie-card-title) !important;
+  line-height: 1.35 !important;
+}
+
+body .jd-page-heading p,
+body .site-main .page-intro,
+body .site-main .section-intro {
+  font-size: var(--jooblie-body-copy) !important;
+  line-height: 1.65 !important;
+}
+
 @media (max-width: 599px) {
+  :root {
+    --jooblie-page-title: clamp(25px, 6vw, 32px);
+    --jooblie-section-title: clamp(21px, 5vw, 25px);
+    --jooblie-card-title: 17px;
+    --jooblie-body-copy: 14px;
+  }
   body .site-header .jooblie-brand-image { width: 116px; }
   body .jd-sidebar-brand .jooblie-brand-image,
   body .auth-card .jooblie-brand-image { width: 120px; }
