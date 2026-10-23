@@ -94,30 +94,56 @@ body .desktop-nav .nav-link:hover,
 body .desktop-nav .nav-link.is-active { background: #eaf6ff; }
 
 body .header-cta-btn {
-  background: #cbff4d !important;
-  border-color: #cbff4d !important;
+  background: #061c3c !important;
+  border-color: #061c3c !important;
   border-radius: 4px !important;
   box-shadow: none !important;
-  color: #061c3c !important;
+  color: #fff !important;
   font-family: var(--font-mono) !important;
   letter-spacing: .04em;
 }
 
-body .header-cta-btn:hover { background: #b9f238 !important; border-color: #b9f238 !important; }
+body .header-cta-btn:hover { background: #123d72 !important; border-color: #123d72 !important; }
 
 body .site-main .button--primary,
 body .button--primary {
-  background: #cbff4d;
-  border-color: #cbff4d;
-  box-shadow: 0 3px 10px rgba(146, 198, 37, .2);
-  color: #061c3c;
+  background: #1498ff;
+  border-color: #1498ff;
+  box-shadow: 0 3px 10px rgba(20, 152, 255, .18);
+  color: #fff;
 }
 
 body .site-main .button--primary:hover:not(:disabled),
 body .button--primary:hover:not(:disabled) {
-  background: #b9f238;
-  border-color: #b9f238;
+  background: #0879cf;
+  border-color: #0879cf;
 }
+
+/* Reserve the lime accent for registration actions, as on the landing page. */
+body .jb-primary-action-btn {
+  background: #cbff4d !important;
+  border-color: #cbff4d !important;
+  box-shadow: 0 3px 10px rgba(146, 198, 37, .2) !important;
+  color: #061c3c !important;
+}
+
+body .jb-primary-action-btn:hover:not(:disabled) {
+  background: #b9f238 !important;
+  border-color: #b9f238 !important;
+  color: #061c3c !important;
+}
+
+body .mobile-auth-cta {
+  background: #061c3c !important;
+  border-color: #061c3c !important;
+  color: #fff !important;
+}
+body .mobile-auth-cta:hover:not(:disabled) {
+  background: #123d72 !important;
+  border-color: #123d72 !important;
+}
+
+body .site-main .button { border-radius: 5px; }
 
 body .site-main .button--secondary,
 body .button--secondary {
@@ -191,8 +217,8 @@ body .admin-summary-card:nth-child(3n) { --summary-accent: #557d11; --summary-so
 
 /* Keep page titles, section headings, and card titles on one responsive scale. */
 :root {
-  --jooblie-page-title: clamp(27px, 1.15vw + 19px, 36px);
-  --jooblie-section-title: clamp(22px, .7vw + 18px, 28px);
+  --jooblie-page-title: clamp(27px, 1.05vw + 19px, 34px);
+  --jooblie-section-title: clamp(22px, .65vw + 18px, 27px);
   --jooblie-card-title: clamp(16px, .2vw + 15px, 18px);
   --jooblie-body-copy: clamp(14px, .15vw + 13px, 16px);
 }
