@@ -10,6 +10,8 @@ The application treats `jobs.origin_site_id` as provenance only. Public visibili
 
 `migrations/008_mississauga_registration_intake.sql` adds a private intake table for the landing-page form. The public API inserts through the backend service role only. The table is not readable by anonymous or authenticated browser clients; admins review and assign leads in `/admin/registrations`. Apply the migration before enabling the landing-page form. This is the internal Jooblie intake queue; it does not replace an approved GoHighLevel synchronization or receipt-email workflow.
 
+`migrations/009_mississauga_registration_notification_type.sql` adds the notification enum value used to alert active administrators when a new landing-page lead is received. Apply it to the shared Supabase project before relying on registration notifications.
+
 For recruiter signup/company bootstrap, also run `migrations/003_recruiter_company_binding.sql` and `migrations/004_recruiter_company_schema_compat.sql`. The compatibility migration ensures the company fields used by onboarding exist on older Jooblie schemas.
 
 ## Portal workflow integrity (migration 006)
