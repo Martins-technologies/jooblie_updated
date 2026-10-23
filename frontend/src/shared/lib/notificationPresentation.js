@@ -9,5 +9,6 @@ export function notificationContent(notification, role) {
   if(id && notification.entity_type==='job') to=role==='admin'?`/admin/jobs?jobId=${id}`:role==='job_seeker'?`/dashboard/job-seeker/jobs/${id}`:'/my-jobs';
   if(notification.entity_type==='application') to=role==='admin'?'/admin/applications':role==='recruiter'?'/candidates':'/dashboard/job-seeker/applications';
   if(id && notification.entity_type==='company') to=role==='admin'?`/admin/companies?id=${id}`:role==='recruiter'?'/my-company':null;
+  if(id && notification.entity_type==='registration' && role==='admin') to='/admin/registrations?status=new';
   return {title,message,to};
 }

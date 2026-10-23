@@ -15,7 +15,7 @@ const roleLabels = { job_seeker: 'Job seeker', recruiter: 'Recruiter', admin: 'A
 const navigation = {
   job_seeker: [['Overview', '/dashboard/job-seeker', LayoutDashboard], ['Find jobs', '/dashboard/job-seeker/jobs', Search], ['My applications', '/dashboard/job-seeker/applications', FileText], ['Saved jobs', '/dashboard/job-seeker/saved', Bookmark], ['My profile', '/dashboard/job-seeker/profile', UserRound]],
   recruiter: [['Overview', '/dashboard/recruiter', LayoutDashboard], ['My jobs', '/my-jobs', BriefcaseBusiness], ['Candidates', '/candidates', Users], ['Post a job', '/post-job', FileText], ['Company profile', '/my-company', Building2]],
-  admin: [['Overview', '/dashboard/admin', LayoutDashboard], ['Jobs', '/admin/jobs', BriefcaseBusiness], ['Review queue', '/admin/moderation', FileText], ['Users', '/admin/users', Users], ['Companies', '/admin/companies', Building2], ['Portals', '/admin/portals', Globe2], ['Applications', '/admin/applications', FileText], ['Activity log', '/admin/activity', ScrollText], ['Security events', '/admin/security', ShieldCheck]],
+  admin: [['Overview', '/dashboard/admin', LayoutDashboard], ['Jobs', '/admin/jobs', BriefcaseBusiness], ['Review queue', '/admin/moderation', FileText], ['Mississauga leads', '/admin/registrations', UserPlus], ['Users', '/admin/users', Users], ['Companies', '/admin/companies', Building2], ['Portals', '/admin/portals', Globe2], ['Applications', '/admin/applications', FileText], ['Activity log', '/admin/activity', ScrollText], ['Security events', '/admin/security', ShieldCheck]],
 };
 const portals = [
   ['Office Jobline', Building2, import.meta.env.VITE_OFFICE_JOBS_URL], ['IT Jobline', Laptop, import.meta.env.VITE_IT_JOBS_URL],

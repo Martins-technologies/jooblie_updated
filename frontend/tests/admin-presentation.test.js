@@ -15,6 +15,11 @@ test('notifications link to role appropriate internal records, never payload URL
   assert.ok(notificationContent(item,'admin').message.length<=240);
   assert.equal(notificationContent({type:'other',data:{message:{private:'value'}}},'admin').message,'');
 });
+test('Mississauga registration alerts take administrators to the new lead queue',()=>{
+  const registration={type:'mississauga_registration',entity_type:'registration',entity_id:'11111111-1111-4111-8111-111111111111',data:{title:'New Mississauga registration'}};
+  assert.equal(notificationContent(registration,'admin').to,'/admin/registrations?status=new');
+  assert.equal(notificationContent(registration,'job_seeker').to,null);
+});
 test('missing or invalid dates remain unavailable',()=>{
   assert.equal(displayDate(null),'—');assert.equal(displayDate('invalid'),'—');assert.notEqual(displayDate('2026-10-16T10:00:00Z'),'—');
 });

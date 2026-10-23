@@ -1,6 +1,34 @@
 import { serviceDb } from '../config/supabase.js';
 import { adminQuery, pageInfo } from '../utils/adminQuery.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
+import { logger } from '../config/logger.js';
+
+export async function notifyAdminsOfMississaugaRegistration(db, registrationId, siteId) {
+  const { data: admins, error: adminError } = await db.from('profiles')
+    .select('id').eq('role', 'admin').eq('status', 'active');
+  if (adminError) {
+    logger.warn({ code: adminError.code || 'ADMIN_LOOKUP_FAILED' }, 'Mississauga registration admin notification lookup failed');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const notifications = (admins || []).filter(admin => admin.id).map(admin => ({
+    user_id: admin.id,
+    type: 'mississauga_registration',
+    entity_type: 'registration',
+    entity_id: registrationId,
+    site_id: siteId || null,
+    data: {
+      title: 'New Mississauga registration',
+      message: 'A job seeker submitted the Mississauga landing page form. Open registrations to review the lead.',
+    },
+    created_at: now,
+  }));
+  if (!notifications.length) return;
+
+  const { error } = await db.from('notifications').insert(notifications);
+  if (error) logger.warn({ code: error.code || 'NOTIFICATION_INSERT_FAILED' }, 'Mississauga registration admin notification insert failed');
+}
 
 function safeReferrer(value) {
   if (!value) return null;
@@ -48,6 +76,14 @@ export const createMississaugaRegistration = asyncHandler(async (req, res) => {
     },
   }).select('id').single();
   if (error || !data?.id) throw new ApiError(503, 'Registration is temporarily unavailable. Please try again.', 'REGISTRATION_UNAVAILABLE');
+
+  // The lead record is durable at this point. In-app alerts are best-effort so
+  // a notification service issue never tells a candidate their registration failed.
+  try {
+    await notifyAdminsOfMississaugaRegistration(serviceDb, data.id, req.site.id);
+  } catch (notificationError) {
+    logger.warn({ code: notificationError?.code || 'NOTIFICATION_FAILED' }, 'Mississauga registration admin notification failed');
+  }
 
   res.status(201).json({ accepted: true, record_id: data.id, duplicate: Boolean(prior?.length) });
 });
