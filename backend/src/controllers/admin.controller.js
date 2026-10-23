@@ -43,8 +43,9 @@ export const overviewAnalytics = asyncHandler(async (req,res) => {
 
 export const dashboard = asyncHandler(async (_req, res) => {
   const count = (table) => serviceDb.from(table).select('id', { count: 'exact', head: true });
-  const [users, companies, jobs, applications, pendingJobs, activeJobs, pendingCompanies, pendingApplications, sites, activeSites, recentUsers, recentJobs, queue, audit, security] = await Promise.all([
+  const [users, companies, jobs, applications, registrations, pendingJobs, activeJobs, pendingCompanies, pendingApplications, sites, activeSites, recentUsers, recentJobs, queue, audit, security] = await Promise.all([
     count('profiles'), count('companies').is('deleted_at', null), count('jobs').is('deleted_at', null), count('applications').is('deleted_at', null),
+    count('mississauga_registrations'),
     count('jobs').is('deleted_at', null).eq('status', 'pending_review'), count('jobs').is('deleted_at', null).eq('status', 'active'),
     count('companies').is('deleted_at', null).eq('verification_status', 'pending'), count('applications').is('deleted_at', null).eq('status', 'submitted'),
     serviceDb.from('sites').select('id,slug,name,domain,site_type,is_active', { count: 'exact' }).order('name').limit(6),
@@ -55,7 +56,7 @@ export const dashboard = asyncHandler(async (_req, res) => {
     serviceDb.from('activity_log').select('id,action,entity_type,entity_id,created_at,data').order('created_at', { ascending: false }).limit(6),
     serviceDb.from('security_events').select('id,event_type,severity,created_at').order('created_at', { ascending: false }).limit(5),
   ]);
-  const results = { users, companies, jobs, applications, pendingJobs, activeJobs, pendingCompanies, pendingApplications };
+  const results = { users, companies, jobs, applications, registrations, pendingJobs, activeJobs, pendingCompanies, pendingApplications };
   res.json({
     metrics: { ...Object.fromEntries(Object.entries(results).map(([key,result]) => [key, optionalCount(result)])), sites: optionalCount(sites), activeSites: optionalCount(activeSites) },
     recentUsers: recentUsers.data || [], recentJobs: recentJobs.data || [], pendingJobs: queue.data || [], sites: sites.data || [], auditLogs: (audit.data || []).map(normalizeActivity), securityEvents: security.data || [],

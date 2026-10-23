@@ -17,6 +17,43 @@ export const authSignInSchema = z.object({
   password: z.string().min(8).max(200),
 });
 
+export const mississaugaRegistrationSchema = z.object({
+  full_name: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
+  phone_e164: z.string().trim().regex(/^\+[1-9][0-9]{6,14}$/),
+  current_city: z.string().trim().min(1).max(80),
+  employment_goal: z.enum([
+    'Find a job',
+    'Explore employers who may support a work permit',
+    'Explore employment related to potential PR pathways',
+    'All of the above',
+    'Not sure yet',
+  ]),
+  preferred_industry: z.enum([
+    'Administration & Office', 'Agriculture', 'Construction & Skilled Trades',
+    'Healthcare & Support Services', 'Hospitality & Food Services',
+    'Manufacturing & Warehousing', 'Retail & Customer Service',
+    'Transportation & Logistics', 'Other', 'Open to any industry',
+  ]).nullable().optional(),
+  privacy_acknowledged: z.literal(true),
+  employer_sharing_consent: z.boolean().default(false),
+  marketing_consent: z.boolean().default(false),
+  source_context: z.object({
+    page_path: z.string().max(200).optional(),
+    referrer: z.string().max(1000).nullable().optional(),
+    utm_source: z.string().max(250).nullable().optional(),
+    utm_medium: z.string().max(250).nullable().optional(),
+    utm_campaign: z.string().max(250).nullable().optional(),
+    utm_content: z.string().max(250).nullable().optional(),
+    fbclid: z.string().max(500).nullable().optional(),
+  }).strict().default({}),
+}).strict();
+
+export const adminRegistrationUpdateSchema = z.object({
+  status: z.enum(['new', 'contacted', 'reviewing', 'closed']).optional(),
+  assigned_to: z.string().uuid().nullable().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, 'Provide a status or owner update.');
+
 export const authSignUpSchema = z.object({
   email: z.string().trim().email().max(320),
   password: z.string().min(8).max(200),

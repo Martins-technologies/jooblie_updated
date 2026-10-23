@@ -22,12 +22,15 @@ import {
   authSignInSchema,
   authSignUpSchema,
   resumeRegisterSchema,
+  mississaugaRegistrationSchema,
+  adminRegistrationUpdateSchema,
 } from './schemas.js';
 import * as publicController from './controllers/public.controller.js';
 import * as authController from './controllers/auth.controller.js';
 import * as seekerController from './controllers/jobSeeker.controller.js';
 import * as recruiterController from './controllers/recruiter.controller.js';
 import * as adminController from './controllers/admin.controller.js';
+import * as registrationController from './controllers/registration.controller.js';
 import { createNotificationHandlers } from './controllers/notifications.controller.js';
 import { z } from 'zod';
 import { serviceDb, publicDb } from './config/supabase.js';
@@ -59,6 +62,7 @@ router.get('/ready', async (_req, res, next) => {
 
 const publicRouter = Router();
 publicRouter.use(siteContext);
+publicRouter.post('/registrations', rateLimit({ windowMs: 60 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false }), validate(mississaugaRegistrationSchema), registrationController.createMississaugaRegistration);
 publicRouter.get('/dataset', publicController.getDataset);
 publicRouter.get('/jobs', publicController.listJobs);
 publicRouter.get('/jobs/:jobId', publicController.getJob);
@@ -124,6 +128,9 @@ admin.patch('/companies/:companyId', writeLimiter, validate(adminCompanyVerifica
 admin.get('/applications', adminController.listApplications);
 admin.patch('/applications/:applicationId', writeLimiter, validate(applicationStatusSchema), adminController.updateApplicationStatus);
 admin.get('/users', adminController.listUsers);
+admin.get('/registrations', registrationController.listMississaugaRegistrations);
+admin.get('/registration-owners', registrationController.listRegistrationOwners);
+admin.patch('/registrations/:registrationId', writeLimiter, validate(adminRegistrationUpdateSchema), registrationController.updateMississaugaRegistration);
 admin.patch('/users/:userId/role', writeLimiter, validate(adminRoleSchema), adminController.changeUserRole);
 admin.patch('/jobs/:jobId/status', writeLimiter, validate(adminJobStatusSchema), adminController.moderateJob);
 admin.get('/audit-logs', adminController.listAuditLogs);

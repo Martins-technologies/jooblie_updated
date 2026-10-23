@@ -61,6 +61,7 @@ const AdminModerationPage = lazy(()=>import('./admin/pages/AdminModerationPage')
 const AdminUsersPage = lazy(()=>import('./admin/pages/AdminUsersPage'));
 const AdminActivityPage = lazy(()=>import('./admin/pages/AdminActivityPage'));
 const AdminDirectoryPage = lazy(()=>import('./admin/pages/AdminDirectoryPage'));
+const AdminRegistrationsPage = lazy(()=>import('./admin/pages/AdminRegistrationsPage'));
 const AdminPortalDetailPage = lazy(()=>import('./admin/pages/AdminPortalDetailPage'));
 
 const NotFoundPage = lazy(()=>import('./public/pages/NotFoundPage'));
@@ -275,6 +276,7 @@ export default function App() {
       />
 
       {['portals','companies','applications','security'].map(type => <Route key={type} path={`admin/${type}`} element={<ProtectedRoute roles={['admin']}><AdminDirectoryPage type={type==='security'?'security-events':type}/></ProtectedRoute>}/>)}
+      <Route path="admin/registrations" element={<ProtectedRoute roles={['admin']}><AdminRegistrationsPage/></ProtectedRoute>}/>
       {/* Admin Moderation Page */}
       <Route
         path="admin/moderation"

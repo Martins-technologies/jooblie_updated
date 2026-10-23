@@ -123,6 +123,11 @@ const linksByRole = {
       icon: Users,
     },
     {
+      to: '/admin/registrations',
+      label: 'Mississauga Leads',
+      icon: UserPlus,
+    },
+    {
       to: '/admin/activity',
       label: 'System & Activity',
       icon: ScrollText,
