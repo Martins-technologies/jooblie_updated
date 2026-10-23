@@ -31,3 +31,4 @@ import './shared/styles/publicPolish.css';
 import './shared/styles/visualExperience.css';
 
 import './shared/styles/publicEditorial.css';
+import './shared/styles/brandAlignment.css';

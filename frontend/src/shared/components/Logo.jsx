@@ -8,7 +8,7 @@ export default function Logo({ variant = 'default', className = '' }) {
   return (
     <Link to="/" className={`brand ${className}`.trim()} aria-label={`${SITE_NAME} home`}>
       <span className="jooblie-brand-image">
-        <img src={logoSrc} alt={SITE_NAME} width="4500" height="4500" />
+        <img src={logoSrc} alt={SITE_NAME} width="2545" height="837" />
       </span>
     </Link>
   );

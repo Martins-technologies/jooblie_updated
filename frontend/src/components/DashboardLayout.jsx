@@ -294,7 +294,7 @@ export default function DashboardLayout({
           className="jd-mobile-brand"
           onClick={closeMobile}
         >
-          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
+          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="2545" height="837"/></span>
         </Link>
 
         <button
@@ -333,7 +333,7 @@ export default function DashboardLayout({
             className="jd-brand"
             onClick={closeMobile}
           >
-            <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
+            <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="2545" height="837"/></span>
           </Link>
 
           <button

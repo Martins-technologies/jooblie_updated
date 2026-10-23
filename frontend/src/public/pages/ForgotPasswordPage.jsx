@@ -58,7 +58,7 @@ export default function ForgotPasswordPage() {
       {/* Top Application Header */}
       <header className="jb-app-nav">
         <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
-          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="4500" height="4500"/></span>
+          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="2545" height="837"/></span>
         </Link>
 
         <Link to="/" className="jb-nav-back">

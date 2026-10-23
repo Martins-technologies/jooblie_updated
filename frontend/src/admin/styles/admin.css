@@ -36,11 +36,11 @@
 .admin-tabs {display:flex;gap:8px;margin-bottom:18px;}
 .admin-tabs a {padding:10px 17px;border-radius:8px;color:#6e7c91;font-size:12px;}
 .admin-tabs a.is-active {background:#e9f2ff;color:#0864e8;font-weight:600;}
-.admin-dialog {width:min(640px,calc(100vw - 32px));max-height:calc(100dvh - 40px);padding:0;border:1px solid #e1e8f2;border-radius:16px;box-shadow:0 24px 90px #162e5833;color:#1b2c47;}
+.admin-dialog {width:min(760px,calc(100vw - 32px));max-height:min(860px,calc(100dvh - 32px));padding:0;border:1px solid #e1e8f2;border-radius:16px;box-shadow:0 24px 90px #162e5833;color:#1b2c47;display:flex;flex-direction:column;overflow:hidden;}
 .admin-dialog::backdrop {background:#152b4e66;backdrop-filter:blur(3px);}
 .admin-dialog__header {display:flex;justify-content:space-between;align-items:center;gap:14px;padding:21px 25px;border-bottom:1px solid #e7edf5;position:sticky;top:0;background:white;z-index:1;}
 .admin-dialog__header h2 {margin:0;font-size:18px;letter-spacing:-.4px;}
-.admin-dialog__body {padding:24px;}
+.admin-dialog__body {padding:20px 24px 24px;overflow-y:auto;overscroll-behavior:contain;min-height:0;}
 .admin-dialog__actions {display:flex;justify-content:flex-end;align-items:center;gap:10px;padding-top:8px;flex-wrap:wrap;}
 .admin-edit-form {display:flex;flex-direction:column;gap:19px;}
 .admin-edit-form>label {display:flex;flex-direction:column;gap:8px;font-size:12px;font-weight:600;color:#41536f;}
@@ -50,6 +50,20 @@
 .admin-details>div {display:grid;grid-template-columns:110px minmax(0,1fr);gap:20px;padding-bottom:15px;border-bottom:1px solid #edf1f7;font-size:13px;line-height:1.7;}
 .admin-details dt {font-size:12px;color:#8994a7;}
 .admin-details dd {margin:0;overflow-wrap:anywhere;white-space:pre-wrap;}
+.registration-details {display:grid;gap:14px;}
+.registration-details__group {padding:15px 17px 12px;border:1px solid #e7edf5;border-radius:12px;background:#fff;}
+.registration-details__group h3 {margin:0 0 12px;color:#52647e;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
+.admin-details--compact {margin:0;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:22px;row-gap:0;}
+.admin-details--compact>div {display:flex;flex-direction:column;gap:4px;min-width:0;padding:9px 0;border-bottom:1px solid #edf1f7;font-size:12px;line-height:1.45;}
+.admin-details--compact>div:nth-last-child(-n+2) {border-bottom:0;}
+.admin-details--compact dt {font-size:10px;line-height:1.3;}
+.admin-details--compact dd {font-size:12px;}
+.registration-details__group--meta {padding-top:5px;padding-bottom:5px;background:#f7f9fc;}
+.registration-details__group--meta .admin-details--compact>div {flex-direction:row;align-items:baseline;gap:12px;border-bottom:0;}
+.registration-details__group--meta .admin-details--compact dt {flex:0 0 150px;}
+.registration-followup {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px;}
+.registration-followup>.admin-note,.registration-followup>.admin-dialog__actions,.registration-followup>.error-banner {grid-column:1/-1;}
+.registration-followup>.admin-note {margin:0;}
 .admin-overview-heading {display:flex;align-items:center;justify-content:space-between;color:#8591a5;font-size:11px;gap:10px;flex-wrap:wrap;}
 .admin-overview-heading small {font-size:11px;}
 .admin-live-label {display:inline-flex;gap:7px;align-items:center;}
@@ -85,7 +99,7 @@
 .workspace-status--blocked,.workspace-status--removed,.workspace-status--rejected,.workspace-status--high,.workspace-status--critical {background:#fff0f1;color:#c24e5a;}
 .workspace-status--verified,.workspace-status--low {background:#eaf9f2;color:#218b65;}
 @media(max-width:1150px){.admin-overview-grid {grid-template-columns:1fr;}.admin-metrics {grid-template-columns:repeat(2,minmax(0,1fr));}}
-@media(max-width:560px){.admin-toolbar{padding:15px;gap:8px;}.admin-toolbar>.app-select{min-width:130px;max-width:none;flex:1;}.admin-search{flex-basis:100%;}.admin-pagination{padding:15px;}.admin-table th,.admin-table td{padding:14px 15px;}.admin-metrics{gap:10px;}.admin-metrics .workspace-metric{padding:16px 12px;display:block;min-height:145px;}.admin-metrics .workspace-metric__icon{width:32px;height:32px;margin-bottom:10px;}.admin-metrics .workspace-metric strong{font-size:24px;}.admin-metrics .workspace-metric small{font-size:10px;}.admin-metric-link>svg{right:12px;top:15px;}.admin-dialog__body{padding:19px;}.admin-details>div{grid-template-columns:90px minmax(0,1fr);gap:12px;}.admin-preview-list .workspace-status{font-size:9px;}.admin-dialog__actions .button{flex:1;}}
+@media(max-width:560px){.admin-toolbar{padding:15px;gap:8px;}.admin-toolbar>.app-select{min-width:130px;max-width:none;flex:1;}.admin-search{flex-basis:100%;}.admin-pagination{padding:15px;}.admin-table th,.admin-table td{padding:14px 15px;}.admin-metrics{gap:10px;}.admin-metrics .workspace-metric{padding:16px 12px;display:block;min-height:145px;}.admin-metrics .workspace-metric__icon{width:32px;height:32px;margin-bottom:10px;}.admin-metrics .workspace-metric strong{font-size:24px;}.admin-metrics .workspace-metric small{font-size:10px;}.admin-metric-link>svg{right:12px;top:15px;}.admin-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:13px;}.admin-dialog__header{padding:15px 17px;}.admin-dialog__body{padding:15px;}.admin-details>div{grid-template-columns:90px minmax(0,1fr);gap:12px;}.admin-details--compact{grid-template-columns:1fr;}.admin-details--compact>div:nth-last-child(-n+2){border-bottom:1px solid #edf1f7;}.admin-details--compact>div:last-child{border-bottom:0;}.registration-details__group{padding:12px 13px 8px;}.registration-details__group--meta .admin-details--compact dt{flex-basis:118px;}.registration-followup{grid-template-columns:1fr;}.registration-followup>.admin-note,.registration-followup>.admin-dialog__actions,.registration-followup>.error-banner{grid-column:auto;}.admin-preview-list .workspace-status{font-size:9px;}.admin-dialog__actions .button{flex:1;}}
 @media(prefers-reduced-motion:reduce){.admin-dialog,.admin-metric-link *{animation:none!important;transition:none!important;}}
 
 .account-popover {animation:account-appear .14s ease-out;}

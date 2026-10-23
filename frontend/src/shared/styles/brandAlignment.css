@@ -1,0 +1,197 @@
+/* Shared brand alignment with the Mississauga landing page. */
+:root {
+  --blue: #1498ff;
+  --blue-dark: #0879cf;
+  --navy: #061c3c;
+  --muted: #626e80;
+  --line: #e3ebf3;
+  --soft: #fafcff;
+  --soft-blue: #eaf6ff;
+  --green: #328750;
+  --brand-blue: #1498ff;
+  --brand-blue-hover: #0879cf;
+  --brand-ink: #061c3c;
+  --brand-muted: #626e80;
+  --brand-tint: #eaf6ff;
+  --brand-canvas: #f7fbff;
+  --brand-line: #e3ebf3;
+  --brand-hover: #f0f8ff;
+  --brand-lime: #cbff4d;
+  --brand-lime-ink: #061c3c;
+  --font-ui: "DM Sans", "Segoe UI", Arial, sans-serif;
+  --font-display: "Manrope", "DM Sans", "Segoe UI", sans-serif;
+  --font-mono: "DM Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-ui);
+  color: #081b35;
+}
+
+html body,
+body :where(button, input, textarea, select, option, a, p, span, div, label, small, strong, th, td) {
+  font-family: var(--font-ui) !important;
+}
+
+body :where(h1, h2, h3, h4, h5, h6, .page-title, .workspace-metric strong) {
+  font-family: var(--font-display) !important;
+}
+
+body :where(.workspace-eyebrow, .jd-section-label, .sidebar-section-label, .admin-overview-heading, .auth-eyebrow) {
+  font-family: var(--font-mono) !important;
+}
+
+html body { color: #081b35; background: #fafcff; }
+
+/* Use the landing page's original transparent wordmarks everywhere the shared
+   app renders its brand, including the sidebar, auth screens, and footer. */
+body .jooblie-brand-image {
+  position: static;
+  display: block;
+  width: 136px;
+  height: auto;
+  aspect-ratio: auto;
+  overflow: visible;
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 0 !important;
+  background: transparent !important;
+  object-fit: contain;
+}
+
+body .jooblie-brand-image > img {
+  position: static;
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  left: auto;
+  top: auto;
+  object-fit: contain;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+body .site-header {
+  background: rgba(250, 252, 255, .94);
+  border-bottom-color: #e3ebf3;
+  box-shadow: 0 4px 20px -8px rgba(6, 28, 60, .12);
+}
+
+body .site-header .jooblie-brand-image { width: 132px; }
+body .jd-sidebar-brand .jooblie-brand-image,
+body .auth-card .jooblie-brand-image { width: 136px; }
+body .footer .jooblie-brand-image { width: 148px; }
+
+body .desktop-nav .nav-link,
+body .header-login-link,
+body .text-button { color: #52647e; }
+
+body .desktop-nav .nav-link:hover,
+body .desktop-nav .nav-link.is-active,
+body .header-login-link:hover,
+body .text-button:hover,
+body .footer__group a:hover { color: #0879cf; }
+
+body .desktop-nav .nav-link:hover,
+body .desktop-nav .nav-link.is-active { background: #eaf6ff; }
+
+body .header-cta-btn {
+  background: #061c3c !important;
+  border-color: #061c3c !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  color: #fff !important;
+  font-family: var(--font-mono) !important;
+  letter-spacing: .04em;
+}
+
+body .header-cta-btn:hover { background: #123d72 !important; }
+
+body .site-main .button--primary,
+body .button--primary {
+  background: #1498ff;
+  border-color: #1498ff;
+  box-shadow: 0 3px 10px rgba(20, 152, 255, .16);
+  color: #fff;
+}
+
+body .site-main .button--primary:hover:not(:disabled),
+body .button--primary:hover:not(:disabled) {
+  background: #0879cf;
+  border-color: #0879cf;
+}
+
+body .site-main .button--secondary,
+body .button--secondary {
+  border-color: #cfe8f8;
+  color: #0879cf;
+}
+
+body .site-main .button--secondary:hover:not(:disabled),
+body .button--secondary:hover:not(:disabled) {
+  background: #eaf6ff;
+  border-color: #9dd5fa;
+  color: #061c3c;
+}
+
+body .auth-page {
+  background: linear-gradient(145deg, #eaf6ff 0%, #fafcff 54%, #f3f9ff 100%);
+}
+
+body .auth-card {
+  border-color: #e3ebf3;
+  border-radius: 12px;
+  box-shadow: 0 18px 54px rgba(6, 28, 60, .09);
+}
+
+/* The landing site uses a deep navy footer and a white-text wordmark. */
+body .footer {
+  background: #06172e;
+  border-top: 1px solid #18324f;
+  color: #fff;
+}
+
+body .footer__disclaimer {
+  background: #0a203c;
+  border-color: #244567;
+  box-shadow: none;
+}
+
+body .footer__disclaimer-badge {
+  background: #102d4c;
+  border-color: #285276;
+}
+
+body .footer__disclaimer-icon,
+body .footer__contact-item svg { color: #1498ff; }
+body .footer__disclaimer-title,
+body .footer__group h3 { color: #fff; }
+body .footer__disclaimer-text,
+body .footer__desc { color: #c5d2e0; }
+body .footer__disclaimer-link {
+  background: #102d4c;
+  border-color: #315676;
+  color: #fff;
+}
+body .footer__disclaimer-link:hover { background: #16426a; border-color: #1498ff; }
+body .footer__tagline { color: #fff; }
+body .footer__contact-item,
+body .footer__group a,
+body .footer__bottom { color: #b8c7d8; }
+body .footer__socials a { background: #10243e; border-color: #29435f; color: #d7e2ed; }
+body .footer__bottom { border-top-color: #294059; }
+body .footer__bottom-links a:hover { color: #cbff4d; }
+
+body .jd-sidebar-brand { background: #fff; border-bottom-color: #e3ebf3; }
+body .jd-sidebar { background: #fff; border-right-color: #e3ebf3; }
+body .jd-nav-link.is-active { background: #eaf6ff; color: #0879cf; box-shadow: inset 3px 0 #1498ff; }
+body .jd-nav-link:hover { background: #f0f8ff; color: #0879cf; }
+body .workspace-topbar { background: #fff; border-bottom-color: #e3ebf3; }
+body .admin-summary-card,
+body .admin-summary-card:nth-child(n) { --summary-accent: #1498ff; --summary-soft: #eaf6ff; }
+body .admin-summary-card:nth-child(3n) { --summary-accent: #557d11; --summary-soft: #f1ffd0; }
+
+@media (max-width: 599px) {
+  body .site-header .jooblie-brand-image { width: 116px; }
+  body .jd-sidebar-brand .jooblie-brand-image,
+  body .auth-card .jooblie-brand-image { width: 120px; }
+  body .footer .jooblie-brand-image { width: 138px; }
+}
