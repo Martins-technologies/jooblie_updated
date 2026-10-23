@@ -94,29 +94,29 @@ body .desktop-nav .nav-link:hover,
 body .desktop-nav .nav-link.is-active { background: #eaf6ff; }
 
 body .header-cta-btn {
-  background: #061c3c !important;
-  border-color: #061c3c !important;
+  background: #cbff4d !important;
+  border-color: #cbff4d !important;
   border-radius: 4px !important;
   box-shadow: none !important;
-  color: #fff !important;
+  color: #061c3c !important;
   font-family: var(--font-mono) !important;
   letter-spacing: .04em;
 }
 
-body .header-cta-btn:hover { background: #123d72 !important; }
+body .header-cta-btn:hover { background: #b9f238 !important; border-color: #b9f238 !important; }
 
 body .site-main .button--primary,
 body .button--primary {
-  background: #1498ff;
-  border-color: #1498ff;
-  box-shadow: 0 3px 10px rgba(20, 152, 255, .16);
-  color: #fff;
+  background: #cbff4d;
+  border-color: #cbff4d;
+  box-shadow: 0 3px 10px rgba(146, 198, 37, .2);
+  color: #061c3c;
 }
 
 body .site-main .button--primary:hover:not(:disabled),
 body .button--primary:hover:not(:disabled) {
-  background: #0879cf;
-  border-color: #0879cf;
+  background: #b9f238;
+  border-color: #b9f238;
 }
 
 body .site-main .button--secondary,
