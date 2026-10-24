@@ -44,18 +44,10 @@ function safeReferrer(value) {
 export const createMississaugaRegistration = asyncHandler(async (req, res) => {
   if (req.site?.slug !== 'jooblie') throw new ApiError(404, 'This registration page is unavailable.', 'SITE_NOT_FOUND');
   const form = req.body;
-  const { data: prior, error: lookupError } = await serviceDb
-    .from('mississauga_registrations')
-    .select('id')
-    .eq('email', form.email)
-    .eq('phone_e164', form.phone_e164)
-    .limit(1);
-  if (lookupError) throw new ApiError(503, 'Registration is temporarily unavailable. Please try again.', 'REGISTRATION_UNAVAILABLE');
-
   const now = new Date().toISOString();
   const employerSharing = form.employer_sharing_consent === true;
   const marketing = form.marketing_consent === true;
-  const { data, error } = await serviceDb.from('mississauga_registrations').insert({
+  const payload = {
     full_name: form.full_name,
     email: form.email,
     phone_e164: form.phone_e164,
@@ -74,18 +66,26 @@ export const createMississaugaRegistration = asyncHandler(async (req, res) => {
       referrer: safeReferrer(form.source_context?.referrer),
       page_path: form.source_context?.page_path || '/mississauga/register',
     },
-  }).select('id').single();
-  if (error || !data?.id) throw new ApiError(503, 'Registration is temporarily unavailable. Please try again.', 'REGISTRATION_UNAVAILABLE');
+  };
+  const { data: result, error } = await serviceDb.rpc('upsert_mississauga_registration', { p_payload: payload });
+  const data = Array.isArray(result) ? result[0] : result;
+  if (error || !data?.registration_id) {
+    logger.error({ code: error?.code || 'REGISTRATION_UPSERT_FAILED' }, 'Mississauga registration save failed');
+    throw new ApiError(503, 'Registration is temporarily unavailable. Please try again.', 'REGISTRATION_UNAVAILABLE');
+  }
+  const duplicate = data.duplicate === true;
 
-  // The lead record is durable at this point. In-app alerts are best-effort so
-  // a notification service issue never tells a candidate their registration failed.
-  try {
-    await notifyAdminsOfMississaugaRegistration(serviceDb, data.id, req.site.id);
-  } catch (notificationError) {
-    logger.warn({ code: notificationError?.code || 'NOTIFICATION_FAILED' }, 'Mississauga registration admin notification failed');
+  // Only notify for the first record; an existing lead's repeat submission
+  // updates that record without creating another alert or queue entry.
+  if (!duplicate) {
+    try {
+      await notifyAdminsOfMississaugaRegistration(serviceDb, data.registration_id, req.site.id);
+    } catch (notificationError) {
+      logger.warn({ code: notificationError?.code || 'NOTIFICATION_FAILED' }, 'Mississauga registration admin notification failed');
+    }
   }
 
-  res.status(201).json({ accepted: true, record_id: data.id, duplicate: Boolean(prior?.length) });
+  res.status(201).json({ accepted: true, record_id: data.registration_id, duplicate });
 });
 
 export const listMississaugaRegistrations = asyncHandler(async (req, res) => {

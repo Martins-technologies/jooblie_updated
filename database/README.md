@@ -12,6 +12,8 @@ The application treats `jobs.origin_site_id` as provenance only. Public visibili
 
 `migrations/009_mississauga_registration_notification_type.sql` adds the notification enum value used to alert active administrators when a new landing-page lead is received. Apply it to the shared Supabase project before relying on registration notifications.
 
+`migrations/011_mississauga_registration_deduplication.sql` adds the atomic service-role RPC used by the registration endpoint. A repeat submission with the same normalized email **and** phone updates the newest matching intake row and returns `duplicate: true`; otherwise it creates a row. It does not delete or merge historical duplicate records, and a repeat with only one matching contact field is treated as a separate registration. Apply migration 011 before deploying the backend change that calls `upsert_mississauga_registration`.
+
 For recruiter signup/company bootstrap, also run `migrations/003_recruiter_company_binding.sql` and `migrations/004_recruiter_company_schema_compat.sql`. The compatibility migration ensures the company fields used by onboarding exist on older Jooblie schemas.
 
 ## Portal workflow integrity (migration 006)
