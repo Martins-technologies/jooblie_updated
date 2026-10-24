@@ -480,48 +480,48 @@ export default function PrivacyPage() {
                 <table className="terms-table">
                   <thead>
                     <tr>
-                      <th>Data Category</th>
-                      <th>Primary Use &amp; Purpose</th>
-                      <th>UK GDPR Lawful Basis</th>
-                      <th>Privacy Safeguard</th>
+                      <th scope="col">Data Category</th>
+                      <th scope="col">Primary Use &amp; Purpose</th>
+                      <th scope="col">UK GDPR Lawful Basis</th>
+                      <th scope="col">Privacy Safeguard</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td><strong>Candidate Profile &amp; CV</strong></td>
-                      <td>Job applications, recruiter matching, skills index</td>
-                      <td><span className="terms-table-badge">Contract / Consent</span></td>
-                      <td>Visible only to employers for applied roles or active search</td>
+                      <td data-label="Data Category"><strong>Candidate Profile &amp; CV</strong></td>
+                      <td data-label="Primary Use &amp; Purpose">Job applications, recruiter matching, skills index</td>
+                      <td data-label="UK GDPR Lawful Basis"><span className="terms-table-badge">Contract / Consent</span></td>
+                      <td data-label="Privacy Safeguard">Visible only to employers for applied roles or active search</td>
                     </tr>
                     <tr>
-                      <td><strong>Identity &amp; Right-to-Work</strong></td>
-                      <td>Statutory worker compliance and credential verification</td>
-                      <td><span className="terms-table-badge">Legal Obligation</span></td>
-                      <td>Encrypted transit &amp; storage; no biometric retention</td>
+                      <td data-label="Data Category"><strong>Identity &amp; Right-to-Work</strong></td>
+                      <td data-label="Primary Use &amp; Purpose">Statutory worker compliance and credential verification</td>
+                      <td data-label="UK GDPR Lawful Basis"><span className="terms-table-badge">Legal Obligation</span></td>
+                      <td data-label="Privacy Safeguard">Encrypted transit &amp; storage; no biometric retention</td>
                     </tr>
                     <tr>
-                      <td><strong>Shift Coordinates</strong></td>
-                      <td>Confirming on-site presence at clock-in/out moments</td>
-                      <td><span className="terms-table-badge">Contractual Necessity</span></td>
-                      <td>Point-in-time check only; no background tracking</td>
+                      <td data-label="Data Category"><strong>Shift Coordinates</strong></td>
+                      <td data-label="Primary Use &amp; Purpose">Confirming on-site presence at clock-in/out moments</td>
+                      <td data-label="UK GDPR Lawful Basis"><span className="terms-table-badge">Contractual Necessity</span></td>
+                      <td data-label="Privacy Safeguard">Point-in-time check only; no background tracking</td>
                     </tr>
                     <tr>
-                      <td><strong>Communications &amp; Messages</strong></td>
-                      <td>Interview coordination, customer support, audit trail</td>
-                      <td><span className="terms-table-badge">Legitimate Interests</span></td>
-                      <td>Encrypted in transit (TLS 1.3); restricted staff access</td>
+                      <td data-label="Data Category"><strong>Communications &amp; Messages</strong></td>
+                      <td data-label="Primary Use &amp; Purpose">Interview coordination, customer support, audit trail</td>
+                      <td data-label="UK GDPR Lawful Basis"><span className="terms-table-badge">Legitimate Interests</span></td>
+                      <td data-label="Privacy Safeguard">Encrypted in transit (TLS 1.3); restricted staff access</td>
                     </tr>
                     <tr>
-                      <td><strong>Technical &amp; Log Data</strong></td>
-                      <td>Bot defense, platform stability, fraud detection</td>
-                      <td><span className="terms-table-badge">Legitimate Interests</span></td>
-                      <td>Automated PII redaction (Pino); rolling 1-2 year retention</td>
+                      <td data-label="Data Category"><strong>Technical &amp; Log Data</strong></td>
+                      <td data-label="Primary Use &amp; Purpose">Bot defense, platform stability, fraud detection</td>
+                      <td data-label="UK GDPR Lawful Basis"><span className="terms-table-badge">Legitimate Interests</span></td>
+                      <td data-label="Privacy Safeguard">Automated PII redaction (Pino); rolling 1-2 year retention</td>
                     </tr>
                     <tr>
-                      <td><strong>Payment &amp; Billing Info</strong></td>
-                      <td>Subscription processing, VAT invoicing, accounting</td>
-                      <td><span className="terms-table-badge">Contract / Legal Duty</span></td>
-                      <td>Tokenized via PCI-DSS Level 1 provider (Stripe)</td>
+                      <td data-label="Data Category"><strong>Payment &amp; Billing Info</strong></td>
+                      <td data-label="Primary Use &amp; Purpose">Subscription processing, VAT invoicing, accounting</td>
+                      <td data-label="UK GDPR Lawful Basis"><span className="terms-table-badge">Contract / Legal Duty</span></td>
+                      <td data-label="Privacy Safeguard">Tokenized via PCI-DSS Level 1 provider (Stripe)</td>
                     </tr>
                   </tbody>
                 </table>
@@ -752,21 +752,21 @@ export default function PrivacyPage() {
                 <table className="terms-table">
                   <thead>
                     <tr>
-                      <th>Cookie Name</th>
-                      <th>Provider</th>
-                      <th>Category</th>
-                      <th>Purpose</th>
-                      <th>Duration</th>
+                      <th scope="col">Cookie Name</th>
+                      <th scope="col">Provider</th>
+                      <th scope="col">Category</th>
+                      <th scope="col">Purpose</th>
+                      <th scope="col">Duration</th>
                     </tr>
                   </thead>
                   <tbody>
                     {cookiesData.map((cookie) => (
                       <tr key={cookie.name}>
-                        <td><code>{cookie.name}</code></td>
-                        <td>{cookie.provider}</td>
-                        <td><span className="terms-table-badge">{cookie.category}</span></td>
-                        <td>{cookie.purpose}</td>
-                        <td>{cookie.duration}</td>
+                        <td data-label="Cookie Name"><code>{cookie.name}</code></td>
+                        <td data-label="Provider">{cookie.provider}</td>
+                        <td data-label="Category"><span className="terms-table-badge">{cookie.category}</span></td>
+                        <td data-label="Purpose">{cookie.purpose}</td>
+                        <td data-label="Duration">{cookie.duration}</td>
                       </tr>
                     ))}
                   </tbody>

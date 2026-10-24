@@ -9,3 +9,25 @@
 @media(max-width:700px){.employers-discovery-page>.employer-directory>.container,.employer-directory-closing>.container{width:calc(100% - 40px)}.employer-directory{padding:42px 0 12px}.employer-directory-heading{flex-direction:column;gap:16px}.employer-directory-toolbar{padding:13px}.employer-directory-search{flex-basis:100%}.employer-directory-filters{width:100%}.employer-directory-filters>button{flex:1;justify-content:center;padding-inline:8px}.employer-directory-closing{padding:22px 0 42px}.employer-directory-closing>.container{padding:25px 23px}.employer-directory-closing .button{white-space:normal}.employer-directory-note{padding-block:22px}.employer-directory-total{font-size:11px}}
 @media(max-width:580px){.employer-discovery-grid{grid-template-columns:minmax(0,1fr);gap:16px}.employer-discovery-card__link{padding:22px}.employer-discovery-description{min-height:0}.employer-discovery-context{min-height:0;padding-bottom:18px}.employer-discovery-card__identity{margin-bottom:0}.employer-discovery-card__footer{margin-top:0}.employer-directory-results-note{align-items:flex-start}.employer-directory-closing .button{width:100%;justify-content:center}.employer-directory-empty .button{width:100%;justify-content:center}}
 @media(prefers-reduced-motion:reduce){.employer-skeleton{animation:none}.employer-discovery-card,.employer-directory-filters>button{transition:none}}
+
+@media(max-width:600px){
+  .employer-directory-toolbar,.employer-directory-search,.employer-directory-filters,.employer-directory-empty{min-width:0;width:100%;}
+  .employer-directory-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}
+  .employer-directory-filters>button{min-width:0;gap:5px;padding:7px 8px;font-size:11px;white-space:nowrap;}
+  .employer-directory-filters>button>span{flex:0 0 21px;}
+  .employer-directory-results-note{flex-wrap:wrap;}
+  .employer-directory-results-note>button{margin-left:auto;}
+  .employer-directory-empty{padding:12px 12px 20px;}
+  .employer-directory-empty .empty-state{min-height:185px;padding:24px 14px 18px!important;}
+  .employer-directory-empty .empty-state h3,.employer-directory-empty .empty-state p{max-width:100%;overflow-wrap:anywhere;}
+  .employer-directory-note{align-items:flex-start;}
+  .employer-directory-note p,.employer-directory-closing>div{min-width:0;overflow-wrap:anywhere;}
+  .employer-discovery-card__footer{align-items:flex-start;}
+  .employer-opening-count,.employer-profile-action{max-width:100%;overflow-wrap:anywhere;}
+}
+@media(max-width:360px){
+  .employer-directory-filters{grid-template-columns:minmax(0,1fr);}
+  .employer-directory-filters>button{justify-content:space-between;font-size:12px;}
+  .employer-discovery-card__link{padding:18px;}
+  .employer-directory-closing>.container{padding:20px 17px;}
+}

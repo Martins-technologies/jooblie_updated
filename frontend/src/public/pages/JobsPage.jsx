@@ -780,6 +780,105 @@ export default function JobsPage() {
           color: #0f172a;
           font-weight: 700;
         }
+
+        @media (max-width: 600px) {
+          .jb-job-card {
+            min-width: 0;
+            padding: 16px 15px 14px;
+          }
+
+          .jb-card-top,
+          .jb-card-meta,
+          .jb-card-badges,
+          .jb-card-snippet,
+          .jb-card-footer {
+            min-width: 0;
+            max-width: 100%;
+          }
+
+          .jb-job-title {
+            display: block;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            line-height: 1.4;
+          }
+
+          .jb-company-location-row {
+            align-items: flex-start;
+            flex-wrap: wrap;
+            white-space: normal;
+            overflow: visible;
+            overflow-wrap: anywhere;
+            line-height: 1.5;
+          }
+
+          .jb-company-name,
+          .jb-location-text {
+            min-width: 0;
+            max-width: 100%;
+            white-space: normal;
+            overflow-wrap: anywhere;
+          }
+
+          .jb-card-badges {
+            align-items: flex-start;
+          }
+
+          .jb-badge {
+            max-width: 100%;
+            white-space: normal;
+            overflow-wrap: anywhere;
+          }
+
+          .jb-card-snippet p {
+            -webkit-line-clamp: 3;
+          }
+
+          .jb-card-footer {
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+          }
+
+          .jb-posted-info {
+            min-width: 0;
+            flex-wrap: wrap;
+            overflow-wrap: anywhere;
+          }
+
+          .jb-apply-cta {
+            margin-left: auto;
+          }
+
+          .jb-job-card > .job-share {
+            padding: 10px 0 0;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .jb-job-card {
+            padding: 14px 12px 12px;
+          }
+
+          .jb-card-top {
+            gap: 9px;
+          }
+
+          .jb-card-actions {
+            gap: 3px;
+          }
+
+          .jb-card-footer {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .jb-apply-cta {
+            margin-left: 0;
+            min-height: 38px;
+            justify-content: center;
+          }
+        }
       `}</style>
 
       {/* Hero Presentation */}

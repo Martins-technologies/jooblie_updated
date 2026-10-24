@@ -11,6 +11,7 @@ export default function ContactPage() {
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const [mailDraft, setMailDraft] = useState('');
   const pending = useRef(false);
   const form = useRef(null);
   const email = (import.meta.env.VITE_SUPPORT_EMAIL || 'Info@jooblie.com').trim();
@@ -31,6 +32,7 @@ export default function ContactPage() {
 
     setErrors(next);
     setStatus('');
+    setMailDraft('');
     if (Object.keys(next).length) {
       form.current.elements.namedItem(Object.keys(next)[0])?.focus();
       return;
@@ -47,13 +49,13 @@ export default function ContactPage() {
       if (!result.accepted) throw new Error('Message was not accepted. Please try again.');
       setStatus(`Your message was accepted for delivery to ${email}. Thank you for contacting Jooblie.`);
       form.current.reset();
-    } catch {
-      // Direct redirect to Info@jooblie.com via email client
+    } catch (error) {
       const subject = encodeURIComponent(data.subject);
       const body = encodeURIComponent(`From: ${data.name} <${data.email}>\n\n${data.message}`);
-      const mailtoUrl = `mailto:${email}?subject=${subject}&body=${body}`;
-      setStatus(`Redirecting to email (${email}). If your email client does not open, please use the email link below.`);
-      window.location.href = mailtoUrl;
+      setMailDraft(`mailto:${email}?subject=${subject}&body=${body}`);
+      setStatus(error?.code === 'CONTACT_NOT_CONFIGURED'
+        ? 'Automatic email delivery is not configured. Your message has not been sent.'
+        : 'We could not submit your message. It has not been sent.');
     } finally {
       pending.current = false;
       setBusy(false);
@@ -174,11 +176,11 @@ export default function ContactPage() {
             )}
 
             {status && (
-              <div role="status" style={{ color: '#059669', fontWeight: 600, margin: '6px 0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div role={mailDraft ? 'alert' : 'status'} style={{ color: mailDraft ? '#b42318' : '#059669', fontWeight: 600, margin: '6px 0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <p style={{ margin: 0 }}>{status}</p>
-                {status.includes('Redirecting') && (
-                  <a href={`mailto:${email}`} style={{ fontSize: '13px', color: '#0769fd', textDecoration: 'underline' }}>
-                    Click here to send email directly to {email}
+                {mailDraft && (
+                  <a href={mailDraft} style={{ fontSize: '13px', color: '#0769fd', textDecoration: 'underline' }}>
+                    Open an email draft to {email}; review it and press Send.
                   </a>
                 )}
               </div>

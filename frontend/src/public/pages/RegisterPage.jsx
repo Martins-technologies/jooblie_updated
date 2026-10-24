@@ -1037,22 +1037,112 @@ export default function RegisterPage() {
 
         @media (max-width: 640px) {
           .jb-app-nav {
-            padding: 16px 20px;
+            width: 100%;
+            gap: 12px;
+            padding: 12px 16px;
           }
 
           .jb-app-workspace {
-            padding: 10px 20px 30px;
+            width: 100%;
+            padding: 4px 16px 24px;
+          }
+
+          .jb-app-auth,
+          .jb-app-stage,
+          .jb-visual-panel,
+          .jb-card-panel,
+          .jb-auth-card {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+          }
+
+          .jb-app-stage {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 16px;
+            align-items: stretch;
+          }
+
+          .jb-visual-panel {
+            padding: 0;
+          }
+
+          .jb-headline-wrap {
+            margin-bottom: 0;
+          }
+
+          .jb-hero-title {
+            font-size: clamp(26px, 8vw, 32px);
+            line-height: 1.16;
+          }
+
+          .jb-hero-desc {
+            margin-top: 6px;
+            font-size: 13px;
+            line-height: 1.5;
+          }
+
+          .jb-visual-frame,
+          .jb-badges-bar,
+          .jb-dot-matrix,
+          .jb-ambient-glow {
+            display: none;
+          }
+
+          .jb-card-panel {
+            justify-content: stretch;
           }
 
           .jb-auth-card {
-            padding: 28px 20px;
-            border-radius: 20px;
+            padding: 22px 18px;
+            border-radius: 18px;
           }
 
-          .jb-badges-bar {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 10px;
+          .jb-card-head {
+            margin-bottom: 16px;
+          }
+
+          .jb-card-heading {
+            font-size: 20px;
+            line-height: 1.3;
+          }
+
+          .jb-card-subtext,
+          .jb-field-label,
+          .jb-auth-card p,
+          .jb-auth-card a,
+          .jb-auth-card button {
+            overflow-wrap: anywhere;
+          }
+
+          .jb-nav-back {
+            min-width: 0;
+            max-width: 145px;
+            flex-shrink: 1;
+            gap: 6px;
+            padding: 8px 10px;
+            font-size: 12px;
+          }
+
+        }
+
+        @media (max-width: 380px) {
+          .jb-app-nav {
+            padding-inline: 12px;
+            gap: 8px;
+          }
+
+          .jb-app-workspace {
+            padding-inline: 12px;
+          }
+
+          .jb-auth-card {
+            padding: 20px 15px;
+          }
+
+          .jb-nav-back {
+            max-width: 132px;
+            padding-inline: 8px;
           }
         }
       `}</style>
