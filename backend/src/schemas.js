@@ -6,7 +6,10 @@ const optionalNumber = z.preprocess(
   (value) => value === '' ? null : value,
   z.union([z.coerce.number().nonnegative(), z.null()]),
 ).optional();
-const audienceSite = z.enum(['aboriginal', 'newcomers']);
+const audienceSite = z.string().trim().min(1).max(80).regex(/^[a-z0-9][a-z0-9-]*$/);
+const audienceSites = z.array(audienceSite).max(50).refine((sites) => new Set(sites).size === sites.length, {
+  message: 'Choose each audience portal only once.',
+});
 const employmentType = z.enum(['full_time', 'part_time', 'contract', 'temporary', 'internship', 'seasonal']);
 const salaryPeriod = z.enum(['hourly', 'weekly', 'monthly', 'yearly']);
 const workplaceType = z.enum(['onsite', 'hybrid', 'remote']);
@@ -91,7 +94,7 @@ export const jobCreateSchema = z.object({
   employment_type: employmentType,
   skills: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
   description: z.string().trim().min(20).max(30_000),
-  audience_sites: z.array(audienceSite).max(2).default([]),
+  audience_sites: audienceSites.default([]),
 }).superRefine((value, ctx) => {
   if (value.salary_min != null && value.salary_max != null && value.salary_max < value.salary_min) {
     ctx.addIssue({
@@ -117,7 +120,7 @@ export const jobUpdateSchema = z.object({
   employment_type: employmentType.optional(),
   skills: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
   description: z.string().trim().min(20).max(30_000).optional(),
-  audience_sites: z.array(audienceSite).max(2).optional(),
+  audience_sites: audienceSites.optional(),
   status: z.enum(['pending_review', 'active', 'closed']).optional(),
 });
 

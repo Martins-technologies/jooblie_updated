@@ -70,6 +70,15 @@ policies in the preflight. Notification preferences use a service-role-only RLS
 table with the existing three email flags; this persists preferences and does not
 implement email delivery.
 
+## Dynamic portal targeting (migration 010)
+
+`migrations/010_dynamic_job_audiences.sql` lets recruiters choose any active,
+configured portal as an additional audience. Jooblie and the job's source portal
+remain automatic destinations; category mappings continue to apply. Apply this
+migration after the earlier migrations (001–009) before deploying the dynamic `/recruiter/portals` selector.
+The admin portal directory remains at `/admin/portals`, and the admin job detail
+view shows each destination currently mapped to that job.
+
 ### Isolated SQL tests
 
 `tests/006_portal_workflow_integrity.test.mjs` runs actual PostgreSQL using PGlite

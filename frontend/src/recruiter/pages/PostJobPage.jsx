@@ -10,15 +10,9 @@ import {
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import { apiRequest } from '../../shared/lib/api';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
-import { SITE_SLUG } from '../../shared/config/site';
 import { applyFormErrors, validateForm } from '../../shared/lib/formValidation';
 import { getFieldErrors, extractErrorMessage } from '../../shared/lib/errors';
 import { jobPayload, validateJobForm } from '../../shared/lib/jobForm';
-
-const audiencePortals = [
-  { slug: 'aboriginal', label: 'Aboriginal Jobline' },
-  { slug: 'newcomers', label: 'Newcomer Jobline' },
-];
 
 const emptyForm = {
   title: '', category_id: '', workplace_type: 'onsite', employment_type: 'full_time',
@@ -33,6 +27,8 @@ export default function PostJobPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState([]);
+  const [audiencePortals, setAudiencePortals] = useState([]);
+  const [audiencePortalsError, setAudiencePortalsError] = useState('');
   const [company, setCompany] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const formRef = useRef(null);
@@ -52,6 +48,12 @@ export default function PostJobPage() {
         const companies = companyRes?.items || [];
         if (!companies.length) throw new Error('No company is linked to your recruiter account. Please contact support.');
         setCompany(companies[0]);
+        try {
+          const portalsRes = await apiRequest('/recruiter/portals', { auth: true, notifyError: false });
+          if (mounted) setAudiencePortals(portalsRes?.items || []);
+        } catch {
+          if (mounted) setAudiencePortalsError('Additional portals could not be loaded. You can still publish to Jooblie and this portal.');
+        }
       } catch (err) {
         if (mounted) setError(err.message || 'Could not load your recruiter profile.');
       } finally {
@@ -143,17 +145,19 @@ export default function PostJobPage() {
 
             <Field label="Required skills" icon={<Wrench size={16} />} hint="Separate skills with commas"><input name="skills" value={form.skills} onChange={handleChange} placeholder="React, Node.js, TypeScript, PostgreSQL" /></Field>
             <fieldset style={{ border: '1px solid #dbe4ef', borderRadius: 10, padding: '1rem' }}>
-              <legend style={{ fontWeight: 700 }}>Additional audience portals</legend>
-              <p style={{ margin: '0 0 12px', color: '#6b7280' }}>Your job also appears on its origin portal, Jooblie, and matching category portals.</p>
-              {audiencePortals.map(({ slug, label }) => (
+              <legend style={{ fontWeight: 700 }}>Where should this job appear?</legend>
+              <p style={{ margin: '0 0 12px', color: '#6b7280' }}>Jooblie and this portal are included automatically. Matching category portals may also display the job. Select any other active portals where you want it listed.</p>
+              {audiencePortalsError && <div className="admin-note" role="status">{audiencePortalsError}</div>}
+              {!audiencePortalsError && !audiencePortals.length && <p style={{ margin: 0, color: '#6b7280' }}>No additional active portals are available.</p>}
+              {audiencePortals.map(({ slug, name, domain }) => (
                 <label key={slug} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-                  <input type="checkbox" checked={slug === SITE_SLUG || form.audience_sites.includes(slug)} disabled={slug === SITE_SLUG} onChange={(event) => {
+                  <input type="checkbox" checked={form.audience_sites.includes(slug)} onChange={(event) => {
                     const checked = event.target.checked;
                     setForm((current) => ({ ...current, audience_sites: checked
-                      ? [...current.audience_sites, slug]
+                      ? [...new Set([...current.audience_sites, slug])]
                       : current.audience_sites.filter((value) => value !== slug) }));
                   }} />
-                  {label}{slug === SITE_SLUG ? ' (origin portal)' : ''}
+                  <span><strong>{name}</strong>{domain && <small style={{ display: 'block', color: '#6b7280' }}>{domain}</small>}</span>
                 </label>
               ))}
             </fieldset>

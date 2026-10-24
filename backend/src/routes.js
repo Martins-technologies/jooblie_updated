@@ -101,6 +101,7 @@ recruiter.use(requireAuth, requireRole('recruiter', 'admin'));
 recruiter.use(siteContext);
 recruiter.get('/dashboard', recruiterController.dashboard);
 recruiter.get('/companies', recruiterController.listCompanies);
+recruiter.get('/portals', recruiterController.listAudiencePortals);
 recruiter.post('/companies', writeLimiter, validate(companySchema), recruiterController.createCompany);
 recruiter.patch('/companies/:companyId', writeLimiter, validate(companyUpdateSchema), recruiterController.updateCompany);
 recruiter.post('/jobs', writeLimiter, validate(jobCreateSchema), recruiterController.createJob);

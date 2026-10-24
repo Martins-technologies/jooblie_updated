@@ -27,6 +27,19 @@ async function assertCompanyAccess(userId, companyId) {
 
 const companySelectFields = 'id,name,website,registration_number,verification_document_path,logo_path,description,verification_status,status,created_at';
 
+export const listAudiencePortals = asyncHandler(async (req, res) => {
+  const { data, error } = await serviceDb
+    .from('sites')
+    .select('id,slug,name,domain,site_type,sectors:sector_id(name)')
+    .eq('is_active', true)
+    .neq('slug', 'jooblie')
+    .neq('id', req.site.id)
+    .order('name');
+
+  if (error) throw new ApiError(500, 'Audience portals could not be loaded.', 'AUDIENCE_PORTALS_FAILED');
+  res.json({ items: data || [] });
+});
+
 const editableCompanyFields = [
   'name',
   'website',
