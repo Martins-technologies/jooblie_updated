@@ -5,6 +5,10 @@
       "destination": "https://jooblie-3d-landing.vercel.app/api/registrations"
     },
     {
+      "source": "/mississauga/:path*",
+      "destination": "https://jooblie-3d-landing.vercel.app/mississauga/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/"
     }
