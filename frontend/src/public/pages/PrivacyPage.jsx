@@ -58,13 +58,6 @@ const cookiesData = [
     duration: '13 months',
   },
   {
-    name: '_fbp (where set)',
-    provider: 'Meta Pixel',
-    category: 'Marketing',
-    purpose: 'Measures campaign visits and completed registrations only after marketing consent',
-    duration: 'Provider and browser settings may vary',
-  },
-  {
     name: 'ph_phc_*_posthog',
     provider: 'PostHog (EU)',
     category: 'Analytics',
@@ -458,9 +451,6 @@ export default function PrivacyPage() {
                   <strong>Privacy-Preserving Telemetry:</strong> Aggregated page view analytics and job discovery metrics use de-identified fingerprinting to count listing views without persistently profiling individual visitors.
                 </li>
                 <li>
-                  <strong>Mississauga Campaign Measurement:</strong> When enabled and after the visitor's separate opt-in, the Mississauga registration page may use Google Analytics and Meta Pixel to measure page views, form activity, and completed registrations. These tools receive event names and page paths, not registration form values, job interests, or contact details. Their providers may still receive browser or network metadata as described in their own privacy notices. Visitors can change this choice through the campaign page's Privacy choices control.
-                </li>
-                <li>
                   <strong>Automated Log Redaction:</strong> Application log pipelines (powered by Pino redaction standards) sanitize database queries and error dumps, ensuring authorization tokens, passwords, and sensitive PII are never written to diagnostic log files.
                 </li>
                 <li>
@@ -755,7 +745,7 @@ export default function PrivacyPage() {
             </div>
             <div className="terms-section__content">
               <p>
-                Essential storage required for platform functionality is always active. Non-essential analytical and marketing tools on the Mississauga campaign page load only after the visitor opts in. You can change the campaign-page choice using its Privacy choices control. Cookie names and retention can vary by provider, configuration and browser.
+                Essential cookies required for platform functionality are always active. Non-essential analytical and functional cookies load only if you provide consent through our cookie preferences banner.
               </p>
 
               <div className="terms-table-wrapper">

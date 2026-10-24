@@ -22,9 +22,6 @@ const CategoriesPage = lazy(()=>import('./public/pages/CategoriesPage'));
 const CompaniesPage = lazy(()=>import('./public/pages/CompaniesPage'));
 const CompanyDetailPage = lazy(()=>import('./public/pages/CompanyDetailPage'));
 const ResourcesPage = lazy(()=>import('./public/pages/ResourcesPage'));
-const MississaugaLayout = lazy(()=>import('./public/pages/MississaugaLayout'));
-const MississaugaRegisterPage = lazy(()=>import('./public/pages/MississaugaRegisterPage'));
-const MississaugaThankYouPage = lazy(()=>import('./public/pages/MississaugaThankYouPage'));
 
 // --- Auth Pages ---
 import SignInPage from './public/pages/SignInPage';
@@ -83,12 +80,6 @@ export default function App() {
       <Route path="register" element={<GuestOnlyRoute><RegisterPage /></GuestOnlyRoute>} />
       <Route path="forgot-password" element={<GuestOnlyRoute><ForgotPasswordPage /></GuestOnlyRoute>} />
       <Route path="reset-password" element={<ResetPasswordPage />} />
-
-      {/* Mississauga campaign landing page and confirmation */}
-      <Route path="mississauga" element={<MississaugaLayout />}>
-        <Route path="register" element={<MississaugaRegisterPage />} />
-        <Route path="thank-you" element={<MississaugaThankYouPage />} />
-      </Route>
 
 
       {/* =====================================================
