@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, BriefcaseBusiness, Users, Activity, Globe2, RefreshCw } from 'lucide-react';
 import DashboardLayout from '../../shared/components/DashboardLayout';
 import {StatusBadge} from '../../shared/components/WorkspaceCards';
-import { safeWebsite } from '../utils/presentation';
+import { safePortalWebsite } from '../utils/presentation';
 import { apiRequest } from '../../shared/lib/api';
 
 const pretty = (value) => String(value || '').replaceAll('_', ' ');
@@ -27,15 +27,17 @@ export default function AdminPortalDetailPage() {
 
   useEffect(() => { const controller = new AbortController(); load(controller.signal); return () => controller.abort(); }, [load]);
   const portal = state.data?.portal;
+  const publicUrl = safePortalWebsite(portal?.domain);
   const metrics = state.data?.metrics || {};
 
   return (
-    <DashboardLayout title={portal ? portal.name : 'Portal'} subtitle={portal ? `Operational data and activity for ${portal.slug}.` : 'Loading portal data...'} actions={safeWebsite(portal?.domain) ? <a className="button button--secondary" href={safeWebsite(portal.domain)} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Open Portal</a> : null}>
+    <DashboardLayout title={portal ? portal.name : 'Portal'} subtitle={portal ? `Operational data and activity for ${portal.slug}.` : 'Loading portal data...'} actions={publicUrl ? <a className="button button--secondary" href={publicUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Open Portal</a> : null}>
       <div style={{ marginBottom: 16 }}><Link to="/admin/portals" className="button button--secondary"><ArrowLeft size={16} /> Back to portal directory</Link></div>
       {state.error && <div className="error-banner" role="alert">{state.error} <button type="button" onClick={load}>Try again</button></div>}
       {state.loading ? <SkeletonContent variant="dashboard" label="Loading portal data..." /> : portal && (
         <div style={{ display: 'grid', gap: 18 }}>
           <div className="admin-note">This is a configured portal record. Enabled status does not confirm website uptime or deployment health. The lists below show up to 25 mapped jobs and 30 recent events.</div>
+          {!publicUrl && <div className="admin-note" role="status">Set an approved public domain for this portal before opening its website. The stored domain is missing, invalid or a placeholder.</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14 }}>
             <Metric icon={Globe2} label="Configuration" value={portal.is_active ? 'Enabled' : 'Disabled'} />
             <Metric icon={BriefcaseBusiness} label="Jobs" value={metrics.jobs} />

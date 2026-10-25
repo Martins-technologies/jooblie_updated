@@ -31,11 +31,13 @@ import * as seekerController from './controllers/jobSeeker.controller.js';
 import * as recruiterController from './controllers/recruiter.controller.js';
 import * as adminController from './controllers/admin.controller.js';
 import * as registrationController from './controllers/registration.controller.js';
+import { createDeliveryWorkerHandler } from './controllers/registrationDelivery.controller.js';
 import { createNotificationHandlers } from './controllers/notifications.controller.js';
 import { z } from 'zod';
 import { serviceDb, publicDb } from './config/supabase.js';
 
 const router = Router();
+router.post('/internal/registration-deliveries', createDeliveryWorkerHandler({ db: serviceDb }));
 router.post('/public/contact',rateLimit({windowMs:900000,max:5,standardHeaders:true,legacyHeaders:false}),validate(contactSchema),asyncHandler(async(req,res)=>{await deliverContact(req.body,{key:process.env.RESEND_API_KEY,from:process.env.CONTACT_FROM_EMAIL,to:process.env.CONTACT_TO_EMAIL||'Info@jooblie.com'});res.status(202).json({accepted:true});}));
 const notifications = createNotificationHandlers(serviceDb);
 router.get('/notifications', requireAuth, notifications.list);
