@@ -8,7 +8,7 @@ const validPayload = {
   phone_e164: '+14165550123',
   current_city: 'Mississauga',
   employment_goal: 'Find a job',
-  privacy_acknowledged: true,
+  terms_accepted: true,
 };
 
 test('normalizes public registrations and defaults optional consent to false', () => {
@@ -16,12 +16,13 @@ test('normalizes public registrations and defaults optional consent to false', (
   assert.equal(parsed.full_name, 'Jane Candidate');
   assert.equal(parsed.email, 'jane@example.com');
   assert.equal(parsed.employer_sharing_consent, false);
-  assert.equal(parsed.marketing_consent, false);
+  assert.equal(parsed.sms_marketing_consent, false);
+  assert.equal(parsed.email_marketing_consent, false);
   assert.deepEqual(parsed.source_context, {});
 });
 
-test('requires the privacy acknowledgment and a valid E.164 phone', () => {
-  assert.equal(mississaugaRegistrationSchema.safeParse({ ...validPayload, privacy_acknowledged: false }).success, false);
+test('requires legal acceptance and a valid E.164 phone', () => {
+  assert.equal(mississaugaRegistrationSchema.safeParse({ ...validPayload, terms_accepted: false }).success, false);
   assert.equal(mississaugaRegistrationSchema.safeParse({ ...validPayload, phone_e164: '4165550123' }).success, false);
 });
 
@@ -32,6 +33,7 @@ test('keeps optional consent independent and rejects unexpected fields', () => {
     source_context: { utm_source: 'instagram', referrer: 'https://example.com/campaign?email=private@example.com' },
   });
   assert.equal(parsed.employer_sharing_consent, true);
-  assert.equal(parsed.marketing_consent, false);
+  assert.equal(parsed.sms_marketing_consent, false);
+  assert.equal(parsed.email_marketing_consent, false);
   assert.equal(mississaugaRegistrationSchema.safeParse({ ...validPayload, password: 'not-needed' }).success, false);
 });

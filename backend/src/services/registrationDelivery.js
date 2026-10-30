@@ -44,11 +44,11 @@ export async function runRegistrationDeliveries({ db, env = process.env, fetcher
         if (leadError || !lead) throw new Error('REGISTRATION_LOOKUP_FAILED');
         url = httpsEndpoint(env.MISSISSAUGA_CRM_WEBHOOK_URL);
         headers = { Authorization: `Bearer ${env.MISSISSAUGA_CRM_WEBHOOK_TOKEN}`, 'Idempotency-Key': idempotencyKey };
-        const { id, full_name, email, phone_e164, current_city, employment_goal, preferred_industry, privacy_acknowledged, privacy_acknowledged_at, employer_sharing_consent, employer_sharing_consent_at, marketing_consent, marketing_consent_at, consent_version, source_context, created_at, updated_at } = lead;
+        const { id, full_name, email, phone_e164, current_city, employment_goal, preferred_industry, terms_accepted, terms_accepted_at, privacy_acknowledged, privacy_acknowledged_at, employer_sharing_consent, employer_sharing_consent_at, sms_marketing_consent, sms_marketing_consent_at, email_marketing_consent, email_marketing_consent_at, consent_version, consent_text_snapshot, source_context, created_at, updated_at } = lead;
         body = { schema_version: 1, delivery_id: job.id, event_id: createHash('sha256').update(`mississauga-registration:${id}`).digest('hex'),
           tags: ['Mississauga Launch', 'Job Seeker'],
           routing: { pipeline_id: env.MISSISSAUGA_CRM_PIPELINE_ID || null, stage_id: env.MISSISSAUGA_CRM_STAGE_ID || null, owner_id: env.MISSISSAUGA_CRM_OWNER_ID || null },
-          registration: { id, full_name, email, phone_e164, current_city, employment_goal, preferred_industry, privacy_acknowledged, privacy_acknowledged_at, employer_sharing_consent, employer_sharing_consent_at, marketing_consent, marketing_consent_at, consent_version, source_context, created_at, updated_at } };
+          registration: { id, full_name, email, phone_e164, current_city, employment_goal, preferred_industry, terms_accepted, terms_accepted_at, privacy_acknowledged, privacy_acknowledged_at, employer_sharing_consent, employer_sharing_consent_at, sms_marketing_consent, sms_marketing_consent_at, email_marketing_consent, email_marketing_consent_at, consent_version, consent_text_snapshot, source_context, created_at, updated_at } };
       }
       const response = await fetcher(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000), headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const receipt = await response.json().catch(() => ({}));

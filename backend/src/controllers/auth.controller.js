@@ -95,6 +95,9 @@ export const signUp = asyncHandler(async (req, res) => {
   if (!signupSiteId) {
     throw new ApiError(400, 'Signup site is not configured.', 'SIGNUP_SITE_REQUIRED');
   }
+  if (req.site.slug === 'jooblie' && req.body.terms_accepted !== true) {
+    throw new ApiError(400, 'Please agree to the Terms and acknowledge the Privacy Policy.', 'TERMS_ACCEPTANCE_REQUIRED');
+  }
 
   if (req.body.role === 'recruiter') {
     const companyName = req.body.company_name.trim();
@@ -159,6 +162,9 @@ export const signUp = asyncHandler(async (req, res) => {
 
   const userId = data.user.id;
   let companyId = null;
+  const consentAcceptedAt = new Date().toISOString();
+  const termsVersion = '2026-10-30';
+  const consentCopy = 'I have read and agree to Jooblie’s Terms and Conditions and acknowledge the Privacy Policy. I understand that Jooblie does not charge job seekers for recruitment or employer introductions and does not guarantee employment, interviews, work permits, LMIAs or permanent residence.';
 
   try {
     const { data: existingProfile, error: profileLookupError } = await serviceDb
@@ -232,6 +238,13 @@ export const signUp = asyncHandler(async (req, res) => {
       email: req.body.email,
       full_name: req.body.name,
       signup_site_id: signupSiteId,
+      ...(req.body.terms_accepted ? {
+        terms_accepted_at: consentAcceptedAt,
+        terms_version: termsVersion,
+        privacy_acknowledged_at: consentAcceptedAt,
+        privacy_version: termsVersion,
+        consent_text_snapshot: { required_acceptance: consentCopy },
+      } : {}),
       ...(companyId ? { recruiter_company_id: companyId } : {}),
     };
 
@@ -244,6 +257,11 @@ export const signUp = asyncHandler(async (req, res) => {
           email: profilePayload.email,
           full_name: profilePayload.full_name,
           signup_site_id: profilePayload.signup_site_id,
+          terms_accepted_at: profilePayload.terms_accepted_at,
+          terms_version: profilePayload.terms_version,
+          privacy_acknowledged_at: profilePayload.privacy_acknowledged_at,
+          privacy_version: profilePayload.privacy_version,
+          consent_text_snapshot: profilePayload.consent_text_snapshot,
           ...(companyId ? { recruiter_company_id: companyId } : {}),
         })
         .eq('id', userId);

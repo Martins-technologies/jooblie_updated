@@ -38,6 +38,7 @@ const groups = [
       ['Contact Support', '/contact'],
       ['Terms of Use', '/terms'],
       ['Privacy Policy', '/privacy'],
+      ['Employer Refund Policy', '/refund-policy'],
     ],
   },
 ];

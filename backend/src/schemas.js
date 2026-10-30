@@ -38,9 +38,10 @@ export const mississaugaRegistrationSchema = z.object({
     'Manufacturing & Warehousing', 'Retail & Customer Service',
     'Transportation & Logistics', 'Other', 'Open to any industry',
   ]).nullable().optional(),
-  privacy_acknowledged: z.literal(true),
+  terms_accepted: z.literal(true),
   employer_sharing_consent: z.boolean().default(false),
-  marketing_consent: z.boolean().default(false),
+  sms_marketing_consent: z.boolean().default(false),
+  email_marketing_consent: z.boolean().default(false),
   source_context: z.object({
     page_path: z.string().max(200).optional(),
     referrer: z.string().max(1000).nullable().optional(),
@@ -65,6 +66,7 @@ export const authSignUpSchema = z.object({
   company_name: optionalText(180),
   company_website: optionalUrl,
   company_registration_number: optionalText(180),
+  terms_accepted: z.boolean().optional().default(false),
 }).superRefine((value, ctx) => {
   if (value.role === 'recruiter') {
     if (!value.company_name || !String(value.company_name).trim()) {

@@ -35,6 +35,7 @@ const ContactPage = lazy(()=>import('./public/pages/ContactPage'));
 const HelpPage = lazy(()=>import('./public/pages/HelpPage'));
 const PrivacyPage = lazy(()=>import('./public/pages/PrivacyPage'));
 const TermsPage = lazy(()=>import('./public/pages/TermsPage'));
+const RefundPolicyPage = lazy(()=>import('./public/pages/RefundPolicyPage'));
 
 // --- Dashboards ---
 const JobSeekerDashboardPage = lazy(()=>import('./seeker/pages/JobSeekerDashboardPage'));
@@ -114,6 +115,7 @@ export default function App() {
         <Route path="privacy" element={<PrivacyPage />} />
         <Route path="privacy-policy" element={<PrivacyPage />} />
         <Route path="terms" element={<TermsPage />} />
+        <Route path="refund-policy" element={<RefundPolicyPage />} />
       </Route>
 
 

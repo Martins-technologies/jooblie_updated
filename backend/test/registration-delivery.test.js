@@ -10,7 +10,7 @@ function database(jobs) {
   return {
     finished,
     async rpc(name, args) { if (name === 'claim_mississauga_deliveries') return { data: jobs }; finished.push(args); return { data: true }; },
-    from() { return { select() { return this; }, eq() { return this; }, async single() { return { data: { id: 'lead-1', full_name: 'Test Person', email: 'test@example.test', employer_sharing_consent: false, marketing_consent: false, updated_at: new Date(now).toISOString() } }; } }; },
+    from() { return { select() { return this; }, eq() { return this; }, async single() { return { data: { id: 'lead-1', full_name: 'Test Person', email: 'test@example.test', employer_sharing_consent: false, sms_marketing_consent: false, email_marketing_consent: false, updated_at: new Date(now).toISOString() } }; } }; },
   };
 }
 
@@ -32,7 +32,8 @@ test('CRM webhook requires a durable receipt and carries separate false consent 
   assert.equal(result.delivered, 1);
   assert.deepEqual(payload.tags, ['Mississauga Launch', 'Job Seeker']);
   assert.equal(payload.registration.employer_sharing_consent, false);
-  assert.equal(payload.registration.marketing_consent, false);
+  assert.equal(payload.registration.sms_marketing_consent, false);
+  assert.equal(payload.registration.email_marketing_consent, false);
   assert.match(payload.event_id, /^[a-f0-9]{64}$/);
   assert.equal(db.finished[0].p_provider_id, 'crm-record');
 });

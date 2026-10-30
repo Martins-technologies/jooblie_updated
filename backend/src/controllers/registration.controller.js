@@ -46,7 +46,12 @@ export const createMississaugaRegistration = asyncHandler(async (req, res) => {
   const form = req.body;
   const now = new Date().toISOString();
   const employerSharing = form.employer_sharing_consent === true;
-  const marketing = form.marketing_consent === true;
+  const smsMarketing = form.sms_marketing_consent === true;
+  const emailMarketing = form.email_marketing_consent === true;
+  const termsText = 'I have read and agree to Jooblie’s Terms and Conditions and acknowledge the Privacy Policy. I understand that Jooblie does not charge job seekers for recruitment or employer introductions and does not guarantee employment, interviews, work permits, LMIAs or permanent residence.';
+  const employerSharingText = 'I agree that Jooblie may share relevant information from my job seeker profile with potential employers for employment matching. I understand I can withdraw this permission by contacting Jooblie.';
+  const smsText = 'I agree to receive marketing and promotional SMS/MMS messages from Jooblie, a recruitment-service division of Clarity Campus / 17617275 Canada Society, at the mobile number I provide. Messages may include job campaigns, hiring events, employer opportunities, recruitment updates, service announcements and promotional offers. Message frequency varies. Message and data rates may apply. Consent is voluntary and is not required for job-seeker registration, free recruitment support or employment consideration. I can unsubscribe at any time by replying STOP to a text or emailing info@jooblie.com. Reply HELP where supported for help. See the Privacy Policy and Terms and Conditions.';
+  const emailText = 'I would like to receive Jooblie promotional emails about hiring campaigns, recruitment services, job events and employer opportunities. I understand I can unsubscribe using the link in any promotional email or by contacting info@jooblie.com. My decision will not affect free job-seeker recruitment assistance.';
   const payload = {
     full_name: form.full_name,
     email: form.email,
@@ -54,13 +59,23 @@ export const createMississaugaRegistration = asyncHandler(async (req, res) => {
     current_city: form.current_city,
     employment_goal: form.employment_goal,
     preferred_industry: form.preferred_industry || null,
+    terms_accepted: true,
+    terms_accepted_at: now,
     privacy_acknowledged: true,
     privacy_acknowledged_at: now,
     employer_sharing_consent: employerSharing,
     employer_sharing_consent_at: employerSharing ? now : null,
-    marketing_consent: marketing,
-    marketing_consent_at: marketing ? now : null,
-    consent_version: 'mississauga-registration-v1',
+    sms_marketing_consent: smsMarketing,
+    sms_marketing_consent_at: smsMarketing ? now : null,
+    email_marketing_consent: emailMarketing,
+    email_marketing_consent_at: emailMarketing ? now : null,
+    consent_version: 'mississauga-registration-2026-10-30-v1',
+    consent_text_snapshot: {
+      required_acceptance: termsText,
+      employer_sharing: employerSharingText,
+      sms_marketing: smsText,
+      email_marketing: emailText,
+    },
     source_context: {
       ...form.source_context,
       referrer: safeReferrer(form.source_context?.referrer),
@@ -96,7 +111,7 @@ export const listMississaugaRegistrations = asyncHandler(async (req, res) => {
   );
   let query = serviceDb
     .from('mississauga_registrations')
-    .select('id,full_name,email,phone_e164,current_city,employment_goal,preferred_industry,privacy_acknowledged,privacy_acknowledged_at,employer_sharing_consent,employer_sharing_consent_at,marketing_consent,marketing_consent_at,consent_version,source_context,status,assigned_to,created_at,updated_at,assignee:profiles!mississauga_registrations_assigned_to_fkey(id,full_name,email)', { count: 'exact' })
+    .select('id,full_name,email,phone_e164,current_city,employment_goal,preferred_industry,terms_accepted,terms_accepted_at,privacy_acknowledged,privacy_acknowledged_at,employer_sharing_consent,employer_sharing_consent_at,sms_marketing_consent,sms_marketing_consent_at,email_marketing_consent,email_marketing_consent_at,consent_version,consent_text_snapshot,source_context,status,assigned_to,created_at,updated_at,assignee:profiles!mississauga_registrations_assigned_to_fkey(id,full_name,email)', { count: 'exact' })
     .order(sort, { ascending })
     .order('id');
   if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,current_city.ilike.%${search}%`);

@@ -14,6 +14,10 @@ The application treats `jobs.origin_site_id` as provenance only. Public visibili
 
 `migrations/011_mississauga_registration_deduplication.sql` adds the atomic service-role RPC used by the registration endpoint. A repeat submission with the same normalized email **and** phone updates the newest matching intake row and returns `duplicate: true`; otherwise it creates a row. It does not delete or merge historical duplicate records, and a repeat with only one matching contact field is treated as a separate registration. Apply migration 011 before deploying the backend change that calls `upsert_mississauga_registration`.
 
+`migrations/012_mississauga_delivery_outbox.sql` must be applied before migration 013 because 013 updates the outbox trigger to include the new consent fields. Migration 012 remains a separate reviewed delivery change; do not enable receipt or CRM delivery until its provider settings and worker schedule have been approved and configured.
+
+`migrations/013_policy_consent_records.sql` adds separate terms/privacy acceptance timestamps and consent-copy snapshots to profiles, plus separate required terms, employer-sharing, promotional SMS, and promotional email records for Mississauga registrations. Historical rows are not marked as accepting the new terms or as opting into either marketing channel. Apply 013 after 012 and before deploying the matching API and frontend changes. This migration is prepared locally only; it has not been run against Supabase.
+
 For recruiter signup/company bootstrap, also run `migrations/003_recruiter_company_binding.sql` and `migrations/004_recruiter_company_schema_compat.sql`. The compatibility migration ensures the company fields used by onboarding exist on older Jooblie schemas.
 
 ## Portal workflow integrity (migration 006)
