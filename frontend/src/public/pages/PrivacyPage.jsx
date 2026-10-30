@@ -1,9 +1,14 @@
-import PolicyDocumentPage from './PolicyDocumentPage';
+import LegalPolicyPage from './LegalPolicyPage';
 
 export default function PrivacyPage() {
-  return <PolicyDocumentPage
-    title="Privacy Policy"
-    description="Read how Jooblie collects, uses, shares, and protects personal information."
-    file="jooblie-privacy-policy.pdf"
-  />;
+  return (
+    <LegalPolicyPage
+      policyKey="privacy"
+      eyebrow="LEGAL"
+      related={[
+        { to: '/terms', label: 'Terms and Conditions' },
+        { to: '/refund-policy', label: 'Employer Refund Policy' },
+      ]}
+    />
+  );
 }

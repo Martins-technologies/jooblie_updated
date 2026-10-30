@@ -1,9 +1,14 @@
-import PolicyDocumentPage from './PolicyDocumentPage';
+import LegalPolicyPage from './LegalPolicyPage';
 
 export default function TermsPage() {
-  return <PolicyDocumentPage
-    title="Terms and Conditions"
-    description="Read the current Jooblie terms and conditions for candidates and employers."
-    file="jooblie-terms-and-conditions.pdf"
-  />;
+  return (
+    <LegalPolicyPage
+      policyKey="terms"
+      eyebrow="LEGAL"
+      related={[
+        { to: '/privacy', label: 'Privacy Policy' },
+        { to: '/refund-policy', label: 'Employer Refund Policy' },
+      ]}
+    />
+  );
 }

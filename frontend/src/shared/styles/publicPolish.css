@@ -2078,6 +2078,7 @@ body .footer .footer__bottom-links a:hover {
   text-align: left;
   cursor: pointer;
   transition: all 0.16s ease;
+  text-decoration: none;
 }
 
 .terms-toc__link:hover {
@@ -2283,6 +2284,15 @@ body .footer .footer__bottom-links a:hover {
 
 .terms-section__content p:last-child {
   margin-bottom: 0;
+}
+
+.terms-policy-meta {
+  border-top: 1px solid #dbeafe;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 16px 0 0;
+  padding-top: 12px;
 }
 
 .terms-section__content h3 {

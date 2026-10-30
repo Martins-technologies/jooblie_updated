@@ -1,9 +1,14 @@
-import PolicyDocumentPage from './PolicyDocumentPage';
+import LegalPolicyPage from './LegalPolicyPage';
 
 export default function RefundPolicyPage() {
-  return <PolicyDocumentPage
-    title="Employer Refund Policy"
-    description="Review refund and cancellation terms for employer-paid Jooblie services."
-    file="jooblie-employer-refund-policy.pdf"
-  />;
+  return (
+    <LegalPolicyPage
+      policyKey="refund"
+      eyebrow="LEGAL"
+      related={[
+        { to: '/terms', label: 'Terms and Conditions' },
+        { to: '/privacy', label: 'Privacy Policy' },
+      ]}
+    />
+  );
 }
