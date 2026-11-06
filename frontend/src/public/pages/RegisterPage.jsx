@@ -82,7 +82,7 @@ export default function RegisterPage() {
         company_name: role === 'recruiter' ? companyName.trim() : undefined,
         company_website: role === 'recruiter' ? companyWebsite.trim() : undefined,
         company_registration_number: role === 'recruiter' ? companyRegistrationNumber.trim() : undefined,
-        terms_accepted: termsAccepted,
+        terms_accepted: role === 'job_seeker' && termsAccepted,
       });
 
       if (error) {
@@ -436,12 +436,14 @@ export default function RegisterPage() {
                       </button>
                     </>
                   )}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, color: '#53657f', fontSize: 13, lineHeight: 1.55 }}>
-                    <input id="reg-terms" name="terms_accepted" type="checkbox" required checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} style={{ marginTop: 3, flex: '0 0 auto' }} />
-                    <label htmlFor="reg-terms">
-                      I have read and agree to Jooblie’s <Link to="/terms" target="_blank" rel="noreferrer">Terms and Conditions</Link> and acknowledge the <Link to="/privacy" target="_blank" rel="noreferrer">Privacy Policy</Link>. I understand that Jooblie does not charge job seekers for recruitment or employer introductions and does not guarantee employment, interviews, work permits, LMIAs or permanent residence.
-                    </label>
-                  </div>
+                  {role === 'job_seeker' && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, color: '#53657f', fontSize: 13, lineHeight: 1.55 }}>
+                      <input id="reg-terms" name="terms_accepted" type="checkbox" required checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} style={{ marginTop: 3, flex: '0 0 auto' }} />
+                      <label htmlFor="reg-terms">
+                        I have read and agree to Jooblie’s <Link to="/terms" target="_blank" rel="noreferrer">Terms and Conditions</Link> and acknowledge the <Link to="/privacy" target="_blank" rel="noreferrer">Privacy Policy</Link>. I understand that Jooblie does not charge job seekers for recruitment or employer introductions and does not guarantee employment, interviews, work permits, LMIAs or permanent residence.
+                      </label>
+                    </div>
+                  )}
                 </form>
               )}
 

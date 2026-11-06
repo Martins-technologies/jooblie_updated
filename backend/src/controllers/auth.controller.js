@@ -95,7 +95,7 @@ export const signUp = asyncHandler(async (req, res) => {
   if (!signupSiteId) {
     throw new ApiError(400, 'Signup site is not configured.', 'SIGNUP_SITE_REQUIRED');
   }
-  if (req.site.slug === 'jooblie' && req.body.terms_accepted !== true) {
+  if (req.site.slug === 'jooblie' && req.body.role === 'job_seeker' && req.body.terms_accepted !== true) {
     throw new ApiError(400, 'Please agree to the Terms and acknowledge the Privacy Policy.', 'TERMS_ACCEPTANCE_REQUIRED');
   }
 
