@@ -166,7 +166,10 @@ export default function SignInPage() {
                 </div>
 
                 <div className="jb-field-block">
-                  <label htmlFor="signin-password" className="jb-field-label">Password</label>
+                  <div className="jb-field-label-row">
+                    <label htmlFor="signin-password" className="jb-field-label">Password</label>
+                    <Link to="/forgot-password" className="jb-forgot-action">Forgot password?</Link>
+                  </div>
                   <div className="jb-control-wrap">
                     <Lock size={16} strokeWidth={2} className="jb-control-icon" />
                     <input
