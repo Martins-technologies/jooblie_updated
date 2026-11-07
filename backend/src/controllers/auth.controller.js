@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createAnonDb, serviceDb } from '../config/supabase.js';
 import { getNotificationPreferences, setNotificationPreferences } from '../utils/notificationPreferences.js';
 import { logger } from '../config/logger.js';
@@ -22,10 +23,10 @@ function signUpFailure(error) {
     return new ApiError(429, 'Too many signup attempts. Please wait and try again.', 'SIGN_UP_RATE_LIMITED', details);
   }
   if (raw.includes('database error saving new user')) {
-    return new ApiError(500, 'Supabase Auth created the login but a database trigger failed while saving the user. Check Auth logs and the profiles insert trigger.', 'SIGN_UP_DB_TRIGGER_FAILED', details);
+    return new ApiError(500, 'Registration could not be completed. Please try again or contact support.', 'SIGN_UP_DB_TRIGGER_FAILED', details);
   }
   if (raw.includes('error sending confirmation email') || raw.includes('error sending recovery email')) {
-    return new ApiError(502, 'The account was started but the confirmation email could not be sent. Check Supabase SMTP settings.', 'SIGN_UP_EMAIL_FAILED', details);
+    return new ApiError(502, 'The confirmation email could not be sent. Please try again or contact support.', 'SIGN_UP_EMAIL_FAILED', details);
   }
 
   return new ApiError(400, 'The account could not be created.', 'SIGN_UP_FAILED', details);
@@ -42,6 +43,9 @@ export const signIn = asyncHandler(async (req, res) => {
   });
 
   if (error || !data?.session) {
+    if (error?.code === 'email_not_confirmed' || /^email not confirmed$/i.test(error?.message || '')) {
+      throw new ApiError(403, 'Please confirm your email before signing in.', 'EMAIL_NOT_CONFIRMED');
+    }
     await writeSecurityEvent(req, {
       eventType: 'sign_in_failed',
       severity: 'medium',
@@ -50,13 +54,18 @@ export const signIn = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Email or password is incorrect.', 'SIGN_IN_FAILED');
   }
 
-  const { data: profile } = await serviceDb
+  const { data: profile, error: profileError } = await serviceDb
     .from('profiles')
     .select('id,status')
     .eq('id', data.user.id)
     .maybeSingle();
 
-  if (profile && profile.status !== 'active') {
+  if (profileError || !profile) {
+    await authDb.auth.signOut({ scope: 'local' }).catch(() => null);
+    throw new ApiError(503, 'Your profile could not be loaded. Please try again.', 'PROFILE_LOAD_FAILED');
+  }
+
+  if (profile.status !== 'active') {
     await authDb.auth.signOut().catch(() => null);
     req.user = data.user;
     await writeSecurityEvent(req, {
@@ -89,214 +98,81 @@ export const signIn = asyncHandler(async (req, res) => {
 });
 
 export const signUp = asyncHandler(async (req, res) => {
-  const authDb = createAnonDb();
   const signupSiteId = req.site?.id;
-
   if (!signupSiteId) {
     throw new ApiError(400, 'Signup site is not configured.', 'SIGNUP_SITE_REQUIRED');
   }
-  if (req.site.slug === 'jooblie' && req.body.role === 'job_seeker' && req.body.terms_accepted !== true) {
+  const isSeeker = req.body.role === 'job_seeker';
+  if (req.site.slug === 'jooblie' && isSeeker && req.body.terms_accepted !== true) {
     throw new ApiError(400, 'Please agree to the Terms and acknowledge the Privacy Policy.', 'TERMS_ACCEPTANCE_REQUIRED');
   }
 
-  if (req.body.role === 'recruiter') {
-    const companyName = req.body.company_name.trim();
-    const { data: conflictingCompany, error: companyLookupError } = await serviceDb
-      .from('companies')
-      .select('id,name')
-      .is('deleted_at', null)
-      .ilike('name', companyName)
-      .limit(1)
-      .maybeSingle();
+  const companyName = isSeeker ? null : req.body.company_name.trim();
+  const companyTaken = async () => {
+    if (!companyName) return false;
+    const { data, error } = await serviceDb.from('companies').select('id')
+      .is('deleted_at', null).ilike('name', companyName.replace(/[\\%_]/g, '\\$&'))
+      .limit(1).maybeSingle();
+    if (error) throw new ApiError(503, 'Company availability could not be checked. Please try again.', 'COMPANY_AVAILABILITY_CHECK_FAILED');
+    return Boolean(data);
+  };
+  const duplicateCompany = () => new ApiError(409, 'That company name is already registered. Please use the existing company or choose a different name.', 'COMPANY_NAME_TAKEN');
+  if (await companyTaken()) throw duplicateCompany();
 
-    if (companyLookupError) {
-      throw new ApiError(500, 'Company availability could not be checked.', 'COMPANY_AVAILABILITY_CHECK_FAILED');
-    }
-
-    if (conflictingCompany) {
-      await writeSecurityEvent(req, {
-        eventType: 'recruiter_company_name_conflict',
-        severity: 'low',
-        metadata: { companyNameLength: companyName.length },
-      });
-      throw new ApiError(409, 'That company name is already registered. Please use the existing company or choose a different name.', 'COMPANY_NAME_TAKEN');
-    }
-  }
-
-  const { data, error } = await authDb.auth.signUp({
-    email: req.body.email,
-    password: req.body.password,
-    options: {
-      data: {
-        name: req.body.name,
-        full_name: req.body.name,
-        role: req.body.role,
-        signup_site_id: signupSiteId,
-        signup_site_slug: req.site.slug,
-        company_name: req.body.company_name || null,
-      },
+  const attemptId = randomUUID();
+  const { error: prepareError } = await serviceDb.rpc('prepare_jooblie_signup', {
+    p_id: attemptId,
+    p_site_id: signupSiteId,
+    p_payload: {
+      email: req.body.email,
+      name: req.body.name,
+      role: req.body.role,
+      company_name: companyName,
+      company_website: req.body.company_website,
+      company_registration_number: req.body.company_registration_number,
+      terms_accepted: isSeeker && req.body.terms_accepted === true,
+      terms_version: '2026-10-30',
+      consent_copy: 'I have read and agree to Jooblie’s Terms and Conditions and acknowledge the Privacy Policy. I understand that Jooblie does not charge job seekers for recruitment or employer introductions and does not guarantee employment, interviews, work permits, LMIAs or permanent residence.',
     },
   });
+  if (prepareError) {
+    logger.warn({ requestId: req.requestId, code: prepareError.code }, 'Signup preparation failed');
+    throw new ApiError(503, 'Registration is temporarily unavailable. Please try again.', 'SIGN_UP_PREPARATION_FAILED');
+  }
 
+  const { data, error } = await createAnonDb().auth.signUp({
+    email: req.body.email,
+    password: req.body.password,
+    options: { data: { jooblie_signup_intent: attemptId } },
+  });
   if (error || !data?.user) {
-    logger.warn(
-      {
-        requestId: req.requestId,
-        supabaseCode: error?.code || null,
-        supabaseMessage: error?.message || 'missing_user',
-        supabaseStatus: error?.status || null,
-      },
-      'Supabase sign-up failed',
-    );
-    await writeSecurityEvent(req, {
-      eventType: 'sign_up_failed',
-      severity: 'low',
-      metadata: {
-        email: req.body.email,
-        supabaseCode: error?.code || null,
-        supabaseMessage: error?.message || 'missing_user',
-      },
-    });
+    // A competing registration may have claimed the company after the preflight.
+    if (error?.code === 'unexpected_failure' && companyName && await companyTaken()) throw duplicateCompany();
+    logger.warn({ requestId: req.requestId, code: error?.code }, 'Supabase sign-up failed');
     throw signUpFailure(error || { message: 'Supabase did not return a user.' });
   }
-
-  const userId = data.user.id;
-  let companyId = null;
-  const consentAcceptedAt = new Date().toISOString();
-  const termsVersion = '2026-10-30';
-  const consentCopy = 'I have read and agree to Jooblie’s Terms and Conditions and acknowledge the Privacy Policy. I understand that Jooblie does not charge job seekers for recruitment or employer introductions and does not guarantee employment, interviews, work permits, LMIAs or permanent residence.';
-
-  try {
-    const { data: existingProfile, error: profileLookupError } = await serviceDb
-      .from('profiles')
-      .select('id,recruiter_company_id')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (profileLookupError) {
-      throw new ApiError(500, 'Your account profile could not be initialized.', 'PROFILE_LOOKUP_FAILED');
-    }
-
-    if (req.body.role === 'recruiter') {
-      const { data: existingCompany } = await serviceDb
-        .from('company_members')
-        .select('company_id')
-        .eq('user_id', userId)
-        .eq('role', 'owner')
-        .maybeSingle();
-
-      companyId = existingCompany?.company_id || existingProfile?.recruiter_company_id || null;
-
-      if (!companyId) {
-        const { data: company, error: companyError } = await serviceDb
-          .from('companies')
-          .insert({
-            name: req.body.company_name.trim(),
-            website: req.body.company_website,
-            registration_number: req.body.company_registration_number?.trim(),
-            created_by: userId,
-          })
-          .select('id')
-          .single();
-
-        if (companyError || !company) {
-          console.error("🔥 SUPABASE COMPANY CREATION ERROR:", companyError);
-          await writeSecurityEvent(req, {
-            eventType: 'recruiter_company_bootstrap_failed',
-            severity: 'medium',
-            metadata: {
-              reason: companyError?.code || 'COMPANY_INSERT_FAILED',
-              companyNameLength: req.body.company_name?.trim()?.length || 0,
-            },
-          });
-
-          if (companyError?.code === '23505' || String(companyError?.message || '').includes('companies_lower_name_live_idx')) {
-            throw new ApiError(409, 'That company name is already registered. Please use the existing company or choose a different name.', 'COMPANY_NAME_TAKEN');
-          }
-
-          throw new ApiError(400, 'The recruiter account was created, but the company could not be created.', 'COMPANY_BOOTSTRAP_FAILED', companyError?.message);
-        }
-
-        companyId = company.id;
-
-        const { error: memberError } = await serviceDb
-          .from('company_members')
-          .insert({ company_id: companyId, user_id: userId, role: 'owner' });
-
-        // 🔥 FIX: Agar database ne trigger ke zariye pehle hi member bana diya hai (code '23505'), to usay ignore karo
-        if (memberError && memberError.code !== '23505') {
-          console.error("🔥 SUPABASE MEMBER ERROR:", memberError);
-          throw new ApiError(500, 'Company ownership could not be initialized.', 'COMPANY_MEMBER_BOOTSTRAP_FAILED', memberError.message);
-        }
-      }
-    }
-
-    const profilePayload = {
-      id: userId,
-      role: req.body.role,
-      status: 'active',
-      email: req.body.email,
-      full_name: req.body.name,
-      signup_site_id: signupSiteId,
-      ...(req.body.terms_accepted ? {
-        terms_accepted_at: consentAcceptedAt,
-        terms_version: termsVersion,
-        privacy_acknowledged_at: consentAcceptedAt,
-        privacy_version: termsVersion,
-        consent_text_snapshot: { required_acceptance: consentCopy },
-      } : {}),
-      ...(companyId ? { recruiter_company_id: companyId } : {}),
-    };
-
-    if (existingProfile) {
-      const { error: profileUpdateError } = await serviceDb
-        .from('profiles')
-        .update({
-          role: profilePayload.role,
-          status: profilePayload.status,
-          email: profilePayload.email,
-          full_name: profilePayload.full_name,
-          signup_site_id: profilePayload.signup_site_id,
-          terms_accepted_at: profilePayload.terms_accepted_at,
-          terms_version: profilePayload.terms_version,
-          privacy_acknowledged_at: profilePayload.privacy_acknowledged_at,
-          privacy_version: profilePayload.privacy_version,
-          consent_text_snapshot: profilePayload.consent_text_snapshot,
-          ...(companyId ? { recruiter_company_id: companyId } : {}),
-        })
-        .eq('id', userId);
-      if (profileUpdateError) throw new ApiError(500, 'Your account profile could not be initialized.', 'PROFILE_BOOTSTRAP_FAILED');
-    } else {
-      const { error: profileInsertError } = await serviceDb.from('profiles').insert(profilePayload);
-      if (profileInsertError && profileInsertError.code !== '23505') {
-        console.error("🔥 SUPABASE PROFILE INSERT ERROR:", profileInsertError);
-        throw new ApiError(500, 'Your account profile could not be initialized.', 'PROFILE_BOOTSTRAP_FAILED');
-      }
-    }
-  } catch (bootstrapError) {
-    // Safely rolling back if anything fails
-    if (companyId) {
-      try {
-        await serviceDb.from('company_members').delete().eq('company_id', companyId).eq('user_id', userId);
-        await serviceDb.from('companies').delete().eq('id', companyId);
-      } catch (cleanupError) {
-        console.error("Rollback cleanup failed:", cleanupError);
-      }
-    }
-    throw bootstrapError;
+  if (data.user.identities?.length === 0 || data.user.user_metadata?.jooblie_signup_intent !== attemptId) {
+    throw new ApiError(409, 'An account with this email already exists. Please sign in.', 'EMAIL_ALREADY_REGISTERED');
   }
 
+  // The Auth trigger commits the profile and company together with the new user.
+  const { data: profile, error: profileError } = await serviceDb.from('profiles')
+    .select('id,recruiter_company_id').eq('id', data.user.id).maybeSingle();
+  if (profileError || !profile || (!isSeeker && !profile.recruiter_company_id)) {
+    throw new ApiError(503, 'Your account could not be confirmed. Please try signing in or contact support.', 'PROFILE_BOOTSTRAP_FAILED');
+  }
+  const companyId = profile.recruiter_company_id;
   req.user = data.user;
   await writeAuditLog(req, {
     action: 'auth.sign_up',
     entityType: 'profile',
-    entityId: userId,
+    entityId: data.user.id,
     metadata: { role: req.body.role, signup_site: req.site.slug, recruiter_company_id: companyId },
   });
 
   res.status(201).json({
-    user: { id: userId, email: data.user.email },
-    company: companyId ? { id: companyId, name: req.body.company_name } : null,
+    user: { id: data.user.id, email: data.user.email },
+    company: companyId ? { id: companyId, name: companyName } : null,
     session: data.session
       ? { access_token: data.session.access_token, refresh_token: data.session.refresh_token, expires_at: data.session.expires_at, token_type: data.session.token_type }
       : null,
@@ -355,3 +231,4 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   res.json({ profile: data });
 });
+

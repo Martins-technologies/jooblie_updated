@@ -12,8 +12,14 @@ const portal = resolvePortalConfig(import.meta.env);
 export const SITE_SLUG = portal.slug;
 export const SITE_NAME = portal.name;
 export const SITE_DESCRIPTION = portal.description;
+export const IS_HEALTH_PORTAL = SITE_SLUG === 'health-care';
 
-export const focusCategories = [
+export const focusCategories = IS_HEALTH_PORTAL ? [
+  { key: 'nursing', label: 'Nursing', icon: 'HeartPulse' },
+  { key: 'healthcare-clinical', label: 'Clinical Healthcare', icon: 'HeartPulse' },
+  { key: 'allied-health', label: 'Allied Health', icon: 'HeartPulse' },
+  { key: 'caregiving-support', label: 'Caregiving & Support', icon: 'HeartPulse' },
+] : [
   {
     key: 'it-software',
     aliases: ['it-software', 'it_software', 'it', 'software', 'technology'],
@@ -72,3 +78,4 @@ export const jobIllustrations = {
 
 export const activeStatusValues = ['active'];
 export const inactiveStatusValues = ['pending_review', 'closed', 'expired', 'removed'];
+

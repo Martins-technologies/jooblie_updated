@@ -142,7 +142,8 @@ export default function JobDetailPage() {
           flex-direction: column;
           align-items: flex-end;
           gap: 12px;
-          min-width: max-content;
+          min-width: 0;
+          max-width: 100%;
         }
         .salary-highlight {
           color: #059669;
@@ -217,6 +218,7 @@ export default function JobDetailPage() {
 
         @media (max-width: 800px) {
           .job-detail-header-card {
+            padding: 24px;
             flex-direction: column;
           }
           .job-detail-header__actions {
@@ -224,7 +226,7 @@ export default function JobDetailPage() {
             width: 100%;
           }
           .detail-grid-container {
-            grid-template-columns: 1fr;
+            grid-template-columns: minmax(0, 1fr);
           }
         }
       `}</style>
@@ -349,3 +351,4 @@ function RichText({ text }) {
   const blocks = String(text).split(/\n{2,}/).filter(Boolean);
   return <>{blocks.map((block, index) => <p key={index} style={{ marginBottom: '12px' }}>{block.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()}</p>)}</>;
 }
+

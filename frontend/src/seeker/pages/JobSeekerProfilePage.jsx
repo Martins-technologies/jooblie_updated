@@ -182,13 +182,13 @@ export default function JobSeekerProfilePage() {
     }
 
     setParsingResume(true);
+    let uploadedPath = null;
     try {
       let body = {};
       if (file) {
         const isDocx = file.name.toLowerCase().endsWith('.docx');
         const contentType = file.type || (isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf');
         
-        let uploadedPath = null;
         if (supabase && auth.user?.id) {
           const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(-180);
           const tempPath = `${auth.user.id}/temp-parse-${crypto.randomUUID()}-${safeName}`;
@@ -280,6 +280,7 @@ export default function JobSeekerProfilePage() {
     } catch (err) {
       showErrorToast(err, 'Failed to extract resume details.');
     } finally {
+      if (uploadedPath) await supabase.storage.from('resumes').remove([uploadedPath]).catch(() => null);
       setParsingResume(false);
     }
   };
@@ -2930,3 +2931,4 @@ const enhancedProfileCSS = `
     }
   }
 `;
+

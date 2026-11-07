@@ -1,3 +1,4 @@
+import { BrandMark } from './Logo';
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { CircleHelp, LayoutDashboard, BriefcaseBusiness, Bookmark, FileText, Building2, Users, ScrollText, Search, UserRound, Settings, LogOut, Menu, X, ChevronDown, ExternalLink, Globe2, Laptop, HeartHandshake, Stethoscope, Tractor, UserPlus, ArrowRight, Bell, ShieldCheck, ChevronRight } from 'lucide-react';
@@ -57,7 +58,7 @@ export default function DashboardLayout({ title, subtitle, children, actions, ov
   return <div className={`jd-app workspace workspace--${role || 'account'}`}>
     {mobileOpen && <button className="jd-overlay" type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
     <aside ref={sidebar} className={`jd-sidebar${mobileOpen ? ' is-open' : ''}`} aria-label="Workspace navigation" aria-hidden={narrow && !mobileOpen ? true : undefined} inert={narrow && !mobileOpen ? '' : undefined}>
-      <div className="jd-sidebar-brand"><Link to={home} className="jd-brand"><span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="2545" height="837"/></span></Link><button type="button" className="jd-close-button" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={20} /></button></div>
+      <div className="jd-sidebar-brand"><Link to={home} className="jd-brand"><BrandMark /></Link><button type="button" className="jd-close-button" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={20} /></button></div>
       <div className="jd-workspace-label"><span className="workspace-dot" />{roleLabels[role] || 'Your'} workspace</div>
       <div className="jd-sidebar-scroll">
         <span className="jd-section-label">Workspace</span><nav className="jd-nav" aria-label="Main navigation">{(navigation[role] || []).map(([label, path, Icon], index) => <NavLink key={path} to={path} end={index === 0} className={({ isActive }) => `jd-nav-link${isActive ? ' is-active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{label}</span><ChevronRight className="jd-nav-arrow" size={14} /></NavLink>)}</nav>
@@ -72,3 +73,4 @@ export default function DashboardLayout({ title, subtitle, children, actions, ov
   </div>;
 }
 export const DashboardIcons = { Bookmark, FileText, Users, ScrollText, BriefcaseBusiness, Building2 };
+

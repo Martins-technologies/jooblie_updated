@@ -1,3 +1,4 @@
+import { BrandMark } from '../../shared/components/Logo';
 import { useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/config/site';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -76,7 +77,7 @@ export default function RegisterPage() {
     });
 
     try {
-      const { error } = await signUp(email.trim(), password, {
+      const { error, confirmationRequired } = await signUp(email.trim(), password, {
         name: name.trim(),
         role,
         company_name: role === 'recruiter' ? companyName.trim() : undefined,
@@ -92,7 +93,7 @@ export default function RegisterPage() {
           success: false,
         });
       } else {
-        showSuccessToast('Account created successfully! Please check your email to verify.');
+        showSuccessToast(confirmationRequired ? 'Account created. Please check your email to verify it.' : 'Account created successfully.');
         setState({
           loading: false,
           success: true,
@@ -113,7 +114,7 @@ export default function RegisterPage() {
       {/* Top Application Header */}
       <header className="jb-app-nav">
         <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
-          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="2545" height="837"/></span>
+          <BrandMark />
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -1159,3 +1160,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+

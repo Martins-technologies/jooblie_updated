@@ -10,29 +10,6 @@ function bearerToken(req) {
   return header.slice(7).trim();
 }
 
-export const optionalAuth = asyncHandler(async (req, _res, next) => {
-  const token = bearerToken(req);
-  if (!token) return next();
-
-  const { data, error } = await serviceDb.auth.getUser(token);
-
-  if (!error && data?.user) {
-    req.accessToken = token;
-    req.user = data.user;
-    req.db = createUserDb(token);
-
-    const { data: profile } = await serviceDb
-      .from('profiles')
-      .select(profileSelect)
-      .eq('id', data.user.id)
-      .maybeSingle();
-
-    req.profile = profile || null;
-  }
-
-  next();
-});
-
 export const requireAuth = asyncHandler(async (req, _res, next) => {
   const token = bearerToken(req);
 
@@ -89,3 +66,4 @@ export function requireRole(...roles) {
     return next();
   };
 }
+

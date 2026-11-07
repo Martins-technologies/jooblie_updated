@@ -23,7 +23,7 @@ export function normalizeCategory(row = {}) {
 
 export function resolveFocusCategory(input = '') {
   const target = slugify(input);
-  const exact = focusCategories.find((category) => category.aliases.some((alias) => slugify(alias) === target));
+  const exact = focusCategories.find((category) => category.key === target || category.aliases?.some((alias) => slugify(alias) === target));
   if (exact) return exact;
 
   const rules = [
@@ -84,7 +84,7 @@ export function normalizeJob(row = {}, companyMap = new Map(), categoryMap = new
 
   const categoryName = cleanText(pick(row, ['category_name']), category?.name || '');
   const dbCategorySlug = slugify(pick(row, ['category_slug'], category?.slug || categoryName));
-  const focusCategory = resolveFocusCategory([dbCategorySlug, categoryName].filter(Boolean).join(' '));
+  const focusCategory = resolveFocusCategory(dbCategorySlug) || resolveFocusCategory(categoryName);
   const city = cleanText(pick(row, ['city']), '');
   const province = cleanText(pick(row, ['province', 'state']), '');
   const workplace = pick(row, ['workplace_type'], null);
@@ -134,3 +134,4 @@ export function normalizeJob(row = {}, companyMap = new Map(), categoryMap = new
     contactEmail: null,
   };
 }
+

@@ -1,0 +1,63 @@
+name: Jooblie checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      SUPABASE_URL: http://127.0.0.1:1
+      SUPABASE_ANON_KEY: test-only-anonymous-placeholder
+      SUPABASE_SERVICE_ROLE_KEY: test-only-service-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: npm audit --omit=dev
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    strategy:
+      matrix:
+        portal: [jooblie, health-care]
+    env:
+      VITE_SITE_SLUG: ${{ matrix.portal }}
+      VITE_API_BASE_URL: http://127.0.0.1:1/api/v1
+      VITE_SUPABASE_URL: http://127.0.0.1:1
+      VITE_SUPABASE_ANON_KEY: test-only-anonymous-placeholder
+      VITE_SUPABASE_SERVICE_ROLE_KEY: jooblie-privileged-env-test-marker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run build
+      - name: Confirm the privileged environment variable stays server-side
+        run: |
+          if grep -R -q --fixed-strings jooblie-privileged-env-test-marker dist; then
+            exit 1
+          fi
+      - run: npm audit --omit=dev

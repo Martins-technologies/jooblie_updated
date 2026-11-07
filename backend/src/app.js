@@ -9,7 +9,6 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { requestContext } from './middleware/requestContext.js';
 import { generalLimiter } from './middleware/security.js';
-import { optionalAuth } from './middleware/auth.js';
 import { notFound, errorHandler } from './middleware/errors.js';
 import { ApiError } from './utils/http.js';
 import routes from './routes.js';
@@ -71,7 +70,6 @@ app.use(express.json({ limit: '10mb', strict: true }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
 app.use(generalLimiter);
-app.use(optionalAuth);
 
 // Authenticated/dashboard responses should never be cached by shared intermediaries.
 app.use((req, res, next) => {
@@ -87,3 +85,4 @@ app.use(notFound);
 app.use(errorHandler);
 
 export default app;
+

@@ -1,12 +1,14 @@
 import {lazy,Suspense} from 'react';
 import PageLoading from './shared/components/PageLoading';
 import RouteMetadata from './shared/components/RouteMetadata';
-import WorkspaceAccountPage from './shared/pages/WorkspaceAccountPage';
-import WorkspaceHelpPage from './shared/pages/WorkspaceHelpPage';
+import { IS_HEALTH_PORTAL } from './shared/config/site';
+const WorkspaceAccountPage = lazy(() => import('./shared/pages/WorkspaceAccountPage'));
+const WorkspaceHelpPage = lazy(() => import('./shared/pages/WorkspaceHelpPage'));
 import {
   Navigate,
   Route,
   Routes,
+  useLocation,
 } from 'react-router-dom';
 
 import SiteLayout from './shared/components/SiteLayout';
@@ -24,10 +26,10 @@ const CompanyDetailPage = lazy(()=>import('./public/pages/CompanyDetailPage'));
 const ResourcesPage = lazy(()=>import('./public/pages/ResourcesPage'));
 
 // --- Auth Pages ---
-import SignInPage from './public/pages/SignInPage';
-import RegisterPage from './public/pages/RegisterPage';
-import ForgotPasswordPage from './public/pages/ForgotPasswordPage';
-import ResetPasswordPage from './public/pages/ResetPasswordPage';
+const SignInPage = lazy(() => import('./public/pages/SignInPage'));
+const RegisterPage = lazy(() => import('./public/pages/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./public/pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./public/pages/ResetPasswordPage'));
 
 // --- General Pages ---
 const AboutPage = lazy(()=>import('./public/pages/AboutPage'));
@@ -67,10 +69,40 @@ const AdminPortalDetailPage = lazy(()=>import('./admin/pages/AdminPortalDetailPa
 
 const NotFoundPage = lazy(()=>import('./public/pages/NotFoundPage'));
 
+const healthLegacyRoutes = {
+  '/browse-jobs': '/all-jobs',
+  '/employers': '/companies',
+  '/about-us': '/about',
+  '/contact-us': '/contact',
+  '/post-a-job': '/post-job',
+  '/signup': '/register',
+  '/dashboard/applications': '/dashboard/job-seeker/applications',
+  '/dashboard/saved-jobs': '/dashboard/job-seeker/saved',
+  '/dashboard/profile': '/dashboard/job-seeker/profile',
+  '/dashboard/notifications': '/dashboard/job-seeker',
+  '/recruiter': '/dashboard/recruiter',
+  '/recruiter/jobs': '/my-jobs',
+  '/recruiter/jobs/new': '/post-job',
+  '/recruiter/company-setup': '/my-company',
+  '/recruiter/company': '/my-company',
+  '/recruiter/applicants': '/candidates',
+  '/recruiter/notifications': '/dashboard/recruiter',
+};
+
+function LegacyRedirect({ to }) {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: to, search, hash }} replace />;
+}
+
 export default function App() {
   return (
     <RouteErrorBoundary>
     <><RouteMetadata/><Suspense fallback={<PageLoading standalone />}><Routes>
+
+      {IS_HEALTH_PORTAL && Object.entries(healthLegacyRoutes).map(([path, to]) =>
+        <Route key={path} path={path} element={<LegacyRedirect to={to} />} />
+      )}
+      {IS_HEALTH_PORTAL && <Route path="/apply/:slug" element={<LegacyRedirect to="/all-jobs" />} />}
 
       {/* =====================================================
           AUTH PAGES (STANDALONE - NO NAVBAR)
@@ -341,3 +373,4 @@ export default function App() {
     </RouteErrorBoundary>
   );
 }
+

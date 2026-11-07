@@ -13,10 +13,12 @@ export const siteContext = asyncHandler(async (req, _res, next) => {
     .eq('is_active', true)
     .maybeSingle();
 
-  if (error || !data) {
+  if (error) throw new ApiError(503, 'This Jooblie site is temporarily unavailable.', 'SITE_LOOKUP_FAILED');
+  if (!data) {
     throw new ApiError(404, 'This Jooblie site is not configured.', 'SITE_NOT_FOUND');
   }
 
   req.site = data;
   next();
 });
+

@@ -1,3 +1,4 @@
+import { BrandMark } from '../../shared/components/Logo';
 import { useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/config/site';
 import { Link, useNavigate } from 'react-router-dom';
@@ -69,7 +70,7 @@ export default function ResetPasswordPage() {
       {/* Top Application Header */}
       <header className="jb-app-nav">
         <Link to="/" className="jb-app-brand" aria-label={`${SITE_NAME} Home`}>
-          <span className="jooblie-brand-image"><img src="/brand/jooblie-source.png" alt="Jooblie" width="2545" height="837"/></span>
+          <BrandMark />
         </Link>
 
         <Link to="/" className="jb-nav-back">
@@ -787,3 +788,4 @@ export default function ResetPasswordPage() {
     </div>
   );
 }
+

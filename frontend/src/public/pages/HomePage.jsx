@@ -22,7 +22,7 @@ import SectionHeading from '../../shared/components/SectionHeading';
 import Reveal from '../../shared/components/Reveal';
 import { EmptyState, LoadingState } from '../../shared/components/StatusMessage';
 import usePublicData from '../../shared/hooks/usePublicData';
-import { focusCategories, SITE_NAME } from '../../shared/config/site';
+import { focusCategories, IS_HEALTH_PORTAL, SITE_NAME } from '../../shared/config/site';
 
 import jobSeekerImage from '../../shared/assets/images/cta/05_for_job_seekers.webp';
 import employerImage from '../../shared/assets/images/cta/04_for_employers.webp';
@@ -104,7 +104,7 @@ export default function HomePage() {
               </div>
 
               <h1>
-                Your next opportunity.<br/><span className="hero-gradient-text">A clearer path forward.</span>
+                {IS_HEALTH_PORTAL ? 'Your next healthcare role.' : 'Your next opportunity.'}<br/><span className="hero-gradient-text">A clearer path forward.</span>
               </h1>
 
               <p className="hero-lead">
@@ -148,7 +148,7 @@ export default function HomePage() {
                       src="/images/hero-diamond-main.jpg"
                       alt="Young male product lead in light blue shirt and young female engineer in navy blazer smiling over laptop"
                       className="hero-diamond-img"
-                      loading="eager"
+                      loading="eager" decoding="async"
                     />
                   </div>
                 </div>
@@ -203,7 +203,7 @@ export default function HomePage() {
       <section className="section section--compact jooblie-category-section">
         <div className="container">
           <SectionHeading
-            title="Popular Job Categories"
+            title={IS_HEALTH_PORTAL ? 'Healthcare Job Categories' : 'Popular Job Categories'}
             action={(
               <Link to="/categories" className="inline-link">
                 View all categories <ArrowRight size={16} />
@@ -428,3 +428,4 @@ export default function HomePage() {
     </div>
   );
 }
+

@@ -1,14 +1,14 @@
-import { ArrowRight, BriefcaseBusiness, Code2, Sprout, Truck, UtensilsCrossed } from 'lucide-react';
+import { ArrowRight, BriefcaseBusiness, Code2, HeartPulse, Sprout, Truck, UtensilsCrossed } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const icons = { Code2, BriefcaseBusiness, UtensilsCrossed, Sprout, Truck };
+const icons = { Code2, BriefcaseBusiness, UtensilsCrossed, Sprout, Truck, HeartPulse };
 
 export default function CategoryCard({ category, count = 0, compact = false }) {
   const Icon = icons[category.icon] || BriefcaseBusiness;
   const internal = `/categories/${category.key}`;
   const content = (
     <>
-      <div className="category-card__image"><img src={category.image} alt="" width="480" height="320" loading="lazy" decoding="async"/></div>
+      {category.image && <div className="category-card__image"><img src={category.image} alt="" width="480" height="320" loading="lazy" decoding="async"/></div>}
       <div className="category-card__body">
         <span className="category-card__icon"><Icon size={20} /></span>
         <div>
@@ -25,3 +25,4 @@ export default function CategoryCard({ category, count = 0, compact = false }) {
   }
   return <Link className="category-card" to={internal}>{content}</Link>;
 }
+

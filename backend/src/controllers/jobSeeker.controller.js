@@ -1,3 +1,4 @@
+import { detectResumeType, RESUME_MAX_BYTES } from '../utils/resumeFile.js';
 import { serviceDb } from '../config/supabase.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
 import { writeAuditLog } from '../utils/audit.js';
@@ -855,17 +856,12 @@ export const registerResume = asyncHandler(async (req, res) => {
   if (!path.startsWith(`${req.user.id}/`)) throw new ApiError(403, 'Invalid resume path.', 'RESUME_PATH_FORBIDDEN');
   const { data: blob, error: downloadError } = await serviceDb.storage.from('resumes').download(path);
   if (downloadError || !blob) throw new ApiError(400, 'Uploaded resume could not be verified.', 'RESUME_VERIFY_FAILED');
-  if (blob.size > 10 * 1024 * 1024) { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Resume must be 10 MB or smaller.', 'RESUME_TOO_LARGE'); }
-  const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
-  const magic = String.fromCharCode(...head);
-  const isPdf = magic === '%PDF-';
-  const isDocx = (head[0] === 0x50 && head[1] === 0x4B) || original_name.toLowerCase().endsWith('.docx');
-  if (!isPdf && !isDocx) {
-    await serviceDb.storage.from('resumes').remove([path]);
-    throw new ApiError(400, 'Only valid PDF or DOCX resumes are accepted.', 'RESUME_NOT_SUPPORTED');
-  }
-  const detectedType = isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf';
-  if (Number(size_bytes) !== blob.size) { await serviceDb.storage.from('resumes').remove([path]); throw new ApiError(400, 'Resume size verification failed.', 'RESUME_SIZE_MISMATCH'); }
+  if (blob.size > RESUME_MAX_BYTES) throw new ApiError(400, 'Resume must be 10 MB or smaller.', 'RESUME_TOO_LARGE');
+  if (Number(size_bytes) !== blob.size) throw new ApiError(400, 'Resume size verification failed.', 'RESUME_SIZE_MISMATCH');
+  const detectedType = detectResumeType(Buffer.from(await blob.arrayBuffer()));
+  if (!detectedType) throw new ApiError(400, 'Only valid PDF or DOCX resumes are accepted.', 'RESUME_NOT_SUPPORTED');
+  // Cleanup belongs to the caller's storage policy. A service-role deletion
+  // here could destroy an already-submitted document on a repeated request.
   const { data, error } = await serviceDb.from('resume_documents').insert({ user_id: req.user.id, storage_path: path, original_name, size_bytes: blob.size, content_type: detectedType }).select('id,storage_path,original_name,size_bytes,content_type,created_at').single();
   if (error) { if (error.code === '23505') throw new ApiError(409, 'This resume has already been registered.', 'RESUME_ALREADY_REGISTERED'); throw new ApiError(400, 'Resume could not be registered.', 'RESUME_REGISTER_FAILED'); }
   await safeAudit(req, { action: 'resume.upload', entityType: 'resume', entityId: data.id, metadata: { size_bytes: blob.size, content_type: detectedType } });
@@ -1397,11 +1393,11 @@ export const applyToJob = asyncHandler(
 );
 
 export const parseResume = asyncHandler(async (req, res) => {
-  const { base64, path, filename = '', contentType = '' } = req.body || {};
-
+  const { base64, path } = req.body || {};
+  if ((base64 != null && typeof base64 !== 'string') || (path != null && typeof path !== 'string')) {
+    throw new ApiError(400, 'Invalid resume upload.', 'RESUME_PAYLOAD_INVALID');
+  }
   let buffer = null;
-  let docName = filename;
-  let fileType = contentType;
 
   if (base64) {
     const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
@@ -1414,8 +1410,8 @@ export const parseResume = asyncHandler(async (req, res) => {
     if (downloadError || !blob) {
       throw new ApiError(400, 'Uploaded resume could not be retrieved.', 'RESUME_DOWNLOAD_FAILED');
     }
+    if (blob.size > RESUME_MAX_BYTES) throw new ApiError(400, 'Resume must be 10 MB or smaller.', 'RESUME_TOO_LARGE');
     buffer = Buffer.from(await blob.arrayBuffer());
-    docName = docName || path.split('/').pop() || '';
   } else {
     throw new ApiError(400, 'Either resume base64 content or storage path is required.', 'RESUME_PAYLOAD_REQUIRED');
   }
@@ -1424,11 +1420,13 @@ export const parseResume = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Resume file is empty.', 'RESUME_EMPTY');
   }
 
-  if (buffer.length > 10 * 1024 * 1024) {
+  if (buffer.length > RESUME_MAX_BYTES) {
     throw new ApiError(400, 'Resume file must be 10 MB or smaller.', 'RESUME_TOO_LARGE');
   }
 
-  const rawText = await extractTextFromBuffer({ buffer, filename: docName, contentType: fileType });
+  const detectedType = detectResumeType(buffer);
+  if (!detectedType) throw new ApiError(400, 'Only valid PDF or DOCX resumes are accepted.', 'RESUME_NOT_SUPPORTED');
+  const rawText = await extractTextFromBuffer({ buffer, contentType: detectedType }).catch(() => null);
   if (!rawText || rawText.trim().length < 20) {
     throw new ApiError(400, 'Could not extract readable text from the provided resume.', 'RESUME_UNREADABLE');
   }
@@ -1440,7 +1438,6 @@ export const parseResume = asyncHandler(async (req, res) => {
     entityType: 'profile',
     entityId: req.user.id,
     metadata: {
-      filename: docName,
       extracted_skills_count: parsed.skills?.length || 0,
       extracted_experience_count: parsed.experience?.length || 0,
       extracted_education_count: parsed.education?.length || 0,
@@ -1453,3 +1450,4 @@ export const parseResume = asyncHandler(async (req, res) => {
     message: 'Resume parsed successfully.',
   });
 });
+
