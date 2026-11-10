@@ -131,6 +131,7 @@ admin.patch('/companies/:companyId', writeLimiter, validate(adminCompanyVerifica
 admin.get('/applications', adminController.listApplications);
 admin.patch('/applications/:applicationId', writeLimiter, validate(applicationStatusSchema), adminController.updateApplicationStatus);
 admin.get('/users', adminController.listUsers);
+admin.delete('/users/:userId', writeLimiter, adminController.deleteUser);
 admin.get('/registrations', registrationController.listMississaugaRegistrations);
 admin.get('/registration-owners', registrationController.listRegistrationOwners);
 admin.patch('/registrations/:registrationId', writeLimiter, validate(adminRegistrationUpdateSchema), registrationController.updateMississaugaRegistration);

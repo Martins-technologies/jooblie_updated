@@ -382,6 +382,33 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
   res.json({ application: updatedData, message: `Application status updated to ${status}.` });
 });
 
+export const deleteUser = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(userId)) {
+    throw new ApiError(400, 'Invalid account ID.', 'INVALID_USER_ID');
+  }
+
+  const removeAccount = async (finalize) => {
+    const { data, error } = await serviceDb.rpc('admin_delete_user_account', {
+      p_actor_id: req.user.id, p_user_id: userId, p_finalize: finalize,
+    });
+    if (error?.code === '42501') throw new ApiError(403, 'Administrator accounts are protected.', 'ACCOUNT_PROTECTED');
+    if (error?.code === '55000') throw new ApiError(409, 'Account files still need to be removed. Try again.', 'ACCOUNT_FILES_REMAIN');
+    if (error) throw new ApiError(500, 'Account could not be deleted. Try again.', 'ACCOUNT_DELETE_FAILED');
+    return data;
+  };
+
+  const { files } = await removeAccount(false);
+  for (let offset = 0; offset < files.length; offset += 1000) {
+    const { error } = await serviceDb.storage.from('resumes').remove(files.slice(offset, offset + 1000));
+    if (error) throw new ApiError(503, 'The account is disabled. Retry deletion to finish removing its files.', 'ACCOUNT_FILE_DELETE_FAILED');
+  }
+
+  const { deleted } = await removeAccount(true);
+  if (deleted) await writeAuditLog(req, { action: 'admin.user.delete', entityType: 'user', entityId: userId });
+  res.status(204).end();
+});
+
 export const changeUserRole = asyncHandler(async (req, res) => {
   if (req.params.userId === req.user.id && req.body.role !== 'admin') {
     throw new ApiError(400, 'You cannot remove your own admin access.', 'SELF_ROLE_CHANGE_BLOCKED');
@@ -398,6 +425,7 @@ export const changeUserRole = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'User not found.', 'USER_NOT_FOUND');
   }
 
+  if (targetProfile.status === 'deleted') throw new ApiError(409, 'Deleted accounts cannot change roles.', 'ACCOUNT_DELETED');
   if (targetProfile.role === req.body.role) return res.json({ profile: targetProfile });
   if (req.body.previous_role && req.body.previous_role !== targetProfile.role) throw new ApiError(409, 'This role changed since you opened it. Refresh and try again.', 'STALE_ROLE');
 
