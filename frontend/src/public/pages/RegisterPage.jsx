@@ -252,7 +252,6 @@ export default function RegisterPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="jb-card-form">
-                  {step === 1 && SITE_SLUG === 'jooblie' && <p className="jb-card-subtext">After you register, verify your email before signing in.</p>}
                   {/* Role Selector (only in step 1) */}
                   {step === 1 && (
                     <div className="jb-role-selector" role="tablist">

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { createAnonDb, serviceDb } from '../config/supabase.js';
-import { env } from '../config/env.js';
 import { getNotificationPreferences, setNotificationPreferences } from '../utils/notificationPreferences.js';
 import { logger } from '../config/logger.js';
 import { asyncHandler, ApiError } from '../utils/http.js';
@@ -8,17 +7,6 @@ import { writeAuditLog, writeSecurityEvent } from '../utils/audit.js';
 import { COMPANY_DOCUMENT_BUCKET, parseCompanyDocuments, uploadCompanyDocuments } from '../utils/companyDocuments.js';
 
 const mainSignupRedirect = 'https://www.jooblie.com/sign-in';
-
-async function requireEmailConfirmation() {
-  const settings = await fetch(new URL('/auth/v1/settings', env.SUPABASE_URL), {
-    headers: { apikey: env.SUPABASE_ANON_KEY },
-    signal: AbortSignal.timeout(5000),
-  }).then(response => response.ok ? response.json() : null).catch(() => null);
-
-  if (settings?.mailer_autoconfirm !== false) {
-    throw new ApiError(503, 'Email verification is temporarily unavailable. Please try again later.', 'SIGN_UP_EMAIL_VERIFICATION_UNAVAILABLE');
-  }
-}
 
 function signUpFailure(error) {
   const raw = String(error?.message || error?.code || '').toLowerCase();
@@ -137,7 +125,6 @@ export const signUp = asyncHandler(async (req, res) => {
 
   const attemptId = randomUUID();
   const documents = isSeeker ? [] : parseCompanyDocuments(req.body, attemptId, isMainSite);
-  if (isMainSite) await requireEmailConfirmation();
 
   const bucket = documents.length ? serviceDb.storage.from(COMPANY_DOCUMENT_BUCKET) : null;
   const removeUploadedDocuments = async () => {
@@ -198,10 +185,6 @@ export const signUp = asyncHandler(async (req, res) => {
   if (data.user.identities?.length === 0 || data.user.user_metadata?.jooblie_signup_intent !== attemptId) {
     await removeUploadedDocuments();
     throw new ApiError(409, 'An account with this email already exists. Please sign in.', 'EMAIL_ALREADY_REGISTERED');
-  }
-  if (isMainSite && data.session) {
-    await authDb.auth.signOut({ scope: 'local' }).catch(() => null);
-    throw new ApiError(503, 'Email verification is temporarily unavailable. Please contact support.', 'SIGN_UP_EMAIL_VERIFICATION_UNAVAILABLE');
   }
 
   // The Auth trigger commits the profile and company together with the new user.
