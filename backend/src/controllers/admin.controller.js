@@ -6,6 +6,7 @@ import { ApiError, asyncHandler } from '../utils/http.js';
 import { writeAuditLog } from '../utils/audit.js';
 import { savePortalJob } from '../utils/portalJobs.js';
 import { loadOverviewAnalytics } from '../utils/overviewAnalytics.js';
+import { COMPANY_DOCUMENT_BUCKET } from '../utils/companyDocuments.js';
 
 
 const adminJobSelect = `
@@ -214,6 +215,36 @@ export const listCompanies = asyncHandler(async (req, res) => {
   const { data, error, count } = await query.range(from, to);
   if (error) throw new ApiError(500, 'Companies could not be loaded.', 'COMPANIES_FAILED');
   res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
+});
+
+export const getCompanyDocuments = asyncHandler(async (req, res) => {
+  const { companyId } = req.params;
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(companyId)) {
+    throw new ApiError(400, 'Invalid company ID.', 'INVALID_COMPANY_ID');
+  }
+
+  const { data: company, error: companyError } = await serviceDb.from('companies')
+    .select('id').eq('id', companyId).is('deleted_at', null).maybeSingle();
+  if (companyError) throw new ApiError(500, 'Company could not be loaded.', 'COMPANY_LOAD_FAILED');
+  if (!company) throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
+
+  const { data, error } = await serviceDb.from('company_verification_documents')
+    .select('business_path,address_path').eq('company_id', companyId).maybeSingle();
+  if (error) throw new ApiError(500, 'Company documents could not be loaded.', 'COMPANY_DOCUMENT_LOAD_FAILED');
+
+  const documents = data ? await Promise.all([
+    ['business document', data.business_path],
+    ['proof of address', data.address_path],
+  ].map(async ([label, path]) => {
+    const { data: signed, error: signError } = await serviceDb.storage.from(COMPANY_DOCUMENT_BUCKET).createSignedUrl(path, 300);
+    if (signError || !signed?.signedUrl) {
+      throw new ApiError(503, 'Company documents could not be opened. Please try again.', 'COMPANY_DOCUMENT_LINK_FAILED');
+    }
+    return { label, url: signed.signedUrl };
+  })) : [];
+
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ documents });
 });
 
 export const updateCompanyVerification = asyncHandler(async (req, res) => {

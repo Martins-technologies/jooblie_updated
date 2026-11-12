@@ -1,9 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { createAnonDb, serviceDb } from '../config/supabase.js';
+import { env } from '../config/env.js';
 import { getNotificationPreferences, setNotificationPreferences } from '../utils/notificationPreferences.js';
 import { logger } from '../config/logger.js';
 import { asyncHandler, ApiError } from '../utils/http.js';
 import { writeAuditLog, writeSecurityEvent } from '../utils/audit.js';
+import { COMPANY_DOCUMENT_BUCKET, parseCompanyDocuments, uploadCompanyDocuments } from '../utils/companyDocuments.js';
+
+const mainSignupRedirect = 'https://www.jooblie.com/sign-in';
+
+async function requireEmailConfirmation() {
+  const settings = await fetch(new URL('/auth/v1/settings', env.SUPABASE_URL), {
+    headers: { apikey: env.SUPABASE_ANON_KEY },
+    signal: AbortSignal.timeout(5000),
+  }).then(response => response.ok ? response.json() : null).catch(() => null);
+
+  if (settings?.mailer_autoconfirm !== false) {
+    throw new ApiError(503, 'Email verification is temporarily unavailable. Please try again later.', 'SIGN_UP_EMAIL_VERIFICATION_UNAVAILABLE');
+  }
+}
 
 function signUpFailure(error) {
   const raw = String(error?.message || error?.code || '').toLowerCase();
@@ -103,7 +118,8 @@ export const signUp = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Signup site is not configured.', 'SIGNUP_SITE_REQUIRED');
   }
   const isSeeker = req.body.role === 'job_seeker';
-  if (req.site.slug === 'jooblie' && isSeeker && req.body.terms_accepted !== true) {
+  const isMainSite = req.site.slug === 'jooblie';
+  if (isMainSite && isSeeker && req.body.terms_accepted !== true) {
     throw new ApiError(400, 'Please agree to the Terms and acknowledge the Privacy Policy.', 'TERMS_ACCEPTANCE_REQUIRED');
   }
 
@@ -120,6 +136,24 @@ export const signUp = asyncHandler(async (req, res) => {
   if (await companyTaken()) throw duplicateCompany();
 
   const attemptId = randomUUID();
+  const documents = isSeeker ? [] : parseCompanyDocuments(req.body, attemptId, isMainSite);
+  if (isMainSite) await requireEmailConfirmation();
+
+  const bucket = documents.length ? serviceDb.storage.from(COMPANY_DOCUMENT_BUCKET) : null;
+  const removeUploadedDocuments = async () => {
+    if (!bucket) return;
+    const { error } = await bucket.remove(documents.map(({ path }) => path)).catch(() => ({ error: true }));
+    if (error) logger.warn({ requestId: req.requestId }, 'Signup document cleanup failed');
+  };
+  if (bucket) {
+    try {
+      await uploadCompanyDocuments(bucket, documents);
+    } catch (error) {
+      await removeUploadedDocuments();
+      throw error;
+    }
+  }
+
   const { error: prepareError } = await serviceDb.rpc('prepare_jooblie_signup', {
     p_id: attemptId,
     p_site_id: signupSiteId,
@@ -130,29 +164,44 @@ export const signUp = asyncHandler(async (req, res) => {
       company_name: companyName,
       company_website: req.body.company_website,
       company_registration_number: req.body.company_registration_number,
+      business_document_path: documents[0]?.path,
+      address_document_path: documents[1]?.path,
       terms_accepted: isSeeker && req.body.terms_accepted === true,
       terms_version: '2026-10-30',
       consent_copy: 'I have read and agree to Jooblie’s Terms and Conditions and acknowledge the Privacy Policy. I understand that Jooblie does not charge job seekers for recruitment or employer introductions and does not guarantee employment, interviews, work permits, LMIAs or permanent residence.',
     },
   });
   if (prepareError) {
+    await removeUploadedDocuments();
     logger.warn({ requestId: req.requestId, code: prepareError.code }, 'Signup preparation failed');
     throw new ApiError(503, 'Registration is temporarily unavailable. Please try again.', 'SIGN_UP_PREPARATION_FAILED');
   }
 
-  const { data, error } = await createAnonDb().auth.signUp({
+  const authDb = createAnonDb();
+  const { data, error } = await authDb.auth.signUp({
     email: req.body.email,
     password: req.body.password,
-    options: { data: { jooblie_signup_intent: attemptId } },
+    options: {
+      data: { jooblie_signup_intent: attemptId },
+      ...(isMainSite && { emailRedirectTo: mainSignupRedirect }),
+    },
   });
   if (error || !data?.user) {
+    if ((error?.status >= 400 && error.status < 500) || error?.message?.includes('Database error saving new user')) {
+      await removeUploadedDocuments();
+    }
     // A competing registration may have claimed the company after the preflight.
     if (error?.code === 'unexpected_failure' && companyName && await companyTaken()) throw duplicateCompany();
     logger.warn({ requestId: req.requestId, code: error?.code }, 'Supabase sign-up failed');
     throw signUpFailure(error || { message: 'Supabase did not return a user.' });
   }
   if (data.user.identities?.length === 0 || data.user.user_metadata?.jooblie_signup_intent !== attemptId) {
+    await removeUploadedDocuments();
     throw new ApiError(409, 'An account with this email already exists. Please sign in.', 'EMAIL_ALREADY_REGISTERED');
+  }
+  if (isMainSite && data.session) {
+    await authDb.auth.signOut({ scope: 'local' }).catch(() => null);
+    throw new ApiError(503, 'Email verification is temporarily unavailable. Please contact support.', 'SIGN_UP_EMAIL_VERIFICATION_UNAVAILABLE');
   }
 
   // The Auth trigger commits the profile and company together with the new user.

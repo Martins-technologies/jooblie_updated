@@ -177,6 +177,8 @@ export async function signUp(email, password, metadata = {}) {
         company_name: metadata.company_name || undefined,
         company_website: metadata.company_website || undefined,
         company_registration_number: metadata.company_registration_number || undefined,
+        business_document: metadata.business_document,
+        address_document: metadata.address_document,
         terms_accepted: metadata.terms_accepted === true,
       },
     });

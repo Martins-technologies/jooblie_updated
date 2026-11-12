@@ -58,6 +58,8 @@ export const adminRegistrationUpdateSchema = z.object({
   assigned_to: z.string().uuid().nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, 'Provide a status or owner update.');
 
+const signupDocument = z.string().min(4).max(2_097_152).optional();
+
 export const authSignUpSchema = z.object({
   email: z.string().trim().email().max(320),
   password: z.string().min(8).max(200),
@@ -66,6 +68,8 @@ export const authSignUpSchema = z.object({
   company_name: optionalText(180),
   company_website: optionalUrl,
   company_registration_number: optionalText(180),
+  business_document: signupDocument,
+  address_document: signupDocument,
   terms_accepted: z.boolean().optional().default(false),
 }).superRefine((value, ctx) => {
   if (value.role === 'recruiter') {

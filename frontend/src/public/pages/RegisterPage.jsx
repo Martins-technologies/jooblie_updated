@@ -1,6 +1,6 @@
 import { BrandMark } from '../../shared/components/Logo';
 import { useRef, useState } from 'react';
-import { SITE_NAME } from '../../shared/config/site';
+import { SITE_NAME, SITE_SLUG } from '../../shared/config/site';
 import { Link, useSearchParams } from 'react-router-dom';
 import { signUp } from '../../shared/lib/data';
 import { showErrorToast, showSuccessToast } from '../../shared/lib/toast';
@@ -25,6 +25,20 @@ import {
 } from 'lucide-react';
 import registerHeroImg from '../../assets/images/register-hero.jpg';
 
+const companyDocumentFields = [
+  { name: 'business_document', label: 'Upload your business documents', hint: 'Incorporation or registration documents.' },
+  { name: 'address_document', label: 'Upload proof of address', hint: 'A utility bill, lease, or similar document.' },
+];
+
+function readSignupDocument(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(new Error('The document could not be read. Please select it again.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function RegisterPage() {
   const [params] = useSearchParams();
 
@@ -38,8 +52,10 @@ export default function RegisterPage() {
   const [companyName, setCompanyName] = useState('');
   const [companyWebsite, setCompanyWebsite] = useState('');
   const [companyRegistrationNumber, setCompanyRegistrationNumber] = useState('');
+  const [companyDocuments, setCompanyDocuments] = useState({});
   const [termsAccepted, setTermsAccepted] = useState(false);
   const pending = useRef(false);
+  const needsCompanyDocuments = role === 'recruiter' && SITE_SLUG === 'jooblie';
   
   const [state, setState] = useState({
     loading: false,
@@ -49,6 +65,7 @@ export default function RegisterPage() {
   const handleRoleChange = (newRole) => {
     setRole(newRole);
     setStep(1);
+    setCompanyDocuments({});
   };
 
   const handleNextStep = (e) => {
@@ -63,6 +80,14 @@ export default function RegisterPage() {
     if (role === 'recruiter' && step === 1) { handleNextStep(event); return; }
     if (role === 'recruiter') {
       const fieldErrors = validateCompanyForm({ name: companyName, website: companyWebsite, registration_number: companyRegistrationNumber });
+      if (needsCompanyDocuments) {
+        for (const { name: field, label } of companyDocumentFields) {
+          const file = companyDocuments[field];
+          if (!file || !file.size || file.size > 1_572_864 || !/\.(pdf|jpe?g|png)$/i.test(file.name)) {
+            fieldErrors[field] = `${label} as a PDF, JPG, or PNG up to 1.5 MB.`;
+          }
+        }
+      }
       if (Object.keys(fieldErrors).length) {
         const names = { name: 'company_name', website: 'company_website', registration_number: 'company_registration_number' };
         applyFormErrors(event.currentTarget, { code: 'VALIDATION_ERROR', details: { fieldErrors: Object.fromEntries(Object.entries(fieldErrors).map(([key, value]) => [names[key] || key, value])) } });
@@ -77,12 +102,16 @@ export default function RegisterPage() {
     });
 
     try {
+      const documents = needsCompanyDocuments ? Object.fromEntries(await Promise.all(
+        companyDocumentFields.map(async ({ name: field }) => [field, await readSignupDocument(companyDocuments[field])]),
+      )) : {};
       const { error, confirmationRequired } = await signUp(email.trim(), password, {
         name: name.trim(),
         role,
         company_name: role === 'recruiter' ? companyName.trim() : undefined,
         company_website: role === 'recruiter' ? companyWebsite.trim() : undefined,
         company_registration_number: role === 'recruiter' ? companyRegistrationNumber.trim() : undefined,
+        ...documents,
         terms_accepted: role === 'job_seeker' && termsAccepted,
       });
 
@@ -97,6 +126,7 @@ export default function RegisterPage() {
         setState({
           loading: false,
           success: true,
+          confirmationRequired,
         });
       }
     } catch (err) {
@@ -210,9 +240,11 @@ export default function RegisterPage() {
                   <div className="jb-success-icon-wrap">
                     <CheckCircle2 size={44} color="#16a34a" strokeWidth={2.4} />
                   </div>
-                  <h3 className="jb-success-title">Account Created Successfully</h3>
+                  <h3 className="jb-success-title">{state.confirmationRequired ? 'Verify your email' : 'Account created'}</h3>
                   <p className="jb-success-text">
-                    We've initialized your {SITE_NAME} account. Please check your inbox to confirm your email, then sign in to your workspace.
+                    {state.confirmationRequired
+                      ? <>We sent a verification link to <strong>{email.trim()}</strong>. Open it, then sign in to your workspace.</>
+                      : `Your ${SITE_NAME} account is ready.`}
                   </p>
                   <Link to="/sign-in" className="jb-primary-action-btn" style={{ textDecoration: 'none', display: 'flex', marginTop: '20px' }}>
                     Proceed to Sign In
@@ -220,6 +252,7 @@ export default function RegisterPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="jb-card-form">
+                  {step === 1 && SITE_SLUG === 'jooblie' && <p className="jb-card-subtext">After you register, verify your email before signing in.</p>}
                   {/* Role Selector (only in step 1) */}
                   {step === 1 && (
                     <div className="jb-role-selector" role="tablist">
@@ -419,6 +452,24 @@ export default function RegisterPage() {
                           />
                         </div>
                       </div>
+
+                      {needsCompanyDocuments && companyDocumentFields.map(({ name: field, label, hint }) => (
+                        <div className="jb-field-block" key={field}>
+                          <label htmlFor={`reg-${field}`} className="jb-field-label">{label}</label>
+                          <small id={`reg-${field}-hint`}>{hint} PDF, JPG, or PNG, up to 1.5 MB.</small>
+                          <input
+                            id={`reg-${field}`}
+                            name={field}
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            required={!companyDocuments[field]}
+                            disabled={state.loading}
+                            aria-describedby={`reg-${field}-hint`}
+                            onChange={(event) => setCompanyDocuments(previous => ({ ...previous, [field]: event.target.files?.[0] }))}
+                          />
+                          {companyDocuments[field] && <small>{companyDocuments[field].name}</small>}
+                        </div>
+                      ))}
 
                       <button
                         type="submit"
