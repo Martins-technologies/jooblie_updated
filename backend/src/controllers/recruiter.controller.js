@@ -1,697 +1,571 @@
-import { serviceDb } from '../config/supabase.js';
-import { ApiError, asyncHandler } from '../utils/http.js';
-import { writeAuditLog } from '../utils/audit.js';
-import { savePortalJob } from '../utils/portalJobs.js';
-import { changeApplicationStatus } from '../utils/applicationStatus.js';
-import { ensureCompanyOwnership } from '../utils/companyOwnership.js';
-
-async function recruiterCompanyIds(userId) {
-  const { data, error } = await serviceDb
-    .from('company_members')
-    .select('company_id')
-    .eq('user_id', userId);
-
-  if (error) {
-    throw new ApiError(500, 'Company permissions could not be loaded.', 'COMPANY_ACCESS_FAILED');
-  }
-
-  return [...new Set((data || []).map((row) => row.company_id))];
-}
-
-async function assertCompanyAccess(userId, companyId) {
-  const ids = await recruiterCompanyIds(userId);
-  if (!ids.includes(companyId)) {
-    throw new ApiError(403, 'You cannot manage jobs for this company.', 'COMPANY_FORBIDDEN');
-  }
-}
-
-const companySelectFields = 'id,name,website,registration_number,verification_document_path,logo_path,description,verification_status,status,created_at';
-
-export const listAudiencePortals = asyncHandler(async (req, res) => {
-  const { data, error } = await serviceDb
-    .from('sites')
-    .select('id,slug,name,domain,site_type,sectors:sector_id(name)')
-    .eq('is_active', true)
-    .neq('slug', 'jooblie')
-    .neq('id', req.site.id)
-    .order('name');
-
-  if (error) throw new ApiError(500, 'Audience portals could not be loaded.', 'AUDIENCE_PORTALS_FAILED');
-  res.json({ items: data || [] });
-});
-
-const editableCompanyFields = [
-  'name',
-  'website',
-  'registration_number',
-  'verification_document_path',
-  'logo_path',
-  'description',
-];
-
-function pickCompanyPayload(body) {
-  return Object.fromEntries(
-    editableCompanyFields
-      .filter((key) => Object.prototype.hasOwnProperty.call(body, key))
-      .map((key) => [key, body[key] === '' ? null : body[key]]),
-  );
-}
-
-function mapCompanyUpdateError(error) {
-  if (error?.code === '23505' || String(error?.message || '').includes('companies_lower_name_live_idx')) {
-    throw new ApiError(
-      409,
-      'That company name is already registered. Please use the existing company or choose a different name.',
-      'COMPANY_NAME_TAKEN',
-    );
-  }
-
-  throw new ApiError(400, 'The company could not be updated.', 'COMPANY_UPDATE_FAILED', error?.message);
-}
-
-
-async function loadApplicationStats(jobIds) {
-  if (!jobIds.length) return [];
-
-  const rows = [];
-  const pageSize = 1000;
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await serviceDb
-      .from('applications')
-      .select('job_id,status')
-      .in('job_id', jobIds)
-      .is('deleted_at', null)
-      .range(from, from + pageSize - 1);
-
-    if (error) {
-      throw new ApiError(500, 'Application statistics could not be loaded.', 'APPLICATION_STATS_FAILED');
-    }
-
-    rows.push(...(data || []));
-    if (!data || data.length < pageSize) break;
-    from += pageSize;
-  }
-
-  return rows;
-}
-
-async function loadViewStats(jobIds) {
-  if (!jobIds.length) return [];
-
-  const rows = [];
-  const pageSize = 1000;
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await serviceDb
-      .from('job_views')
-      .select('job_id')
-      .in('job_id', jobIds)
-      .range(from, from + pageSize - 1);
-
-    if (error) {
-      throw new ApiError(500, 'Job view statistics could not be loaded.', 'VIEW_STATS_FAILED');
-    }
-
-    rows.push(...(data || []));
-    if (!data || data.length < pageSize) break;
-    from += pageSize;
-  }
-
-  return rows;
-}
-
-export const listCompanies = asyncHandler(async (req, res) => {
-  const ids = await recruiterCompanyIds(req.user.id);
-  if (!ids.length) return res.json({ items: [] });
-
-  const { data, error } = await serviceDb
-    .from('companies')
-    .select('id,name,website,registration_number,verification_document_path,logo_path,description,verification_status,status,created_at')
-    .in('id', ids)
-    .is('deleted_at', null)
-    .order('name');
-
-  if (error) throw new ApiError(500, 'Your companies could not be loaded.', 'COMPANIES_FAILED');
-  res.json({ items: data || [] });
-});
-
-export const createCompany = asyncHandler(async (req, res) => {
-  const payload = {
-    name: req.body.name,
-    website: req.body.website,
-    registration_number: req.body.registration_number,
-    verification_document_path: req.body.verification_document_path || null,
-    logo_path: req.body.logo_path || null,
-    description: req.body.description || null,
-    created_by: req.user.id,
-  };
-
-  const { data: company, error } = await serviceDb
-    .from('companies')
-    .insert(payload)
-    .select('id,name,website,registration_number,verification_document_path,logo_path,description,verification_status,status,created_at')
-    .single();
-
-  if (error) {
-    throw new ApiError(400, 'The company could not be created.', 'COMPANY_CREATE_FAILED', error.message);
-  }
-
-  try {
-    await ensureCompanyOwnership(serviceDb, company.id, req.user.id);
-  } catch (ownershipError) {
-    // Only a definite failed membership insert is compensated. A trigger-created
-    // owner or an unavailable ownership check must never delete a valid company.
-    if (['COMPANY_MEMBER_FAILED', 'COMPANY_OWNER_CONFLICT'].includes(ownershipError.code)) {
-      await serviceDb.from('companies').delete().eq('id', company.id).eq('created_by', req.user.id);
-    }
-    throw ownershipError;
-  }
-
-  await serviceDb
-    .from('profiles')
-    .update({ recruiter_company_id: company.id })
-    .eq('id', req.user.id)
-    .is('recruiter_company_id', null);
-
-  await writeAuditLog(req, {
-    action: 'company.create',
-    entityType: 'company',
-    entityId: company.id,
-    companyId: company.id,
-  });
-
-  res.status(201).json({ company });
-});
-
-export const updateCompany = asyncHandler(async (req, res) => {
-  const { companyId } = req.params;
-
-  const { data: existing, error: existingError } = await serviceDb
-    .from('companies')
-    .select('id')
-    .eq('id', companyId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (existingError || !existing) {
-    throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
-  }
-
-  await assertCompanyAccess(req.user.id, companyId);
-
-  const payload = pickCompanyPayload(req.body);
-
-  if (!Object.keys(payload).length) {
-    const { data: company, error } = await serviceDb
-      .from('companies')
-      .select(companySelectFields)
-      .eq('id', companyId)
-      .single();
-
-    if (error) mapCompanyUpdateError(error);
-    return res.json({ company });
-  }
-
-  const { data: company, error } = await serviceDb
-    .from('companies')
-    .update(payload)
-    .eq('id', companyId)
-    .select(companySelectFields)
-    .single();
-
-  if (error) mapCompanyUpdateError(error);
-
-  await writeAuditLog(req, {
-    action: 'company.update',
-    entityType: 'company',
-    entityId: company.id,
-    companyId: company.id,
-    metadata: { fields: Object.keys(payload) },
-  });
-
-  res.json({ company });
-});
-
-export const dashboard = asyncHandler(async (req, res) => {
-  const companyIds = await recruiterCompanyIds(req.user.id);
-
-  if (!companyIds.length) {
-    return res.json({
-      metrics: { companies: 0, jobs: 0, activeJobs: 0, applications: 0, views: 0 },
-      pipeline: {
-        submitted: 0,
-        viewed: 0,
-        shortlisted: 0,
-        interviewing: 0,
-        offered: 0,
-        hired: 0,
-        rejected: 0,
-        withdrawn: 0,
-      },
-      companies: [],
-      jobs: [],
-      recentApplications: [],
-    });
-  }
-
-  const [companiesRes, jobsRes, activeJobsRes] = await Promise.all([
-    serviceDb
-      .from('companies')
-      .select('id,name,website,logo_path,verification_status,status')
-      .in('id', companyIds)
-      .is('deleted_at', null),
-    serviceDb
-      .from('jobs')
-      .select('id,title,status,company_id,category_id,province,city,is_remote,employment_type,workplace_type,experience_level,salary_min,salary_max,salary_currency,salary_period,created_at,published_at')
-      .in('company_id', companyIds)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(100),
-    serviceDb
-      .from('jobs')
-      .select('id', { count: 'exact', head: true })
-      .in('company_id', companyIds)
-      .is('deleted_at', null)
-      .eq('status', 'active'),
-  ]);
-
-  const firstError = [companiesRes, jobsRes, activeJobsRes].find((result) => result.error)?.error;
-  if (firstError) throw new ApiError(500, 'Recruiter dashboard could not be loaded.', 'DASHBOARD_LOAD_FAILED');
-
-  const jobs = jobsRes.data || [];
-  const jobIds = jobs.map((job) => job.id);
-  const categoryIds = [...new Set(jobs.map((job) => job.category_id).filter(Boolean))];
-
-  const [recentAppsRes, applicationStats, viewRows, categoriesRes] = await Promise.all([
-    jobIds.length
-      ? serviceDb
-        .from('applications')
-        .select('id,job_id,applicant_id,status,created_at,updated_at', { count: 'exact' })
-        .in('job_id', jobIds)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(30)
-      : Promise.resolve({ data: [], error: null, count: 0 }),
-    loadApplicationStats(jobIds),
-    loadViewStats(jobIds),
-    categoryIds.length
-      ? serviceDb.from('categories').select('id,name,slug').in('id', categoryIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-
-  const secondError = [recentAppsRes, categoriesRes].find((result) => result.error)?.error;
-  if (secondError) throw new ApiError(500, 'Recruiter dashboard could not be loaded.', 'DASHBOARD_LOAD_FAILED');
-
-  const recentApplicationsRaw = recentAppsRes.data || [];
-  const applicantIds = [...new Set(recentApplicationsRaw.map((item) => item.applicant_id).filter(Boolean))];
-  const { data: applicants = [], error: applicantError } = applicantIds.length
-    ? await serviceDb
-      .from('profiles')
-      .select('id,full_name,headline,location_city,location_province')
-      .in('id', applicantIds)
-    : { data: [], error: null };
-
-  if (applicantError) throw new ApiError(500, 'Candidate profiles could not be loaded.', 'APPLICANTS_FAILED');
-
-  const companyMap = new Map((companiesRes.data || []).map((item) => [item.id, item]));
-  const categoryMap = new Map((categoriesRes.data || []).map((item) => [Number(item.id), item]));
-  const applicantMap = new Map((applicants || []).map((item) => [item.id, item]));
-  const jobMap = new Map(jobs.map((job) => [job.id, job]));
-  const viewCounts = new Map();
-  const applicationCounts = new Map();
-  const applicationStatusCounts = new Map();
-  const pipeline = {
-    submitted: 0,
-    viewed: 0,
-    shortlisted: 0,
-    interviewing: 0,
-    offered: 0,
-    hired: 0,
-    rejected: 0,
-    withdrawn: 0,
-  };
-
-  viewRows.forEach((row) => {
-    viewCounts.set(row.job_id, (viewCounts.get(row.job_id) || 0) + 1);
-  });
-
-  applicationStats.forEach((row) => {
-    applicationCounts.set(row.job_id, (applicationCounts.get(row.job_id) || 0) + 1);
-
-    const byStatus = applicationStatusCounts.get(row.job_id) || {};
-    byStatus[row.status] = (byStatus[row.status] || 0) + 1;
-    applicationStatusCounts.set(row.job_id, byStatus);
-
-    if (Object.prototype.hasOwnProperty.call(pipeline, row.status)) {
-      pipeline[row.status] += 1;
-    }
-  });
-
-  const jobsWithRelations = jobs.map((job) => ({
-    ...job,
-    companies: companyMap.get(job.company_id) || null,
-    categories: categoryMap.get(Number(job.category_id)) || null,
-    views_count: viewCounts.get(job.id) || 0,
-    applications_count: applicationCounts.get(job.id) || 0,
-    application_status_counts: applicationStatusCounts.get(job.id) || {},
-  }));
-
-  const recentApplications = recentApplicationsRaw.map((application) => ({
-    ...application,
-    profiles: applicantMap.get(application.applicant_id) || null,
-    jobs: (() => {
-      const job = jobMap.get(application.job_id);
-      return job ? { id: job.id, title: job.title, company_id: job.company_id } : null;
-    })(),
-  }));
-
-  res.json({
-    metrics: {
-      companies: companyIds.length,
-      jobs: jobs.length,
-      activeJobs: activeJobsRes.count || 0,
-      applications: recentAppsRes.count || applicationStats.length,
-      views: viewRows.length,
-    },
-    pipeline,
-    companies: companiesRes.data || [],
-    jobs: jobsWithRelations,
-    recentApplications,
-  });
-});
-
-export const createJob = asyncHandler(async (req, res) => {
-  const data = await savePortalJob(serviceDb, {
-    actorId: req.user.id,
-    siteId: req.site.id,
-    body: req.body,
-  });
-
-  await writeAuditLog(req, {
-    action: 'job.create',
-    entityType: 'job',
-    entityId: data.id,
-    companyId: data.company_id,
-    metadata: {
-      origin_site: req.site.slug,
-      category_id: data.category_id,
-      audience_sites: req.body.audience_sites || [],
-    },
-  });
-
-  res.status(201).json({ job: data });
-});
-
-export const updateJob = asyncHandler(async (req, res) => {
-  const data = await savePortalJob(serviceDb, {
-    actorId: req.user.id,
-    jobId: req.params.jobId,
-    siteId: req.site.id,
-    body: req.body,
-  });
-
-  await writeAuditLog(req, {
-    action: 'job.update',
-    entityType: 'job',
-    entityId: data.id,
-    companyId: data.company_id,
-    metadata: { status: data.status },
-  });
-
-  res.json({ job: data });
-});
-
-const recruiterAllowedTransitions = {
-  submitted: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'rejected']),
-  viewed: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'rejected']),
-  shortlisted: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'rejected']),
-  interviewing: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected']),
-  offered: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected']),
-  hired: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected']),
-  rejected: new Set(['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'rejected']),
-  withdrawn: new Set(['withdrawn']),
-};
-
-export const listApplications = asyncHandler(async (req, res) => {
-  const { data: job } = await serviceDb
-    .from('jobs')
-    .select('id,company_id')
-    .eq('id', req.params.jobId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (!job) throw new ApiError(404, 'Job not found.', 'JOB_NOT_FOUND');
-  await assertCompanyAccess(req.user.id, job.company_id);
-
-  const { data, error } = await serviceDb
-    .from('applications')
-    .select('id,status,cover_letter,resume_path,created_at,updated_at,applicant_id')
-    .eq('job_id', job.id)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
-
-  if (error) throw new ApiError(500, 'Applications could not be loaded.', 'APPLICATIONS_FAILED');
-
-  const applicantIds = [...new Set((data || []).map((item) => item.applicant_id))];
-  const { data: profiles = [] } = applicantIds.length
-    ? await serviceDb
-        .from('profiles')
-        .select('id,full_name,email,phone,headline,location_city,location_province,skills,default_resume_path,experience,education')
-        .in('id', applicantIds)
-    : { data: [] };
-
-  const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
-  res.json({
-    items: (data || []).map((application) => ({
-      ...application,
-      profiles: profileMap.get(application.applicant_id) || null,
-    })),
-  });
-});
-
-export const listAllApplications = asyncHandler(async (req, res) => {
-  const companyIds = await recruiterCompanyIds(req.user.id);
-  if (!companyIds.length) return res.json({ items: [], page: 1, pageSize: 25, total: 0 });
-
-  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-  const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 25));
-  const from = (page - 1) * pageSize;
-  let query = serviceDb.from('applications').select('id,status,cover_letter,resume_path,applied_via_site_id,created_at,updated_at,applicant_id,job_id,jobs!inner(id,title,company_id)', { count: 'exact' })
-    .in('jobs.company_id', companyIds).is('deleted_at', null).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
-  if (req.query.status && req.query.status !== 'all') query = query.eq('status', req.query.status);
-  if (req.query.jobId) query = query.eq('job_id', req.query.jobId);
-  const { data, error, count } = await query;
-  if (error) throw new ApiError(500, 'Candidates could not be loaded.', 'CANDIDATES_FAILED', error.message);
-
-  const applicantIds = [...new Set((data || []).map((item) => item.applicant_id))];
-  const { data: profiles = [] } = applicantIds.length ? await serviceDb.from('profiles').select('id,full_name,email,phone,headline,location_city,location_province,skills,experience,education,default_resume_path').in('id', applicantIds) : { data: [] };
-  const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
-
-  // Fetch sites for cross-portal display
-  const { data: sites = [] } = await serviceDb.from('sites').select('id,name,slug');
-  const siteMap = new Map((sites || []).map((s) => [s.id, s]));
-
-  // Fetch recent activity log for stage details (interview, offer, feedback, notes)
-  const appIds = (data || []).map((a) => a.id);
-  const { data: logs = [] } = appIds.length
-    ? await serviceDb.from('activity_log')
-        .select('action,entity_id,data,created_at')
-        .eq('entity_type', 'application')
-        .in('entity_id', appIds)
-        .order('created_at', { ascending: false })
-    : { data: [] };
-
-  const items = (data || []).map((application) => {
-    const site = siteMap.get(application.applied_via_site_id) || { id: 1, name: 'Jooblie Aggregator', slug: 'jooblie' };
-    const appLogs = logs.filter((l) => l.entity_id === application.id);
-    const latestInterviewLog = appLogs.find((l) => l.action === 'application.interview' || l.data?.interview);
-    const latestOfferLog = appLogs.find((l) => l.action === 'application.offer' || l.data?.offer);
-    const latestRejectLog = appLogs.find((l) => l.action === 'application.reject' || l.data?.feedback);
-    const latestShortlistLog = appLogs.find((l) => l.action === 'application.shortlist' || l.data?.note);
-
-    return {
-      ...application,
-      portal: site,
-      interview: latestInterviewLog?.data?.interview || null,
-      offer: latestOfferLog?.data?.offer || null,
-      feedback: latestRejectLog?.data?.feedback || null,
-      internal_note: latestShortlistLog?.data?.note || null,
-      profiles: profileMap.get(application.applicant_id) || null,
-    };
-  });
-
-  res.json({ items, page, pageSize, total: count || 0 });
-});
-
-// 🔥 getApplicationResumeUrl
-export const getApplicationResumeUrl = asyncHandler(async (req, res) => {
-  const { data: application } = await serviceDb
-    .from('applications')
-    .select('id,resume_path,job_id,status') 
-    .eq('id', req.params.applicationId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (!application?.resume_path) throw new ApiError(404, 'Resume not found.', 'RESUME_NOT_FOUND');
-
-  const { data: job } = await serviceDb
-    .from('jobs')
-    .select('company_id')
-    .eq('id', application.job_id)
-    .maybeSingle();
-
-  if (!job) throw new ApiError(404, 'Application job not found.', 'APPLICATION_NOT_FOUND');
-  
-  await assertCompanyAccess(req.user.id, job.company_id);
-
-  const { data: signed, error } = await serviceDb.storage
-    .from('resumes')
-    .createSignedUrl(application.resume_path, 300);
-
-  if (error || !signed?.signedUrl) throw new ApiError(404, 'Resume is not available.', 'RESUME_URL_FAILED');
-
-  await writeAuditLog(req, { 
-    action: 'application.resume.view', 
-    entityType: 'application', 
-    entityId: application.id, 
-    companyId: job.company_id 
-  });
-
-  // Automatically mark as viewed if it was just submitted
-  if (application.status === 'submitted') {
-    await changeApplicationStatus(req.db, {
-      applicationId: application.id,
-      expectedStatus: 'submitted',
-      status: 'viewed',
-      allowConflict: true,
-    });
-  }
-
-  res.json({ url: signed.signedUrl, expiresIn: 300 });
-});
-
-// 🔥 updateApplication with stage progression action triggers
-export const updateApplication = asyncHandler(async (req, res) => {
-  const { data: application } = await serviceDb
-    .from('applications')
-    .select('id,job_id,status,applicant_id,applied_via_site_id')
-    .eq('id', req.params.applicationId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (!application) throw new ApiError(404, 'Application not found.', 'APPLICATION_NOT_FOUND');
-
-  const { data: job } = await serviceDb
-    .from('jobs')
-    .select('id,title,company_id')
-    .eq('id', application.job_id)
-    .maybeSingle();
-
-  if (!job) throw new ApiError(404, 'Application job not found.', 'APPLICATION_NOT_FOUND');
-  await assertCompanyAccess(req.user.id, job.company_id);
-
-  const allowed = recruiterAllowedTransitions[application.status] || new Set();
-  if (!allowed.has(req.body.status)) {
-    throw new ApiError(409, `Application cannot move from ${application.status} to ${req.body.status}.`, 'INVALID_APPLICATION_TRANSITION');
-  }
-
-  // Handle offer document attachment if base64 provided
-  let offerPayload = req.body.offer || null;
-  if (offerPayload && offerPayload.documentBase64) {
-    try {
-      const match = String(offerPayload.documentBase64).match(/^data:([^;]+);base64,(.+)$/);
-      const rawBase64 = match ? match[2] : offerPayload.documentBase64;
-      const buffer = Buffer.from(rawBase64, 'base64');
-      const safeFilename = (offerPayload.documentName || 'Offer_Letter.pdf').replace(/[^a-zA-Z0-9._-]+/g, '-');
-      const storagePath = `offers/${application.id}/${Date.now()}-${safeFilename}`;
-      const { error: uploadErr } = await serviceDb.storage
-        .from('resumes')
-        .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: true });
-      if (!uploadErr) {
-        offerPayload.documentPath = storagePath;
-        delete offerPayload.documentBase64;
-      }
-    } catch (e) {
-      console.warn('Could not store offer attachment in storage:', e.message);
-    }
-  }
-
-  const data = await changeApplicationStatus(req.db, {
-    applicationId: application.id,
-    expectedStatus: application.status,
-    status: req.body.status,
-  });
-
-  // Action name for audit log
-  let actionName = 'application.status.update';
-  if (req.body.status === 'shortlisted') actionName = 'application.shortlist';
-  else if (req.body.status === 'interviewing') actionName = 'application.interview';
-  else if (req.body.status === 'offered') actionName = 'application.offer';
-  else if (req.body.status === 'rejected') actionName = 'application.reject';
-
-  await writeAuditLog(req, {
-    action: actionName,
-    entityType: 'application',
-    entityId: application.id,
-    companyId: job.company_id,
-    data: {
-      status: req.body.status,
-      note: req.body.note || null,
-      interview: req.body.interview || null,
-      offer: offerPayload,
-      feedback: req.body.feedback || null,
-    },
-  });
-
-  // Send structured in-app and email notification to candidate
-  const { data: company } = await serviceDb.from('companies').select('name').eq('id', job.company_id).maybeSingle();
-  const companyNameStr = company?.name || 'The Employer';
-
-  let notifType = 'application_status';
-  let notifTitle = `Status update: ${job.title}`;
-  let notifMessage = `Your application for ${job.title} at ${companyNameStr} has moved to ${req.body.status}.`;
-
-  if (req.body.status === 'shortlisted') {
-    notifType = 'candidate_shortlisted';
-    notifTitle = `Shortlisted: ${job.title}`;
-    notifMessage = `Great news! You have been shortlisted for ${job.title} at ${companyNameStr}.${req.body.note ? ` Note: "${req.body.note}"` : ''}`;
-  } else if (req.body.status === 'interviewing') {
-    notifType = 'interview_scheduled';
-    notifTitle = `Interview Scheduled: ${job.title}`;
-    notifMessage = `${companyNameStr} has scheduled an interview for ${job.title}. Date: ${req.body.interview?.date || 'TBD'} ${req.body.interview?.time || ''}. Check your applications tab for full details.`;
-  } else if (req.body.status === 'offered') {
-    notifType = 'offer_extended';
-    notifTitle = `Official Job Offer: ${job.title}`;
-    notifMessage = `Congratulations! ${companyNameStr} has extended an official job offer for ${job.title}. Inspect your offer details and respond.`;
-  } else if (req.body.status === 'rejected') {
-    notifType = 'application_rejected';
-    notifTitle = `Application update: ${job.title}`;
-    notifMessage = `Thank you for taking the time to apply for ${job.title} at ${companyNameStr}.${req.body.feedback ? ` Feedback: "${req.body.feedback}"` : ' The team has decided to move forward with other candidates at this time.'}`;
-  }
-
-  await serviceDb.from('notifications').insert({
-    user_id: application.applicant_id,
-    type: notifType,
-    entity_type: 'application',
-    entity_id: application.id,
-    site_id: application.applied_via_site_id || null,
-    data: {
-      title: notifTitle,
-      message: notifMessage,
-      status: req.body.status,
-      job_id: job.id,
-      job_title: job.title,
-      company_name: companyNameStr,
-      note: req.body.note || null,
-      interview: req.body.interview || null,
-      offer: offerPayload,
-      feedback: req.body.feedback || null,
-    },
-    created_at: new Date().toISOString(),
-  });
-
-  res.json({ application: data, offer: offerPayload });
-});
+aW1wb3J0IHsgc2VydmljZURiIH0gZnJvbSAnLi4vY29uZmlnL3N1cGFiYXNl
+LmpzJzsKaW1wb3J0IHsgQXBpRXJyb3IsIGFzeW5jSGFuZGxlciB9IGZyb20g
+Jy4uL3V0aWxzL2h0dHAuanMnOwppbXBvcnQgeyB3cml0ZUF1ZGl0TG9nIH0g
+ZnJvbSAnLi4vdXRpbHMvYXVkaXQuanMnOwppbXBvcnQgeyBzYXZlUG9ydGFs
+Sm9iIH0gZnJvbSAnLi4vdXRpbHMvcG9ydGFsSm9icy5qcyc7CmltcG9ydCB7
+IGNoYW5nZUFwcGxpY2F0aW9uU3RhdHVzIH0gZnJvbSAnLi4vdXRpbHMvYXBw
+bGljYXRpb25TdGF0dXMuanMnOwppbXBvcnQgeyBlbnN1cmVDb21wYW55T3du
+ZXJzaGlwIH0gZnJvbSAnLi4vdXRpbHMvY29tcGFueU93bmVyc2hpcC5qcyc7
+Cgphc3luYyBmdW5jdGlvbiByZWNydWl0ZXJDb21wYW55SWRzKHVzZXJJZCkg
+ewogIGNvbnN0IHsgZGF0YSwgZXJyb3IgfSA9IGF3YWl0IHNlcnZpY2VEYgog
+ICAgLmZyb20oJ2NvbXBhbnlfbWVtYmVycycpCiAgICAuc2VsZWN0KCdjb21w
+YW55X2lkJykKICAgIC5lcSgndXNlcl9pZCcsIHVzZXJJZCk7CgogIGlmIChl
+cnJvcikgewogICAgdGhyb3cgbmV3IEFwaUVycm9yKDUwMCwgJ0NvbXBhbnkg
+cGVybWlzc2lvbnMgY291bGQgbm90IGJlIGxvYWRlZC4nLCAnQ09NUEFOWV9B
+Q0NFU1NfRkFJTEVEJyk7CiAgfQoKICByZXR1cm4gWy4uLm5ldyBTZXQoKGRh
+dGEgfHwgW10pLm1hcCgocm93KSA9PiByb3cuY29tcGFueV9pZCkpXTsKfQoK
+YXN5bmMgZnVuY3Rpb24gYXNzZXJ0Q29tcGFueUFjY2Vzcyh1c2VySWQsIGNv
+bXBhbnlJZCkgewogIGNvbnN0IGlkcyA9IGF3YWl0IHJlY3J1aXRlckNvbXBh
+bnlJZHModXNlcklkKTsKICBpZiAoIWlkcy5pbmNsdWRlcyhjb21wYW55SWQp
+KSB7CiAgICB0aHJvdyBuZXcgQXBpRXJyb3IoNDAzLCAnWW91IGNhbm5vdCBt
+YW5hZ2Ugam9icyBmb3IgdGhpcyBjb21wYW55LicsICdDT01QQU5ZX0ZPUkJJ
+RERFTicpOwogIH0KfQoKY29uc3QgY29tcGFueVNlbGVjdEZpZWxkcyA9ICdp
+ZCxuYW1lLHdlYnNpdGUscmVnaXN0cmF0aW9uX251bWJlcix2ZXJpZmljYXRp
+b25fZG9jdW1lbnRfcGF0aCxsb2dvX3BhdGgsZGVzY3JpcHRpb24sdmVyaWZp
+Y2F0aW9uX3N0YXR1cyxzdGF0dXMsY3JlYXRlZF9hdCc7CgpleHBvcnQgY29u
+c3QgbGlzdEF1ZGllbmNlUG9ydGFscyA9IGFzeW5jSGFuZGxlcihhc3luYyAo
+cmVxLCByZXMpID0+IHsKICBjb25zdCB7IGRhdGEsIGVycm9yIH0gPSBhd2Fp
+dCBzZXJ2aWNlRGIKICAgIC5mcm9tKCdzaXRlcycpCiAgICAuc2VsZWN0KCdp
+ZCxzbHVnLG5hbWUsZG9tYWluLHNpdGVfdHlwZSxzZWN0b3JzOnNlY3Rvcl9p
+ZChuYW1lKScpCiAgICAuZXEoJ2lzX2FjdGl2ZScsIHRydWUpCiAgICAubmVx
+KCdzbHVnJywgJ2pvb2JsaWUnKQogICAgLm5lcSgnaWQnLCByZXEuc2l0ZS5p
+ZCkKICAgIC5vcmRlcignbmFtZScpOwoKICBpZiAoZXJyb3IpIHRocm93IG5l
+dyBBcGlFcnJvcig1MDAsICdBdWRpZW5jZSBwb3J0YWxzIGNvdWxkIG5vdCBi
+ZSBsb2FkZWQuJywgJ0FVRElFTkNFX1BPUlRBTFNfRkFJTEVEJyk7CiAgcmVz
+Lmpzb24oeyBpdGVtczogZGF0YSB8fCBbXSB9KTsKfSk7Cgpjb25zdCBlZGl0
+YWJsZUNvbXBhbnlGaWVsZHMgPSBbCiAgJ25hbWUnLAogICd3ZWJzaXRlJywK
+ICAncmVnaXN0cmF0aW9uX251bWJlcicsCiAgJ3ZlcmlmaWNhdGlvbl9kb2N1
+bWVudF9wYXRoJywKICAnbG9nb19wYXRoJywKICAnZGVzY3JpcHRpb24nLApd
+OwoKZnVuY3Rpb24gcGlja0NvbXBhbnlQYXlsb2FkKGJvZHkpIHsKICByZXR1
+cm4gT2JqZWN0LmZyb21FbnRyaWVzKAogICAgZWRpdGFibGVDb21wYW55Rmll
+bGRzCiAgICAgIC5maWx0ZXIoKGtleSkgPT4gT2JqZWN0LnByb3RvdHlwZS5o
+YXNPd25Qcm9wZXJ0eS5jYWxsKGJvZHksIGtleSkpCiAgICAgIC5tYXAoKGtl
+eSkgPT4gW2tleSwgYm9keVtrZXldID09PSAnJyA/IG51bGwgOiBib2R5W2tl
+eV1dKSwKICApOwp9CgpmdW5jdGlvbiBtYXBDb21wYW55VXBkYXRlRXJyb3Io
+ZXJyb3IpIHsKICBpZiAoZXJyb3I/LmNvZGUgPT09ICcyMzUwNScgfHwgU3Ry
+aW5nKGVycm9yPy5tZXNzYWdlIHx8ICcnKS5pbmNsdWRlcygnY29tcGFuaWVz
+X2xvd2VyX25hbWVfbGl2ZV9pZHgnKSkgewogICAgdGhyb3cgbmV3IEFwaUVy
+cm9yKAogICAgICA0MDksCiAgICAgICdUaGF0IGNvbXBhbnkgbmFtZSBpcyBh
+bHJlYWR5IHJlZ2lzdGVyZWQuIFBsZWFzZSB1c2UgdGhlIGV4aXN0aW5nIGNv
+bXBhbnkgb3IgY2hvb3NlIGEgZGlmZmVyZW50IG5hbWUuJywKICAgICAgJ0NP
+TVBBTllfTkFNRV9UQUtFTicsCiAgICApOwogIH0KCiAgdGhyb3cgbmV3IEFw
+aUVycm9yKDQwMCwgJ1RoZSBjb21wYW55IGNvdWxkIG5vdCBiZSB1cGRhdGVk
+LicsICdDT01QQU5ZX1VQREFURV9GQUlMRUQnLCBlcnJvcj8ubWVzc2FnZSk7
+Cn0KCgphc3luYyBmdW5jdGlvbiBsb2FkQXBwbGljYXRpb25TdGF0cyhqb2JJ
+ZHMpIHsKICBpZiAoIWpvYklkcy5sZW5ndGgpIHJldHVybiBbXTsKCiAgY29u
+c3Qgcm93cyA9IFtdOwogIGNvbnN0IHBhZ2VTaXplID0gMTAwMDsKICBsZXQg
+ZnJvbSA9IDA7CgogIHdoaWxlICh0cnVlKSB7CiAgICBjb25zdCB7IGRhdGEs
+IGVycm9yIH0gPSBhd2FpdCBzZXJ2aWNlRGIKICAgICAgLmZyb20oJ2FwcGxp
+Y2F0aW9ucycpCiAgICAgIC5zZWxlY3QoJ2pvYl9pZCxzdGF0dXMnKQogICAg
+ICAuaW4oJ2pvYl9pZCcsIGpvYklkcykKICAgICAgLmlzKCdkZWxldGVkX2F0
+JywgbnVsbCkKICAgICAgLnJhbmdlKGZyb20sIGZyb20gKyBwYWdlU2l6ZSAt
+IDEpOwoKICAgIGlmIChlcnJvcikgewogICAgICB0aHJvdyBuZXcgQXBpRXJy
+b3IoNTAwLCAnQXBwbGljYXRpb24gc3RhdGlzdGljcyBjb3VsZCBub3QgYmUg
+bG9hZGVkLicsICdBUFBMSUNBVElPTl9TVEFUU19GQUlMRUQnKTsKICAgIH0K
+CiAgICByb3dzLnB1c2goLi4uKGRhdGEgfHwgW10pKTsKICAgIGlmICghZGF0
+YSB8fCBkYXRhLmxlbmd0aCA8IHBhZ2VTaXplKSBicmVhazsKICAgIGZyb20g
+Kz0gcGFnZVNpemU7CiAgfQoKICByZXR1cm4gcm93czsKfQoKYXN5bmMgZnVu
+Y3Rpb24gbG9hZFZpZXdTdGF0cyhqb2JJZHMpIHsKICBpZiAoIWpvYklkcy5s
+ZW5ndGgpIHJldHVybiBbXTsKCiAgY29uc3Qgcm93cyA9IFtdOwogIGNvbnN0
+IHBhZ2VTaXplID0gMTAwMDsKICBsZXQgZnJvbSA9IDA7CgogIHdoaWxlICh0
+cnVlKSB7CiAgICBjb25zdCB7IGRhdGEsIGVycm9yIH0gPSBhd2FpdCBzZXJ2
+aWNlRGIKICAgICAgLmZyb20oJ2pvYl92aWV3cycpCiAgICAgIC5zZWxlY3Qo
+J2pvYl9pZCcpCiAgICAgIC5pbignam9iX2lkJywgam9iSWRzKQogICAgICAu
+cmFuZ2UoZnJvbSwgZnJvbSArIHBhZ2VTaXplIC0gMSk7CgogICAgaWYgKGVy
+cm9yKSB7CiAgICAgIHRocm93IG5ldyBBcGlFcnJvcig1MDAsICdKb2Igdmll
+dyBzdGF0aXN0aWNzIGNvdWxkIG5vdCBiZSBsb2FkZWQuJywgJ1ZJRVdfU1RB
+VFNfRkFJTEVEJyk7CiAgICB9CgogICAgcm93cy5wdXNoKC4uLihkYXRhIHx8
+IFtdKSk7CiAgICBpZiAoIWRhdGEgfHwgZGF0YS5sZW5ndGggPCBwYWdlU2l6
+ZSkgYnJlYWs7CiAgICBmcm9tICs9IHBhZ2VTaXplOwogIH0KCiAgcmV0dXJu
+IHJvd3M7Cn0KCmV4cG9ydCBjb25zdCBsaXN0Q29tcGFuaWVzID0gYXN5bmNI
+YW5kbGVyKGFzeW5jIChyZXEsIHJlcykgPT4gewogIGNvbnN0IGlkcyA9IGF3
+YWl0IHJlY3J1aXRlckNvbXBhbnlJZHMocmVxLnVzZXIuaWQpOwogIGlmICgh
+aWRzLmxlbmd0aCkgcmV0dXJuIHJlcy5qc29uKHsgaXRlbXM6IFtdIH0pOwoK
+ICBjb25zdCB7IGRhdGEsIGVycm9yIH0gPSBhd2FpdCBzZXJ2aWNlRGIKICAg
+IC5mcm9tKCdjb21wYW5pZXMnKQogICAgLnNlbGVjdCgnaWQsbmFtZSx3ZWJz
+aXRlLHJlZ2lzdHJhdGlvbl9udW1iZXIsdmVyaWZpY2F0aW9uX2RvY3VtZW50
+X3BhdGgsbG9nb19wYXRoLGRlc2NyaXB0aW9uLHZlcmlmaWNhdGlvbl9zdGF0
+dXMsc3RhdHVzLGNyZWF0ZWRfYXQnKQogICAgLmluKCdpZCcsIGlkcykKICAg
+IC5pcygnZGVsZXRlZF9hdCcsIG51bGwpCiAgICAub3JkZXIoJ25hbWUnKTsK
+CiAgaWYgKGVycm9yKSB0aHJvdyBuZXcgQXBpRXJyb3IoNTAwLCAnWW91ciBj
+b21wYW5pZXMgY291bGQgbm90IGJlIGxvYWRlZC4nLCAnQ09NUEFOSUVTX0ZB
+SUxFRCcpOwogIHJlcy5qc29uKHsgaXRlbXM6IGRhdGEgfHwgW10gfSk7Cn0p
+OwoKZXhwb3J0IGNvbnN0IGNyZWF0ZUNvbXBhbnkgPSBhc3luY0hhbmRsZXIo
+YXN5bmMgKHJlcSwgcmVzKSA9PiB7CiAgY29uc3QgcGF5bG9hZCA9IHsKICAg
+IG5hbWU6IHJlcS5ib2R5Lm5hbWUsCiAgICB3ZWJzaXRlOiByZXEuYm9keS53
+ZWJzaXRlLAogICAgcmVnaXN0cmF0aW9uX251bWJlcjogcmVxLmJvZHkucmVn
+aXN0cmF0aW9uX251bWJlciwKICAgIHZlcmlmaWNhdGlvbl9kb2N1bWVudF9w
+YXRoOiByZXEuYm9keS52ZXJpZmljYXRpb25fZG9jdW1lbnRfcGF0aCB8fCBu
+dWxsLAogICAgbG9nb19wYXRoOiByZXEuYm9keS5sb2dvX3BhdGggfHwgbnVs
+bCwKICAgIGRlc2NyaXB0aW9uOiByZXEuYm9keS5kZXNjcmlwdGlvbiB8fCBu
+dWxsLAogICAgY3JlYXRlZF9ieTogcmVxLnVzZXIuaWQsCiAgfTsKCiAgY29u
+c3QgeyBkYXRhOiBjb21wYW55LCBlcnJvciB9ID0gYXdhaXQgc2VydmljZURi
+CiAgICAuZnJvbSgnY29tcGFuaWVzJykKICAgIC5pbnNlcnQocGF5bG9hZCkK
+ICAgIC5zZWxlY3QoJ2lkLG5hbWUsd2Vic2l0ZSxyZWdpc3RyYXRpb25fbnVt
+YmVyLHZlcmlmaWNhdGlvbl9kb2N1bWVudF9wYXRoLGxvZ29fcGF0aCxkZXNj
+cmlwdGlvbix2ZXJpZmljYXRpb25fc3RhdHVzLHN0YXR1cyxjcmVhdGVkX2F0
+JykKICAgIC5zaW5nbGUoKTsKCiAgaWYgKGVycm9yKSB7CiAgICB0aHJvdyBu
+ZXcgQXBpRXJyb3IoNDAwLCAnVGhlIGNvbXBhbnkgY291bGQgbm90IGJlIGNy
+ZWF0ZWQuJywgJ0NPTVBBTllfQ1JFQVRFX0ZBSUxFRCcsIGVycm9yLm1lc3Nh
+Z2UpOwogIH0KCiAgdHJ5IHsKICAgIGF3YWl0IGVuc3VyZUNvbXBhbnlPd25l
+cnNoaXAoc2VydmljZURiLCBjb21wYW55LmlkLCByZXEudXNlci5pZCk7CiAg
+fSBjYXRjaCAob3duZXJzaGlwRXJyb3IpIHsKICAgIC8vIE9ubHkgYSBkZWZp
+bml0ZSBmYWlsZWQgbWVtYmVyc2hpcCBpbnNlcnQgaXMgY29tcGVuc2F0ZWQu
+IEEgdHJpZ2dlci1jcmVhdGVkCiAgICAvLyBvd25lciBvciBhbiB1bmF2YWls
+YWJsZSBvd25lcnNoaXAgY2hlY2sgbXVzdCBuZXZlciBkZWxldGUgYSB2YWxp
+ZCBjb21wYW55LgogICAgaWYgKFsnQ09NUEFOWV9NRU1CRVJfRkFJTEVEJywg
+J0NPTVBBTllfT1dORVJfQ09ORkxJQ1QnXS5pbmNsdWRlcyhvd25lcnNoaXBF
+cnJvci5jb2RlKSkgewogICAgICBhd2FpdCBzZXJ2aWNlRGIuZnJvbSgnY29t
+cGFuaWVzJykuZGVsZXRlKCkuZXEoJ2lkJywgY29tcGFueS5pZCkuZXEoJ2Ny
+ZWF0ZWRfYnknLCByZXEudXNlci5pZCk7CiAgICB9CiAgICB0aHJvdyBvd25l
+cnNoaXBFcnJvcjsKICB9CgogIGF3YWl0IHNlcnZpY2VEYgogICAgLmZyb20o
+J3Byb2ZpbGVzJykKICAgIC51cGRhdGUoeyByZWNydWl0ZXJfY29tcGFueV9p
+ZDogY29tcGFueS5pZCB9KQogICAgLmVxKCdpZCcsIHJlcS51c2VyLmlkKQog
+ICAgLmlzKCdyZWNydWl0ZXJfY29tcGFueV9pZCcsIG51bGwpOwoKICBhd2Fp
+dCB3cml0ZUF1ZGl0TG9nKHJlcSwgewogICAgYWN0aW9uOiAnY29tcGFueS5j
+cmVhdGUnLAogICAgZW50aXR5VHlwZTogJ2NvbXBhbnknLAogICAgZW50aXR5
+SWQ6IGNvbXBhbnkuaWQsCiAgICBjb21wYW55SWQ6IGNvbXBhbnkuaWQsCiAg
+fSk7CgogIHJlcy5zdGF0dXMoMjAxKS5qc29uKHsgY29tcGFueSB9KTsKfSk7
+CgpleHBvcnQgY29uc3QgdXBkYXRlQ29tcGFueSA9IGFzeW5jSGFuZGxlcihh
+c3luYyAocmVxLCByZXMpID0+IHsKICBjb25zdCB7IGNvbXBhbnlJZCB9ID0g
+cmVxLnBhcmFtczsKCiAgY29uc3QgeyBkYXRhOiBleGlzdGluZywgZXJyb3I6
+IGV4aXN0aW5nRXJyb3IgfSA9IGF3YWl0IHNlcnZpY2VEYgogICAgLmZyb20o
+J2NvbXBhbmllcycpCiAgICAuc2VsZWN0KCdpZCcpCiAgICAuZXEoJ2lkJywg
+Y29tcGFueUlkKQogICAgLmlzKCdkZWxldGVkX2F0JywgbnVsbCkKICAgIC5t
+YXliZVNpbmdsZSgpOwoKICBpZiAoZXhpc3RpbmdFcnJvciB8fCAhZXhpc3Rp
+bmcpIHsKICAgIHRocm93IG5ldyBBcGlFcnJvcig0MDQsICdDb21wYW55IG5v
+dCBmb3VuZC4nLCAnQ09NUEFOWV9OT1RfRk9VTkQnKTsKICB9CgogIGF3YWl0
+IGFzc2VydENvbXBhbnlBY2Nlc3MocmVxLnVzZXIuaWQsIGNvbXBhbnlJZCk7
+CgogIGNvbnN0IHBheWxvYWQgPSBwaWNrQ29tcGFueVBheWxvYWQocmVxLmJv
+ZHkpOwoKICBpZiAoIU9iamVjdC5rZXlzKHBheWxvYWQpLmxlbmd0aCkgewog
+ICAgY29uc3QgeyBkYXRhOiBjb21wYW55LCBlcnJvciB9ID0gYXdhaXQgc2Vy
+dmljZURiCiAgICAgIC5mcm9tKCdjb21wYW5pZXMnKQogICAgICAuc2VsZWN0
+KGNvbXBhbnlTZWxlY3RGaWVsZHMpCiAgICAgIC5lcSgnaWQnLCBjb21wYW55
+SWQpCiAgICAgIC5pcygnZGVsZXRlZF9hdCcsIG51bGwpCiAgICAgIC5tYXli
+ZVNpbmdsZSgpOwoKICAgIGlmIChlcnJvcikgbWFwQ29tcGFueVVwZGF0ZUVy
+cm9yKGVycm9yKTsKICAgIGlmICghY29tcGFueSkgdGhyb3cgbmV3IEFwaUVy
+cm9yKDQwNCwgJ0NvbXBhbnkgbm90IGZvdW5kLicsICdDT01QQU5ZX05PVF9G
+T1VORCcpOwogICAgcmV0dXJuIHJlcy5qc29uKHsgY29tcGFueSB9KTsKICB9
+CgogIGNvbnN0IHsgZGF0YTogY29tcGFueSwgZXJyb3IgfSA9IGF3YWl0IHNl
+cnZpY2VEYgogICAgLmZyb20oJ2NvbXBhbmllcycpCiAgICAudXBkYXRlKHBh
+eWxvYWQpCiAgICAuZXEoJ2lkJywgY29tcGFueUlkKQogICAgLmlzKCdkZWxl
+dGVkX2F0JywgbnVsbCkKICAgIC5zZWxlY3QoY29tcGFueVNlbGVjdEZpZWxk
+cykKICAgIC5tYXliZVNpbmdsZSgpOwoKICBpZiAoZXJyb3IpIG1hcENvbXBh
+bnlVcGRhdGVFcnJvcihlcnJvcik7CiAgaWYgKCFjb21wYW55KSB0aHJvdyBu
+ZXcgQXBpRXJyb3IoNDA0LCAnQ29tcGFueSBub3QgZm91bmQuJywgJ0NPTVBB
+TllfTk9UX0ZPVU5EJyk7CgogIGF3YWl0IHdyaXRlQXVkaXRMb2cocmVxLCB7
+CiAgICBhY3Rpb246ICdjb21wYW55LnVwZGF0ZScsCiAgICBlbnRpdHlUeXBl
+OiAnY29tcGFueScsCiAgICBlbnRpdHlJZDogY29tcGFueS5pZCwKICAgIGNv
+bXBhbnlJZDogY29tcGFueS5pZCwKICAgIG1ldGFkYXRhOiB7IGZpZWxkczog
+T2JqZWN0LmtleXMocGF5bG9hZCkgfSwKICB9KTsKCiAgcmVzLmpzb24oeyBj
+b21wYW55IH0pOwp9KTsKCmV4cG9ydCBjb25zdCBkYXNoYm9hcmQgPSBhc3lu
+Y0hhbmRsZXIoYXN5bmMgKHJlcSwgcmVzKSA9PiB7CiAgY29uc3QgY29tcGFu
+eUlkcyA9IGF3YWl0IHJlY3J1aXRlckNvbXBhbnlJZHMocmVxLnVzZXIuaWQp
+OwoKICBpZiAoIWNvbXBhbnlJZHMubGVuZ3RoKSB7CiAgICByZXR1cm4gcmVz
+Lmpzb24oewogICAgICBtZXRyaWNzOiB7IGNvbXBhbmllczogMCwgam9iczog
+MCwgYWN0aXZlSm9iczogMCwgYXBwbGljYXRpb25zOiAwLCB2aWV3czogMCB9
+LAogICAgICBwaXBlbGluZTogewogICAgICAgIHN1Ym1pdHRlZDogMCwKICAg
+ICAgICB2aWV3ZWQ6IDAsCiAgICAgICAgc2hvcnRsaXN0ZWQ6IDAsCiAgICAg
+ICAgaW50ZXJ2aWV3aW5nOiAwLAogICAgICAgIG9mZmVyZWQ6IDAsCiAgICAg
+ICAgaGlyZWQ6IDAsCiAgICAgICAgcmVqZWN0ZWQ6IDAsCiAgICAgICAgd2l0
+aGRyYXduOiAwLAogICAgICB9LAogICAgICBjb21wYW5pZXM6IFtdLAogICAg
+ICBqb2JzOiBbXSwKICAgICAgcmVjZW50QXBwbGljYXRpb25zOiBbXSwKICAg
+IH0pOwogIH0KCiAgY29uc3QgW2NvbXBhbmllc1Jlcywgam9ic1JlcywgYWN0
+aXZlSm9ic1Jlc10gPSBhd2FpdCBQcm9taXNlLmFsbChbCiAgICBzZXJ2aWNl
+RGIKICAgICAgLmZyb20oJ2NvbXBhbmllcycpCiAgICAgIC5zZWxlY3QoJ2lk
+LG5hbWUsd2Vic2l0ZSxsb2dvX3BhdGgsdmVyaWZpY2F0aW9uX3N0YXR1cyxz
+dGF0dXMnKQogICAgICAuaW4oJ2lkJywgY29tcGFueUlkcykKICAgICAgLmlz
+KCdkZWxldGVkX2F0JywgbnVsbCksCiAgICBzZXJ2aWNlRGIKICAgICAgLmZy
+b20oJ2pvYnMnKQogICAgICAuc2VsZWN0KCdpZCx0aXRsZSxzdGF0dXMsY29t
+cGFueV9pZCxjYXRlZ29yeV9pZCxwcm92aW5jZSxjaXR5LGlzX3JlbW90ZSxl
+bXBsb3ltZW50X3R5cGUsd29ya3BsYWNlX3R5cGUsZXhwZXJpZW5jZV9sZXZl
+bCxzYWxhcnlfbWluLHNhbGFyeV9tYXgsc2FsYXJ5X2N1cnJlbmN5LHNhbGFy
+eV9wZXJpb2QsY3JlYXRlZF9hdCxwdWJsaXNoZWRfYXQnKQogICAgICAuaW4o
+J2NvbXBhbnlfaWQnLCBjb21wYW55SWRzKQogICAgICAuaXMoJ2RlbGV0ZWRf
+YXQnLCBudWxsKQogICAgICAub3JkZXIoJ2NyZWF0ZWRfYXQnLCB7IGFzY2Vu
+ZGluZzogZmFsc2UgfSkKICAgICAgLmxpbWl0KDEwMCksCiAgICBzZXJ2aWNl
+RGIKICAgICAgLmZyb20oJ2pvYnMnKQogICAgICAuc2VsZWN0KCdpZCcsIHsg
+Y291bnQ6ICdleGFjdCcsIGhlYWQ6IHRydWUgfSkKICAgICAgLmluKCdjb21w
+YW55X2lkJywgY29tcGFueUlkcykKICAgICAgLmlzKCdkZWxldGVkX2F0Jywg
+bnVsbCkKICAgICAgLmVxKCdzdGF0dXMnLCAnYWN0aXZlJyksCiAgXSk7Cgog
+IGNvbnN0IGZpcnN0RXJyb3IgPSBbY29tcGFuaWVzUmVzLCBqb2JzUmVzLCBh
+Y3RpdmVKb2JzUmVzXS5maW5kKChyZXN1bHQpID0+IHJlc3VsdC5lcnJvcik/
+LmVycm9yOwogIGlmIChmaXJzdEVycm9yKSB0aHJvdyBuZXcgQXBpRXJyb3Io
+NTAwLCAnUmVjcnVpdGVyIGRhc2hib2FyZCBjb3VsZCBub3QgYmUgbG9hZGVk
+LicsICdEQVNIQk9BUkRfTE9BRF9GQUlMRUQnKTsKCiAgY29uc3Qgam9icyA9
+IGpvYnNSZXMuZGF0YSB8fCBbXTsKICBjb25zdCBqb2JJZHMgPSBqb2JzLm1h
+cCgoam9iKSA9PiBqb2IuaWQpOwogIGNvbnN0IGNhdGVnb3J5SWRzID0gWy4u
+Lm5ldyBTZXQoam9icy5tYXAoKGpvYikgPT4gam9iLmNhdGVnb3J5X2lkKS5m
+aWx0ZXIoQm9vbGVhbikpXTsKCiAgY29uc3QgW3JlY2VudEFwcHNSZXMsIGFw
+cGxpY2F0aW9uU3RhdHMsIHZpZXdSb3dzLCBjYXRlZ29yaWVzUmVzXSA9IGF3
+YWl0IFByb21pc2UuYWxsKFsKICAgIGpvYklkcy5sZW5ndGgKICAgICAgPyBz
+ZXJ2aWNlRGIKICAgICAgICAuZnJvbSgnYXBwbGljYXRpb25zJykKICAgICAg
+ICAuc2VsZWN0KCdpZCxqb2JfaWQsYXBwbGljYW50X2lkLHN0YXR1cyxjcmVh
+dGVkX2F0LHVwZGF0ZWRfYXQnLCB7IGNvdW50OiAnZXhhY3QnIH0pCiAgICAg
+ICAgLmluKCdqb2JfaWQnLCBqb2JJZHMpCiAgICAgICAgLmlzKCdkZWxldGVk
+X2F0JywgbnVsbCkKICAgICAgICAub3JkZXIoJ2NyZWF0ZWRfYXQnLCB7IGFz
+Y2VuZGluZzogZmFsc2UgfSkKICAgICAgICAubGltaXQoMzApCiAgICAgIDog
+UHJvbWlzZS5yZXNvbHZlKHsgZGF0YTogW10sIGVycm9yOiBudWxsLCBjb3Vu
+dDogMCB9KSwKICAgIGxvYWRBcHBsaWNhdGlvblN0YXRzKGpvYklkcyksCiAg
+ICBsb2FkVmlld1N0YXRzKGpvYklkcyksCiAgICBjYXRlZ29yeUlkcy5sZW5n
+dGgKICAgICAgPyBzZXJ2aWNlRGIuZnJvbSgnY2F0ZWdvcmllcycpLnNlbGVj
+dCgnaWQsbmFtZSxzbHVnJykuaW4oJ2lkJywgY2F0ZWdvcnlJZHMpCiAgICAg
+IDogUHJvbWlzZS5yZXNvbHZlKHsgZGF0YTogW10sIGVycm9yOiBudWxsIH0p
+LAogIF0pOwoKICBjb25zdCBzZWNvbmRFcnJvciA9IFtyZWNlbnRBcHBzUmVz
+LCBjYXRlZ29yaWVzUmVzXS5maW5kKChyZXN1bHQpID0+IHJlc3VsdC5lcnJv
+cik/LmVycm9yOwogIGlmIChzZWNvbmRFcnJvcikgdGhyb3cgbmV3IEFwaUVy
+cm9yKDUwMCwgJ1JlY3J1aXRlciBkYXNoYm9hcmQgY291bGQgbm90IGJlIGxv
+YWRlZC4nLCAnREFTSEJPQVJEX0xPQURfRkFJTEVEJyk7CgogIGNvbnN0IHJl
+Y2VudEFwcGxpY2F0aW9uc1JhdyA9IHJlY2VudEFwcHNSZXMuZGF0YSB8fCBb
+XTsKICBjb25zdCBhcHBsaWNhbnRJZHMgPSBbLi4ubmV3IFNldChyZWNlbnRB
+cHBsaWNhdGlvbnNSYXcubWFwKChpdGVtKSA9PiBpdGVtLmFwcGxpY2FudF9p
+ZCkuZmlsdGVyKEJvb2xlYW4pKV07CiAgY29uc3QgeyBkYXRhOiBhcHBsaWNh
+bnRzID0gW10sIGVycm9yOiBhcHBsaWNhbnRFcnJvciB9ID0gYXBwbGljYW50
+SWRzLmxlbmd0aAogICAgPyBhd2FpdCBzZXJ2aWNlRGIKICAgICAgLmZyb20o
+J3Byb2ZpbGVzJykKICAgICAgLnNlbGVjdCgnaWQsZnVsbF9uYW1lLGhlYWRs
+aW5lLGxvY2F0aW9uX2NpdHksbG9jYXRpb25fcHJvdmluY2UnKQogICAgICAu
+aW4oJ2lkJywgYXBwbGljYW50SWRzKQogICAgOiB7IGRhdGE6IFtdLCBlcnJv
+cjogbnVsbCB9OwoKICBpZiAoYXBwbGljYW50RXJyb3IpIHRocm93IG5ldyBB
+cGlFcnJvcig1MDAsICdDYW5kaWRhdGUgcHJvZmlsZXMgY291bGQgbm90IGJl
+IGxvYWRlZC4nLCAnQVBQTElDQU5UU19GQUlMRUQnKTsKCiAgY29uc3QgY29t
+cGFueU1hcCA9IG5ldyBNYXAoKGNvbXBhbmllc1Jlcy5kYXRhIHx8IFtdKS5t
+YXAoKGl0ZW0pID0+IFtpdGVtLmlkLCBpdGVtXSkpOwogIGNvbnN0IGNhdGVn
+b3J5TWFwID0gbmV3IE1hcCgoY2F0ZWdvcmllc1Jlcy5kYXRhIHx8IFtdKS5t
+YXAoKGl0ZW0pID0+IFtOdW1iZXIoaXRlbS5pZCksIGl0ZW1dKSk7CiAgY29u
+c3QgYXBwbGljYW50TWFwID0gbmV3IE1hcCgoYXBwbGljYW50cyB8fCBbXSku
+bWFwKChpdGVtKSA9PiBbaXRlbS5pZCwgaXRlbV0pKTsKICBjb25zdCBqb2JN
+YXAgPSBuZXcgTWFwKGpvYnMubWFwKChqb2IpID0+IFtqb2IuaWQsIGpvYl0p
+KTsKICBjb25zdCB2aWV3Q291bnRzID0gbmV3IE1hcCgpOwogIGNvbnN0IGFw
+cGxpY2F0aW9uQ291bnRzID0gbmV3IE1hcCgpOwogIGNvbnN0IGFwcGxpY2F0
+aW9uU3RhdHVzQ291bnRzID0gbmV3IE1hcCgpOwogIGNvbnN0IHBpcGVsaW5l
+ID0gewogICAgc3VibWl0dGVkOiAwLAogICAgdmlld2VkOiAwLAogICAgc2hv
+cnRsaXN0ZWQ6IDAsCiAgICBpbnRlcnZpZXdpbmc6IDAsCiAgICBvZmZlcmVk
+OiAwLAogICAgaGlyZWQ6IDAsCiAgICByZWplY3RlZDogMCwKICAgIHdpdGhk
+cmF3bjogMCwKICB9OwoKICB2aWV3Um93cy5mb3JFYWNoKChyb3cpID0+IHsK
+ICAgIHZpZXdDb3VudHMuc2V0KHJvdy5qb2JfaWQsICh2aWV3Q291bnRzLmdl
+dChyb3cuam9iX2lkKSB8fCAwKSArIDEpOwogIH0pOwoKICBhcHBsaWNhdGlv
+blN0YXRzLmZvckVhY2goKHJvdykgPT4gewogICAgYXBwbGljYXRpb25Db3Vu
+dHMuc2V0KHJvdy5qb2JfaWQsIChhcHBsaWNhdGlvbkNvdW50cy5nZXQocm93
+LmpvYl9pZCkgfHwgMCkgKyAxKTsKCiAgICBjb25zdCBieVN0YXR1cyA9IGFw
+cGxpY2F0aW9uU3RhdHVzQ291bnRzLmdldChyb3cuam9iX2lkKSB8fCB7fTsK
+ICAgIGJ5U3RhdHVzW3Jvdy5zdGF0dXNdID0gKGJ5U3RhdHVzW3Jvdy5zdGF0
+dXNdIHx8IDApICsgMTsKICAgIGFwcGxpY2F0aW9uU3RhdHVzQ291bnRzLnNl
+dChyb3cuam9iX2lkLCBieVN0YXR1cyk7CgogICAgaWYgKE9iamVjdC5wcm90
+b3R5cGUuaGFzT3duUHJvcGVydHkuY2FsbChwaXBlbGluZSwgcm93LnN0YXR1
+cykpIHsKICAgICAgcGlwZWxpbmVbcm93LnN0YXR1c10gKz0gMTsKICAgIH0K
+ICB9KTsKCiAgY29uc3Qgam9ic1dpdGhSZWxhdGlvbnMgPSBqb2JzLm1hcCgo
+am9iKSA9PiAoewogICAgLi4uam9iLAogICAgY29tcGFuaWVzOiBjb21wYW55
+TWFwLmdldChqb2IuY29tcGFueV9pZCkgfHwgbnVsbCwKICAgIGNhdGVnb3Jp
+ZXM6IGNhdGVnb3J5TWFwLmdldChOdW1iZXIoam9iLmNhdGVnb3J5X2lkKSkg
+fHwgbnVsbCwKICAgIHZpZXdzX2NvdW50OiB2aWV3Q291bnRzLmdldChqb2Iu
+aWQpIHx8IDAsCiAgICBhcHBsaWNhdGlvbnNfY291bnQ6IGFwcGxpY2F0aW9u
+Q291bnRzLmdldChqb2IuaWQpIHx8IDAsCiAgICBhcHBsaWNhdGlvbl9zdGF0
+dXNfY291bnRzOiBhcHBsaWNhdGlvblN0YXR1c0NvdW50cy5nZXQoam9iLmlk
+KSB8fCB7fSwKICB9KSk7CgogIGNvbnN0IHJlY2VudEFwcGxpY2F0aW9ucyA9
+IHJlY2VudEFwcGxpY2F0aW9uc1Jhdy5tYXAoKGFwcGxpY2F0aW9uKSA9PiAo
+ewogICAgLi4uYXBwbGljYXRpb24sCiAgICBwcm9maWxlczogYXBwbGljYW50
+TWFwLmdldChhcHBsaWNhdGlvbi5hcHBsaWNhbnRfaWQpIHx8IG51bGwsCiAg
+ICBqb2JzOiAoKCkgPT4gewogICAgICBjb25zdCBqb2IgPSBqb2JNYXAuZ2V0
+KGFwcGxpY2F0aW9uLmpvYl9pZCk7CiAgICAgIHJldHVybiBqb2IgPyB7IGlk
+OiBqb2IuaWQsIHRpdGxlOiBqb2IudGl0bGUsIGNvbXBhbnlfaWQ6IGpvYi5j
+b21wYW55X2lkIH0gOiBudWxsOwogICAgfSkoKSwKICB9KSk7CgogIHJlcy5q
+c29uKHsKICAgIG1ldHJpY3M6IHsKICAgICAgY29tcGFuaWVzOiBjb21wYW5p
+ZXNSZXMuZGF0YT8ubGVuZ3RoID8/IDAsCiAgICAgIGpvYnM6IGpvYnMubGVu
+Z3RoLAogICAgICBhY3RpdmVKb2JzOiBhY3RpdmVKb2JzUmVzLmNvdW50IHx8
+IDAsCiAgICAgIGFwcGxpY2F0aW9uczogcmVjZW50QXBwc1Jlcy5jb3VudCB8
+fCBhcHBsaWNhdGlvblN0YXRzLmxlbmd0aCwKICAgICAgdmlld3M6IHZpZXdS
+b3dzLmxlbmd0aCwKICAgIH0sCiAgICBwaXBlbGluZSwKICAgIGNvbXBhbmll
+czogY29tcGFuaWVzUmVzLmRhdGEgfHwgW10sCiAgICBqb2JzOiBqb2JzV2l0
+aFJlbGF0aW9ucywKICAgIHJlY2VudEFwcGxpY2F0aW9ucywKICB9KTsKfSk7
+CgpleHBvcnQgY29uc3QgY3JlYXRlSm9iID0gYXN5bmNIYW5kbGVyKGFzeW5j
+IChyZXEsIHJlcykgPT4gewogIGNvbnN0IGRhdGEgPSBhd2FpdCBzYXZlUG9y
+dGFsSm9iKHNlcnZpY2VEYiwgewogICAgYWN0b3JJZDogcmVxLnVzZXIuaWQs
+CiAgICBzaXRlSWQ6IHJlcS5zaXRlLmlkLAogICAgYm9keTogcmVxLmJvZHks
+CiAgfSk7CgogIGF3YWl0IHdyaXRlQXVkaXRMb2cocmVxLCB7CiAgICBhY3Rp
+b246ICdqb2IuY3JlYXRlJywKICAgIGVudGl0eVR5cGU6ICdqb2InLAogICAg
+ZW50aXR5SWQ6IGRhdGEuaWQsCiAgICBjb21wYW55SWQ6IGRhdGEuY29tcGFu
+eV9pZCwKICAgIG1ldGFkYXRhOiB7CiAgICAgIG9yaWdpbl9zaXRlOiByZXEu
+c2l0ZS5zbHVnLAogICAgICBjYXRlZ29yeV9pZDogZGF0YS5jYXRlZ29yeV9p
+ZCwKICAgICAgYXVkaWVuY2Vfc2l0ZXM6IHJlcS5ib2R5LmF1ZGllbmNlX3Np
+dGVzIHx8IFtdLAogICAgfSwKICB9KTsKCiAgcmVzLnN0YXR1cygyMDEpLmpz
+b24oeyBqb2I6IGRhdGEgfSk7Cn0pOwoKZXhwb3J0IGNvbnN0IHVwZGF0ZUpv
+YiA9IGFzeW5jSGFuZGxlcihhc3luYyAocmVxLCByZXMpID0+IHsKICBjb25z
+dCBkYXRhID0gYXdhaXQgc2F2ZVBvcnRhbEpvYihzZXJ2aWNlRGIsIHsKICAg
+IGFjdG9ySWQ6IHJlcS51c2VyLmlkLAogICAgam9iSWQ6IHJlcS5wYXJhbXMu
+am9iSWQsCiAgICBzaXRlSWQ6IHJlcS5zaXRlLmlkLAogICAgYm9keTogcmVx
+LmJvZHksCiAgfSk7CgogIGF3YWl0IHdyaXRlQXVkaXRMb2cocmVxLCB7CiAg
+ICBhY3Rpb246ICdqb2IudXBkYXRlJywKICAgIGVudGl0eVR5cGU6ICdqb2In
+LAogICAgZW50aXR5SWQ6IGRhdGEuaWQsCiAgICBjb21wYW55SWQ6IGRhdGEu
+Y29tcGFueV9pZCwKICAgIG1ldGFkYXRhOiB7IHN0YXR1czogZGF0YS5zdGF0
+dXMgfSwKICB9KTsKCiAgcmVzLmpzb24oeyBqb2I6IGRhdGEgfSk7Cn0pOwoK
+Y29uc3QgcmVjcnVpdGVyQWxsb3dlZFRyYW5zaXRpb25zID0gewogIHN1Ym1p
+dHRlZDogbmV3IFNldChbJ3N1Ym1pdHRlZCcsICd2aWV3ZWQnLCAnc2hvcnRs
+aXN0ZWQnLCAnaW50ZXJ2aWV3aW5nJywgJ29mZmVyZWQnLCAncmVqZWN0ZWQn
+XSksCiAgdmlld2VkOiBuZXcgU2V0KFsnc3VibWl0dGVkJywgJ3ZpZXdlZCcs
+ICdzaG9ydGxpc3RlZCcsICdpbnRlcnZpZXdpbmcnLCAnb2ZmZXJlZCcsICdy
+ZWplY3RlZCddKSwKICBzaG9ydGxpc3RlZDogbmV3IFNldChbJ3N1Ym1pdHRl
+ZCcsICd2aWV3ZWQnLCAnc2hvcnRsaXN0ZWQnLCAnaW50ZXJ2aWV3aW5nJywg
+J29mZmVyZWQnLCAncmVqZWN0ZWQnXSksCiAgaW50ZXJ2aWV3aW5nOiBuZXcg
+U2V0KFsnc3VibWl0dGVkJywgJ3ZpZXdlZCcsICdzaG9ydGxpc3RlZCcsICdp
+bnRlcnZpZXdpbmcnLCAnb2ZmZXJlZCcsICdoaXJlZCcsICdyZWplY3RlZCdd
+KSwKICBvZmZlcmVkOiBuZXcgU2V0KFsnc3VibWl0dGVkJywgJ3ZpZXdlZCcs
+ICdzaG9ydGxpc3RlZCcsICdpbnRlcnZpZXdpbmcnLCAnb2ZmZXJlZCcsICdo
+aXJlZCcsICdyZWplY3RlZCddKSwKICBoaXJlZDogbmV3IFNldChbJ3N1Ym1p
+dHRlZCcsICd2aWV3ZWQnLCAnc2hvcnRsaXN0ZWQnLCAnaW50ZXJ2aWV3aW5n
+JywgJ29mZmVyZWQnLCAnaGlyZWQnLCAncmVqZWN0ZWQnXSksCiAgcmVqZWN0
+ZWQ6IG5ldyBTZXQoWydzdWJtaXR0ZWQnLCAndmlld2VkJywgJ3Nob3J0bGlz
+dGVkJywgJ2ludGVydmlld2luZycsICdvZmZlcmVkJywgJ3JlamVjdGVkJ10p
+LAogIHdpdGhkcmF3bjogbmV3IFNldChbJ3dpdGhkcmF3biddKSwKfTsKCmV4
+cG9ydCBjb25zdCBsaXN0QXBwbGljYXRpb25zID0gYXN5bmNIYW5kbGVyKGFz
+eW5jIChyZXEsIHJlcykgPT4gewogIGNvbnN0IHsgZGF0YTogam9iIH0gPSBh
+d2FpdCBzZXJ2aWNlRGIKICAgIC5mcm9tKCdqb2JzJykKICAgIC5zZWxlY3Qo
+J2lkLGNvbXBhbnlfaWQnKQogICAgLmVxKCdpZCcsIHJlcS5wYXJhbXMuam9i
+SWQpCiAgICAuaXMoJ2RlbGV0ZWRfYXQnLCBudWxsKQogICAgLm1heWJlU2lu
+Z2xlKCk7CgogIGlmICgham9iKSB0aHJvdyBuZXcgQXBpRXJyb3IoNDA0LCAn
+Sm9iIG5vdCBmb3VuZC4nLCAnSk9CX05PVF9GT1VORCcpOwogIGF3YWl0IGFz
+c2VydENvbXBhbnlBY2Nlc3MocmVxLnVzZXIuaWQsIGpvYi5jb21wYW55X2lk
+KTsKCiAgY29uc3QgeyBkYXRhLCBlcnJvciB9ID0gYXdhaXQgc2VydmljZURi
+CiAgICAuZnJvbSgnYXBwbGljYXRpb25zJykKICAgIC5zZWxlY3QoJ2lkLHN0
+YXR1cyxjb3Zlcl9sZXR0ZXIscmVzdW1lX3BhdGgsY3JlYXRlZF9hdCx1cGRh
+dGVkX2F0LGFwcGxpY2FudF9pZCcpCiAgICAuZXEoJ2pvYl9pZCcsIGpvYi5p
+ZCkKICAgIC5pcygnZGVsZXRlZF9hdCcsIG51bGwpCiAgICAub3JkZXIoJ2Ny
+ZWF0ZWRfYXQnLCB7IGFzY2VuZGluZzogZmFsc2UgfSk7CgogIGlmIChlcnJv
+cikgdGhyb3cgbmV3IEFwaUVycm9yKDUwMCwgJ0FwcGxpY2F0aW9ucyBjb3Vs
+ZCBub3QgYmUgbG9hZGVkLicsICdBUFBMSUNBVElPTlNfRkFJTEVEJyk7Cgog
+IGNvbnN0IGFwcGxpY2FudElkcyA9IFsuLi5uZXcgU2V0KChkYXRhIHx8IFtd
+KS5tYXAoKGl0ZW0pID0+IGl0ZW0uYXBwbGljYW50X2lkKSldOwogIGNvbnN0
+IHsgZGF0YTogcHJvZmlsZXMgPSBbXSB9ID0gYXBwbGljYW50SWRzLmxlbmd0
+aAogICAgPyBhd2FpdCBzZXJ2aWNlRGIKICAgICAgICAuZnJvbSgncHJvZmls
+ZXMnKQogICAgICAgIC5zZWxlY3QoJ2lkLGZ1bGxfbmFtZSxlbWFpbCxwaG9u
+ZSxoZWFkbGluZSxsb2NhdGlvbl9jaXR5LGxvY2F0aW9uX3Byb3ZpbmNlLHNr
+aWxscyxkZWZhdWx0X3Jlc3VtZV9wYXRoLGV4cGVyaWVuY2UsZWR1Y2F0aW9u
+JykKICAgICAgICAuaW4oJ2lkJywgYXBwbGljYW50SWRzKQogICAgOiB7IGRh
+dGE6IFtdIH07CgogIGNvbnN0IHByb2ZpbGVNYXAgPSBuZXcgTWFwKChwcm9m
+aWxlcyB8fCBbXSkubWFwKChwcm9maWxlKSA9PiBbcHJvZmlsZS5pZCwgcHJv
+ZmlsZV0pKTsKICByZXMuanNvbih7CiAgICBpdGVtczogKGRhdGEgfHwgW10p
+Lm1hcCgoYXBwbGljYXRpb24pID0+ICh7CiAgICAgIC4uLmFwcGxpY2F0aW9u
+LAogICAgICBwcm9maWxlczogcHJvZmlsZU1hcC5nZXQoYXBwbGljYXRpb24u
+YXBwbGljYW50X2lkKSB8fCBudWxsLAogICAgfSkpLAogIH0pOwp9KTsKCmV4
+cG9ydCBjb25zdCBsaXN0QWxsQXBwbGljYXRpb25zID0gYXN5bmNIYW5kbGVy
+KGFzeW5jIChyZXEsIHJlcykgPT4gewogIGNvbnN0IGNvbXBhbnlJZHMgPSBh
+d2FpdCByZWNydWl0ZXJDb21wYW55SWRzKHJlcS51c2VyLmlkKTsKICBpZiAo
+IWNvbXBhbnlJZHMubGVuZ3RoKSByZXR1cm4gcmVzLmpzb24oeyBpdGVtczog
+W10sIHBhZ2U6IDEsIHBhZ2VTaXplOiAyNSwgdG90YWw6IDAgfSk7CgogIGNv
+bnN0IHBhZ2UgPSBNYXRoLm1heCgxLCBOdW1iZXIucGFyc2VJbnQocmVxLnF1
+ZXJ5LnBhZ2UsIDEwKSB8fCAxKTsKICBjb25zdCBwYWdlU2l6ZSA9IE1hdGgu
+bWluKDEwMCwgTWF0aC5tYXgoMSwgTnVtYmVyLnBhcnNlSW50KHJlcS5xdWVy
+eS5wYWdlU2l6ZSwgMTApIHx8IDI1KSk7CiAgY29uc3QgZnJvbSA9IChwYWdl
+IC0gMSkgKiBwYWdlU2l6ZTsKICBsZXQgcXVlcnkgPSBzZXJ2aWNlRGIuZnJv
+bSgnYXBwbGljYXRpb25zJykuc2VsZWN0KCdpZCxzdGF0dXMsY292ZXJfbGV0
+dGVyLHJlc3VtZV9wYXRoLGFwcGxpZWRfdmlhX3NpdGVfaWQsY3JlYXRlZF9h
+dCx1cGRhdGVkX2F0LGFwcGxpY2FudF9pZCxqb2JfaWQsam9icyFpbm5lcihp
+ZCx0aXRsZSxjb21wYW55X2lkKScsIHsgY291bnQ6ICdleGFjdCcgfSkKICAg
+IC5pbignam9icy5jb21wYW55X2lkJywgY29tcGFueUlkcykuaXMoJ2RlbGV0
+ZWRfYXQnLCBudWxsKS5vcmRlcignY3JlYXRlZF9hdCcsIHsgYXNjZW5kaW5n
+OiBmYWxzZSB9KS5yYW5nZShmcm9tLCBmcm9tICsgcGFnZVNpemUgLSAxKTsK
+ICBpZiAocmVxLnF1ZXJ5LnN0YXR1cyAmJiByZXEucXVlcnkuc3RhdHVzICE9
+PSAnYWxsJykgcXVlcnkgPSBxdWVyeS5lcSgnc3RhdHVzJywgcmVxLnF1ZXJ5
+LnN0YXR1cyk7CiAgaWYgKHJlcS5xdWVyeS5qb2JJZCkgcXVlcnkgPSBxdWVy
+eS5lcSgnam9iX2lkJywgcmVxLnF1ZXJ5LmpvYklkKTsKICBjb25zdCB7IGRh
+dGEsIGVycm9yLCBjb3VudCB9ID0gYXdhaXQgcXVlcnk7CiAgaWYgKGVycm9y
+KSB0aHJvdyBuZXcgQXBpRXJyb3IoNTAwLCAnQ2FuZGlkYXRlcyBjb3VsZCBu
+b3QgYmUgbG9hZGVkLicsICdDQU5ESURBVEVTX0ZBSUxFRCcsIGVycm9yLm1l
+c3NhZ2UpOwoKICBjb25zdCBhcHBsaWNhbnRJZHMgPSBbLi4ubmV3IFNldCgo
+ZGF0YSB8fCBbXSkubWFwKChpdGVtKSA9PiBpdGVtLmFwcGxpY2FudF9pZCkp
+XTsKICBjb25zdCB7IGRhdGE6IHByb2ZpbGVzID0gW10gfSA9IGFwcGxpY2Fu
+dElkcy5sZW5ndGggPyBhd2FpdCBzZXJ2aWNlRGIuZnJvbSgncHJvZmlsZXMn
+KS5zZWxlY3QoJ2lkLGZ1bGxfbmFtZSxlbWFpbCxwaG9uZSxoZWFkbGluZSxs
+b2NhdGlvbl9jaXR5LGxvY2F0aW9uX3Byb3ZpbmNlLHNraWxscyxleHBlcmll
+bmNlLGVkdWNhdGlvbixkZWZhdWx0X3Jlc3VtZV9wYXRoJykuaW4oJ2lkJywg
+YXBwbGljYW50SWRzKSA6IHsgZGF0YTogW10gfTsKICBjb25zdCBwcm9maWxl
+TWFwID0gbmV3IE1hcCgocHJvZmlsZXMgfHwgW10pLm1hcCgocHJvZmlsZSkg
+PT4gW3Byb2ZpbGUuaWQsIHByb2ZpbGVdKSk7CgogIC8vIEZldGNoIHNpdGVz
+IGZvciBjcm9zcy1wb3J0YWwgZGlzcGxheQogIGNvbnN0IHsgZGF0YTogc2l0
+ZXMgPSBbXSB9ID0gYXdhaXQgc2VydmljZURiLmZyb20oJ3NpdGVzJykuc2Vs
+ZWN0KCdpZCxuYW1lLHNsdWcnKTsKICBjb25zdCBzaXRlTWFwID0gbmV3IE1h
+cCgoc2l0ZXMgfHwgW10pLm1hcCgocykgPT4gW3MuaWQsIHNdKSk7CgogIC8v
+IEZldGNoIHJlY2VudCBhY3Rpdml0eSBsb2cgZm9yIHN0YWdlIGRldGFpbHMg
+KGludGVydmlldywgb2ZmZXIsIGZlZWRiYWNrLCBub3RlcykKICBjb25zdCBh
+cHBJZHMgPSAoZGF0YSB8fCBbXSkubWFwKChhKSA9PiBhLmlkKTsKICBjb25z
+dCB7IGRhdGE6IGxvZ3MgPSBbXSB9ID0gYXBwSWRzLmxlbmd0aAogICAgPyBh
+d2FpdCBzZXJ2aWNlRGIuZnJvbSgnYWN0aXZpdHlfbG9nJykKICAgICAgICAu
+c2VsZWN0KCdhY3Rpb24sZW50aXR5X2lkLGRhdGEsY3JlYXRlZF9hdCcpCiAg
+ICAgICAgLmVxKCdlbnRpdHlfdHlwZScsICdhcHBsaWNhdGlvbicpCiAgICAg
+ICAgLmluKCdlbnRpdHlfaWQnLCBhcHBJZHMpCiAgICAgICAgLm9yZGVyKCdj
+cmVhdGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pCiAgICA6IHsgZGF0
+YTogW10gfTsKCiAgY29uc3QgaXRlbXMgPSAoZGF0YSB8fCBbXSkubWFwKChh
+cHBsaWNhdGlvbikgPT4gewogICAgY29uc3Qgc2l0ZSA9IHNpdGVNYXAuZ2V0
+KGFwcGxpY2F0aW9uLmFwcGxpZWRfdmlhX3NpdGVfaWQpIHx8IHsgaWQ6IDEs
+IG5hbWU6ICdKb29ibGllIEFnZ3JlZ2F0b3InLCBzbHVnOiAnam9vYmxpZScg
+fTsKICAgIGNvbnN0IGFwcExvZ3MgPSBsb2dzLmZpbHRlcigobCkgPT4gbC5l
+bnRpdHlfaWQgPT09IGFwcGxpY2F0aW9uLmlkKTsKICAgIGNvbnN0IGxhdGVz
+dEludGVydmlld0xvZyA9IGFwcExvZ3MuZmluZCgobCkgPT4gbC5hY3Rpb24g
+PT09ICdhcHBsaWNhdGlvbi5pbnRlcnZpZXcnIHx8IGwuZGF0YT8uaW50ZXJ2
+aWV3KTsKICAgIGNvbnN0IGxhdGVzdE9mZmVyTG9nID0gYXBwTG9ncy5maW5k
+KChsKSA9PiBsLmFjdGlvbiA9PT0gJ2FwcGxpY2F0aW9uLm9mZmVyJyB8fCBs
+LmRhdGE/Lm9mZmVyKTsKICAgIGNvbnN0IGxhdGVzdFJlamVjdExvZyA9IGFw
+cExvZ3MuZmluZCgobCkgPT4gbC5hY3Rpb24gPT09ICdhcHBsaWNhdGlvbi5y
+ZWplY3QnIHx8IGwuZGF0YT8uZmVlZGJhY2spOwogICAgY29uc3QgbGF0ZXN0
+U2hvcnRsaXN0TG9nID0gYXBwTG9ncy5maW5kKChsKSA9PiBsLmFjdGlvbiA9
+PT0gJ2FwcGxpY2F0aW9uLnNob3J0bGlzdCcgfHwgbC5kYXRhPy5ub3RlKTsK
+CiAgICByZXR1cm4gewogICAgICAuLi5hcHBsaWNhdGlvbiwKICAgICAgcG9y
+dGFsOiBzaXRlLAogICAgICBpbnRlcnZpZXc6IGxhdGVzdEludGVydmlld0xv
+Zz8uZGF0YT8uaW50ZXJ2aWV3IHx8IG51bGwsCiAgICAgIG9mZmVyOiBsYXRl
+c3RPZmZlckxvZz8uZGF0YT8ub2ZmZXIgfHwgbnVsbCwKICAgICAgZmVlZGJh
+Y2s6IGxhdGVzdFJlamVjdExvZz8uZGF0YT8uZmVlZGJhY2sgfHwgbnVsbCwK
+ICAgICAgaW50ZXJuYWxfbm90ZTogbGF0ZXN0U2hvcnRsaXN0TG9nPy5kYXRh
+Py5ub3RlIHx8IG51bGwsCiAgICAgIHByb2ZpbGVzOiBwcm9maWxlTWFwLmdl
+dChhcHBsaWNhdGlvbi5hcHBsaWNhbnRfaWQpIHx8IG51bGwsCiAgICB9Owog
+IH0pOwoKICByZXMuanNvbih7IGl0ZW1zLCBwYWdlLCBwYWdlU2l6ZSwgdG90
+YWw6IGNvdW50IHx8IDAgfSk7Cn0pOwoKLy8g8J+UpSBnZXRBcHBsaWNhdGlv
+blJlc3VtZVVybApleHBvcnQgY29uc3QgZ2V0QXBwbGljYXRpb25SZXN1bWVV
+cmwgPSBhc3luY0hhbmRsZXIoYXN5bmMgKHJlcSwgcmVzKSA9PiB7CiAgY29u
+c3QgeyBkYXRhOiBhcHBsaWNhdGlvbiB9ID0gYXdhaXQgc2VydmljZURiCiAg
+ICAuZnJvbSgnYXBwbGljYXRpb25zJykKICAgIC5zZWxlY3QoJ2lkLHJlc3Vt
+ZV9wYXRoLGpvYl9pZCxzdGF0dXMnKSAKICAgIC5lcSgnaWQnLCByZXEucGFy
+YW1zLmFwcGxpY2F0aW9uSWQpCiAgICAuaXMoJ2RlbGV0ZWRfYXQnLCBudWxs
+KQogICAgLm1heWJlU2luZ2xlKCk7CgogIGlmICghYXBwbGljYXRpb24/LnJl
+c3VtZV9wYXRoKSB0aHJvdyBuZXcgQXBpRXJyb3IoNDA0LCAnUmVzdW1lIG5v
+dCBmb3VuZC4nLCAnUkVTVU1FX05PVF9GT1VORCcpOwoKICBjb25zdCB7IGRh
+dGE6IGpvYiB9ID0gYXdhaXQgc2VydmljZURiCiAgICAuZnJvbSgnam9icycp
+CiAgICAuc2VsZWN0KCdjb21wYW55X2lkJykKICAgIC5lcSgnaWQnLCBhcHBs
+aWNhdGlvbi5qb2JfaWQpCiAgICAubWF5YmVTaW5nbGUoKTsKCiAgaWYgKCFq
+b2IpIHRocm93IG5ldyBBcGlFcnJvcig0MDQsICdBcHBsaWNhdGlvbiBqb2Ig
+bm90IGZvdW5kLicsICdBUFBMSUNBVElPTl9OT1RfRk9VTkQnKTsKICAKICBh
+d2FpdCBhc3NlcnRDb21wYW55QWNjZXNzKHJlcS51c2VyLmlkLCBqb2IuY29t
+cGFueV9pZCk7CgogIGNvbnN0IHsgZGF0YTogc2lnbmVkLCBlcnJvciB9ID0g
+YXdhaXQgc2VydmljZURiLnN0b3JhZ2UKICAgIC5mcm9tKCdyZXN1bWVzJykK
+ICAgIC5jcmVhdGVTaWduZWRVcmwoYXBwbGljYXRpb24ucmVzdW1lX3BhdGgs
+IDMwMCk7CgogIGlmIChlcnJvciB8fCAhc2lnbmVkPy5zaWduZWRVcmwpIHRo
+cm93IG5ldyBBcGlFcnJvcig0MDQsICdSZXN1bWUgaXMgbm90IGF2YWlsYWJs
+ZS4nLCAnUkVTVU1FX1VSTF9GQUlMRUQnKTsKCiAgYXdhaXQgd3JpdGVBdWRp
+dExvZyhyZXEsIHsgCiAgICBhY3Rpb246ICdhcHBsaWNhdGlvbi5yZXN1bWUu
+dmlldycsIAogICAgZW50aXR5VHlwZTogJ2FwcGxpY2F0aW9uJywgCiAgICBl
+bnRpdHlJZDogYXBwbGljYXRpb24uaWQsIAogICAgY29tcGFueUlkOiBqb2Iu
+Y29tcGFueV9pZCAKICB9KTsKCiAgLy8gQXV0b21hdGljYWxseSBtYXJrIGFz
+IHZpZXdlZCBpZiBpdCB3YXMganVzdCBzdWJtaXR0ZWQKICBpZiAoYXBwbGlj
+YXRpb24uc3RhdHVzID09PSAnc3VibWl0dGVkJykgewogICAgYXdhaXQgY2hh
+bmdlQXBwbGljYXRpb25TdGF0dXMocmVxLmRiLCB7CiAgICAgIGFwcGxpY2F0
+aW9uSWQ6IGFwcGxpY2F0aW9uLmlkLAogICAgICBleHBlY3RlZFN0YXR1czog
+J3N1Ym1pdHRlZCcsCiAgICAgIHN0YXR1czogJ3ZpZXdlZCcsCiAgICAgIGFs
+bG93Q29uZmxpY3Q6IHRydWUsCiAgICB9KTsKICB9CgogIHJlcy5qc29uKHsg
+dXJsOiBzaWduZWQuc2lnbmVkVXJsLCBleHBpcmVzSW46IDMwMCB9KTsKfSk7
+CgovLyDwn5SlIHVwZGF0ZUFwcGxpY2F0aW9uIHdpdGggc3RhZ2UgcHJvZ3Jl
+c3Npb24gYWN0aW9uIHRyaWdnZXJzCmV4cG9ydCBjb25zdCB1cGRhdGVBcHBs
+aWNhdGlvbiA9IGFzeW5jSGFuZGxlcihhc3luYyAocmVxLCByZXMpID0+IHsK
+ICBjb25zdCB7IGRhdGE6IGFwcGxpY2F0aW9uIH0gPSBhd2FpdCBzZXJ2aWNl
+RGIKICAgIC5mcm9tKCdhcHBsaWNhdGlvbnMnKQogICAgLnNlbGVjdCgnaWQs
+am9iX2lkLHN0YXR1cyxhcHBsaWNhbnRfaWQsYXBwbGllZF92aWFfc2l0ZV9p
+ZCcpCiAgICAuZXEoJ2lkJywgcmVxLnBhcmFtcy5hcHBsaWNhdGlvbklkKQog
+ICAgLmlzKCdkZWxldGVkX2F0JywgbnVsbCkKICAgIC5tYXliZVNpbmdsZSgp
+OwoKICBpZiAoIWFwcGxpY2F0aW9uKSB0aHJvdyBuZXcgQXBpRXJyb3IoNDA0
+LCAnQXBwbGljYXRpb24gbm90IGZvdW5kLicsICdBUFBMSUNBVElPTl9OT1Rf
+Rk9VTkQnKTsKCiAgY29uc3QgeyBkYXRhOiBqb2IgfSA9IGF3YWl0IHNlcnZp
+Y2VEYgogICAgLmZyb20oJ2pvYnMnKQogICAgLnNlbGVjdCgnaWQsdGl0bGUs
+Y29tcGFueV9pZCcpCiAgICAuZXEoJ2lkJywgYXBwbGljYXRpb24uam9iX2lk
+KQogICAgLm1heWJlU2luZ2xlKCk7CgogIGlmICgham9iKSB0aHJvdyBuZXcg
+QXBpRXJyb3IoNDA0LCAnQXBwbGljYXRpb24gam9iIG5vdCBmb3VuZC4nLCAn
+QVBQTElDQVRJT05fTk9UX0ZPVU5EJyk7CiAgYXdhaXQgYXNzZXJ0Q29tcGFu
+eUFjY2VzcyhyZXEudXNlci5pZCwgam9iLmNvbXBhbnlfaWQpOwoKICBjb25z
+dCBhbGxvd2VkID0gcmVjcnVpdGVyQWxsb3dlZFRyYW5zaXRpb25zW2FwcGxp
+Y2F0aW9uLnN0YXR1c10gfHwgbmV3IFNldCgpOwogIGlmICghYWxsb3dlZC5o
+YXMocmVxLmJvZHkuc3RhdHVzKSkgewogICAgdGhyb3cgbmV3IEFwaUVycm9y
+KDQwOSwgYEFwcGxpY2F0aW9uIGNhbm5vdCBtb3ZlIGZyb20gJHthcHBsaWNh
+dGlvbi5zdGF0dXN9IHRvICR7cmVxLmJvZHkuc3RhdHVzfS5gLCAnSU5WQUxJ
+RF9BUFBMSUNBVElPTl9UUkFOU0lUSU9OJyk7CiAgfQoKICAvLyBIYW5kbGUg
+b2ZmZXIgZG9jdW1lbnQgYXR0YWNobWVudCBpZiBiYXNlNjQgcHJvdmlkZWQK
+ICBsZXQgb2ZmZXJQYXlsb2FkID0gcmVxLmJvZHkub2ZmZXIgfHwgbnVsbDsK
+ICBpZiAob2ZmZXJQYXlsb2FkICYmIG9mZmVyUGF5bG9hZC5kb2N1bWVudEJh
+c2U2NCkgewogICAgdHJ5IHsKICAgICAgY29uc3QgbWF0Y2ggPSBTdHJpbmco
+b2ZmZXJQYXlsb2FkLmRvY3VtZW50QmFzZTY0KS5tYXRjaCgvXmRhdGE6KFte
+O10rKTtiYXNlNjQsKC4rKSQvKTsKICAgICAgY29uc3QgcmF3QmFzZTY0ID0g
+bWF0Y2ggPyBtYXRjaFsyXSA6IG9mZmVyUGF5bG9hZC5kb2N1bWVudEJhc2U2
+NDsKICAgICAgY29uc3QgYnVmZmVyID0gQnVmZmVyLmZyb20ocmF3QmFzZTY0
+LCAnYmFzZTY0Jyk7CiAgICAgIGNvbnN0IHNhZmVGaWxlbmFtZSA9IChvZmZl
+clBheWxvYWQuZG9jdW1lbnROYW1lIHx8ICdPZmZlcl9MZXR0ZXIucGRmJyku
+cmVwbGFjZSgvW15hLXpBLVowLTkuXy1dKy9nLCAnLScpOwogICAgICBjb25z
+dCBzdG9yYWdlUGF0aCA9IGBvZmZlcnMvJHthcHBsaWNhdGlvbi5pZH0vJHtE
+YXRlLm5vdygpfS0ke3NhZmVGaWxlbmFtZX1gOwogICAgICBjb25zdCB7IGVy
+cm9yOiB1cGxvYWRFcnIgfSA9IGF3YWl0IHNlcnZpY2VEYi5zdG9yYWdlCiAg
+ICAgICAgLmZyb20oJ3Jlc3VtZXMnKQogICAgICAgIC51cGxvYWQoc3RvcmFn
+ZVBhdGgsIGJ1ZmZlciwgeyBjb250ZW50VHlwZTogJ2FwcGxpY2F0aW9uL3Bk
+ZicsIHVwc2VydDogdHJ1ZSB9KTsKICAgICAgaWYgKCF1cGxvYWRFcnIpIHsK
+ICAgICAgICBvZmZlclBheWxvYWQuZG9jdW1lbnRQYXRoID0gc3RvcmFnZVBh
+dGg7CiAgICAgICAgZGVsZXRlIG9mZmVyUGF5bG9hZC5kb2N1bWVudEJhc2U2
+NDsKICAgICAgfQogICAgfSBjYXRjaCAoZSkgewogICAgICBjb25zb2xlLndh
+cm4oJ0NvdWxkIG5vdCBzdG9yZSBvZmZlciBhdHRhY2htZW50IGluIHN0b3Jh
+Z2U6JywgZS5tZXNzYWdlKTsKICAgIH0KICB9CgogIGNvbnN0IGRhdGEgPSBh
+d2FpdCBjaGFuZ2VBcHBsaWNhdGlvblN0YXR1cyhyZXEuZGIsIHsKICAgIGFw
+cGxpY2F0aW9uSWQ6IGFwcGxpY2F0aW9uLmlkLAogICAgZXhwZWN0ZWRTdGF0
+dXM6IGFwcGxpY2F0aW9uLnN0YXR1cywKICAgIHN0YXR1czogcmVxLmJvZHku
+c3RhdHVzLAogIH0pOwoKICAvLyBBY3Rpb24gbmFtZSBmb3IgYXVkaXQgbG9n
+CiAgbGV0IGFjdGlvbk5hbWUgPSAnYXBwbGljYXRpb24uc3RhdHVzLnVwZGF0
+ZSc7CiAgaWYgKHJlcS5ib2R5LnN0YXR1cyA9PT0gJ3Nob3J0bGlzdGVkJykg
+YWN0aW9uTmFtZSA9ICdhcHBsaWNhdGlvbi5zaG9ydGxpc3QnOwogIGVsc2Ug
+aWYgKHJlcS5ib2R5LnN0YXR1cyA9PT0gJ2ludGVydmlld2luZycpIGFjdGlv
+bk5hbWUgPSAnYXBwbGljYXRpb24uaW50ZXJ2aWV3JzsKICBlbHNlIGlmIChy
+ZXEuYm9keS5zdGF0dXMgPT09ICdvZmZlcmVkJykgYWN0aW9uTmFtZSA9ICdh
+cHBsaWNhdGlvbi5vZmZlcic7CiAgZWxzZSBpZiAocmVxLmJvZHkuc3RhdHVz
+ID09PSAncmVqZWN0ZWQnKSBhY3Rpb25OYW1lID0gJ2FwcGxpY2F0aW9uLnJl
+amVjdCc7CgogIGF3YWl0IHdyaXRlQXVkaXRMb2cocmVxLCB7CiAgICBhY3Rp
+b246IGFjdGlvbk5hbWUsCiAgICBlbnRpdHlUeXBlOiAnYXBwbGljYXRpb24n
+LAogICAgZW50aXR5SWQ6IGFwcGxpY2F0aW9uLmlkLAogICAgY29tcGFueUlk
+OiBqb2IuY29tcGFueV9pZCwKICAgIGRhdGE6IHsKICAgICAgc3RhdHVzOiBy
+ZXEuYm9keS5zdGF0dXMsCiAgICAgIG5vdGU6IHJlcS5ib2R5Lm5vdGUgfHwg
+bnVsbCwKICAgICAgaW50ZXJ2aWV3OiByZXEuYm9keS5pbnRlcnZpZXcgfHwg
+bnVsbCwKICAgICAgb2ZmZXI6IG9mZmVyUGF5bG9hZCwKICAgICAgZmVlZGJh
+Y2s6IHJlcS5ib2R5LmZlZWRiYWNrIHx8IG51bGwsCiAgICB9LAogIH0pOwoK
+ICAvLyBTZW5kIHN0cnVjdHVyZWQgaW4tYXBwIGFuZCBlbWFpbCBub3RpZmlj
+YXRpb24gdG8gY2FuZGlkYXRlCiAgY29uc3QgeyBkYXRhOiBjb21wYW55IH0g
+PSBhd2FpdCBzZXJ2aWNlRGIuZnJvbSgnY29tcGFuaWVzJykuc2VsZWN0KCdu
+YW1lJykuZXEoJ2lkJywgam9iLmNvbXBhbnlfaWQpLm1heWJlU2luZ2xlKCk7
+CiAgY29uc3QgY29tcGFueU5hbWVTdHIgPSBjb21wYW55Py5uYW1lIHx8ICdU
+aGUgRW1wbG95ZXInOwoKICBsZXQgbm90aWZUeXBlID0gJ2FwcGxpY2F0aW9u
+X3N0YXR1cyc7CiAgbGV0IG5vdGlmVGl0bGUgPSBgU3RhdHVzIHVwZGF0ZTog
+JHtqb2IudGl0bGV9YDsKICBsZXQgbm90aWZNZXNzYWdlID0gYFlvdXIgYXBw
+bGljYXRpb24gZm9yICR7am9iLnRpdGxlfSBhdCAke2NvbXBhbnlOYW1lU3Ry
+fSBoYXMgbW92ZWQgdG8gJHtyZXEuYm9keS5zdGF0dXN9LmA7CgogIGlmIChy
+ZXEuYm9keS5zdGF0dXMgPT09ICdzaG9ydGxpc3RlZCcpIHsKICAgIG5vdGlm
+VHlwZSA9ICdjYW5kaWRhdGVfc2hvcnRsaXN0ZWQnOwogICAgbm90aWZUaXRs
+ZSA9IGBTaG9ydGxpc3RlZDogJHtqb2IudGl0bGV9YDsKICAgIG5vdGlmTWVz
+c2FnZSA9IGBHcmVhdCBuZXdzISBZb3UgaGF2ZSBiZWVuIHNob3J0bGlzdGVk
+IGZvciAke2pvYi50aXRsZX0gYXQgJHtjb21wYW55TmFtZVN0cn0uJHtyZXEu
+Ym9keS5ub3RlID8gYCBOb3RlOiAiJHtyZXEuYm9keS5ub3RlfSJgIDogJyd9
+YDsKICB9IGVsc2UgaWYgKHJlcS5ib2R5LnN0YXR1cyA9PT0gJ2ludGVydmll
+d2luZycpIHsKICAgIG5vdGlmVHlwZSA9ICdpbnRlcnZpZXdfc2NoZWR1bGVk
+JzsKICAgIG5vdGlmVGl0bGUgPSBgSW50ZXJ2aWV3IFNjaGVkdWxlZDogJHtq
+b2IudGl0bGV9YDsKICAgIG5vdGlmTWVzc2FnZSA9IGAke2NvbXBhbnlOYW1l
+U3RyfSBoYXMgc2NoZWR1bGVkIGFuIGludGVydmlldyBmb3IgJHtqb2IudGl0
+bGV9LiBEYXRlOiAke3JlcS5ib2R5LmludGVydmlldz8uZGF0ZSB8fCAnVEJE
+J30gJHtyZXEuYm9keS5pbnRlcnZpZXc/LnRpbWUgfHwgJyd9LiBDaGVjayB5
+b3VyIGFwcGxpY2F0aW9ucyB0YWIgZm9yIGZ1bGwgZGV0YWlscy5gOwogIH0g
+ZWxzZSBpZiAocmVxLmJvZHkuc3RhdHVzID09PSAnb2ZmZXJlZCcpIHsKICAg
+IG5vdGlmVHlwZSA9ICdvZmZlcl9leHRlbmRlZCc7CiAgICBub3RpZlRpdGxl
+ID0gYE9mZmljaWFsIEpvYiBPZmZlcjogJHtqb2IudGl0bGV9YDsKICAgIG5v
+dGlmTWVzc2FnZSA9IGBDb25ncmF0dWxhdGlvbnMhICR7Y29tcGFueU5hbWVT
+dHJ9IGhhcyBleHRlbmRlZCBhbiBvZmZpY2lhbCBqb2Igb2ZmZXIgZm9yICR7
+am9iLnRpdGxlfS4gSW5zcGVjdCB5b3VyIG9mZmVyIGRldGFpbHMgYW5kIHJl
+c3BvbmQuYDsKICB9IGVsc2UgaWYgKHJlcS5ib2R5LnN0YXR1cyA9PT0gJ3Jl
+amVjdGVkJykgewogICAgbm90aWZUeXBlID0gJ2FwcGxpY2F0aW9uX3JlamVj
+dGVkJzsKICAgIG5vdGlmVGl0bGUgPSBgQXBwbGljYXRpb24gdXBkYXRlOiAk
+e2pvYi50aXRsZX1gOwogICAgbm90aWZNZXNzYWdlID0gYFRoYW5rIHlvdSBm
+b3IgdGFraW5nIHRoZSB0aW1lIHRvIGFwcGx5IGZvciAke2pvYi50aXRsZX0g
+YXQgJHtjb21wYW55TmFtZVN0cn0uJHtyZXEuYm9keS5mZWVkYmFjayA/IGAg
+RmVlZGJhY2s6ICIke3JlcS5ib2R5LmZlZWRiYWNrfSJgIDogJyBUaGUgdGVh
+bSBoYXMgZGVjaWRlZCB0byBtb3ZlIGZvcndhcmQgd2l0aCBvdGhlciBjYW5k
+aWRhdGVzIGF0IHRoaXMgdGltZS4nfWA7CiAgfQoKICBhd2FpdCBzZXJ2aWNl
+RGIuZnJvbSgnbm90aWZpY2F0aW9ucycpLmluc2VydCh7CiAgICB1c2VyX2lk
+OiBhcHBsaWNhdGlvbi5hcHBsaWNhbnRfaWQsCiAgICB0eXBlOiBub3RpZlR5
+cGUsCiAgICBlbnRpdHlfdHlwZTogJ2FwcGxpY2F0aW9uJywKICAgIGVudGl0
+eV9pZDogYXBwbGljYXRpb24uaWQsCiAgICBzaXRlX2lkOiBhcHBsaWNhdGlv
+bi5hcHBsaWVkX3ZpYV9zaXRlX2lkIHx8IG51bGwsCiAgICBkYXRhOiB7CiAg
+ICAgIHRpdGxlOiBub3RpZlRpdGxlLAogICAgICBtZXNzYWdlOiBub3RpZk1l
+c3NhZ2UsCiAgICAgIHN0YXR1czogcmVxLmJvZHkuc3RhdHVzLAogICAgICBq
+b2JfaWQ6IGpvYi5pZCwKICAgICAgam9iX3RpdGxlOiBqb2IudGl0bGUsCiAg
+ICAgIGNvbXBhbnlfbmFtZTogY29tcGFueU5hbWVTdHIsCiAgICAgIG5vdGU6
+IHJlcS5ib2R5Lm5vdGUgfHwgbnVsbCwKICAgICAgaW50ZXJ2aWV3OiByZXEu
+Ym9keS5pbnRlcnZpZXcgfHwgbnVsbCwKICAgICAgb2ZmZXI6IG9mZmVyUGF5
+bG9hZCwKICAgICAgZmVlZGJhY2s6IHJlcS5ib2R5LmZlZWRiYWNrIHx8IG51
+bGwsCiAgICB9LAogICAgY3JlYXRlZF9hdDogbmV3IERhdGUoKS50b0lTT1N0
+cmluZygpLAogIH0pOwoKICByZXMuanNvbih7IGFwcGxpY2F0aW9uOiBkYXRh
+LCBvZmZlcjogb2ZmZXJQYXlsb2FkIH0pOwp9KTsK
