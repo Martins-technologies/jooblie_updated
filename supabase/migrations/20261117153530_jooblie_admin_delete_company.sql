@@ -1,48 +1,65 @@
-Y3JlYXRlIGZ1bmN0aW9uIHB1YmxpYy5hZG1pbl9kZWxldGVfY29tcGFueShw
-X2FjdG9yX2lkIHV1aWQsIHBfY29tcGFueV9pZCB1dWlkKQpyZXR1cm5zIGpz
-b25iCmxhbmd1YWdlIHBscGdzcWwKc2VjdXJpdHkgaW52b2tlcgpzZXQgc2Vh
-cmNoX3BhdGggPSAnJwphcyAkJApkZWNsYXJlCiAgZGVsZXRpb25fdGltZSB0
-aW1lc3RhbXB0eiA6PSBub3coKTsKICBqb2JzX3JlbW92ZWQgaW50ZWdlcjsK
-YmVnaW4KICBwZXJmb3JtIDEgZnJvbSBwdWJsaWMucHJvZmlsZXMKICAgIHdo
-ZXJlIGlkID0gcF9hY3Rvcl9pZCBhbmQgcm9sZSA9ICdhZG1pbicgYW5kIHN0
-YXR1cyA9ICdhY3RpdmUnCiAgICBmb3Igc2hhcmU7CiAgaWYgbm90IGZvdW5k
-IHRoZW4KICAgIHJhaXNlIGV4Y2VwdGlvbiAnQWN0aXZlIGFkbWluaXN0cmF0
-b3IgcmVxdWlyZWQnIHVzaW5nIGVycmNvZGUgPSAnNDI1MDEnOwogIGVuZCBp
-ZjsKCiAgdXBkYXRlIHB1YmxpYy5jb21wYW5pZXMgc2V0IGRlbGV0ZWRfYXQg
-PSBkZWxldGlvbl90aW1lCiAgICB3aGVyZSBpZCA9IHBfY29tcGFueV9pZCBh
-bmQgZGVsZXRlZF9hdCBpcyBudWxsOwogIGlmIG5vdCBmb3VuZCB0aGVuCiAg
-ICBpZiBleGlzdHMgKHNlbGVjdCAxIGZyb20gcHVibGljLmNvbXBhbmllcyB3
-aGVyZSBpZCA9IHBfY29tcGFueV9pZCkgdGhlbgogICAgICByZXR1cm4ganNv
-bmJfYnVpbGRfb2JqZWN0KCdkZWxldGVkJywgZmFsc2UsICdqb2JzX3JlbW92
-ZWQnLCAwKTsKICAgIGVuZCBpZjsKICAgIHJhaXNlIGV4Y2VwdGlvbiAnQ29t
-cGFueSBub3QgZm91bmQnIHVzaW5nIGVycmNvZGUgPSAnUDAwMDInOwogIGVu
-ZCBpZjsKCiAgdXBkYXRlIHB1YmxpYy5qb2JzIHNldCBkZWxldGVkX2F0ID0g
-ZGVsZXRpb25fdGltZQogICAgd2hlcmUgY29tcGFueV9pZCA9IHBfY29tcGFu
-eV9pZCBhbmQgZGVsZXRlZF9hdCBpcyBudWxsOwogIGdldCBkaWFnbm9zdGlj
-cyBqb2JzX3JlbW92ZWQgPSByb3dfY291bnQ7CiAgcmV0dXJuIGpzb25iX2J1
-aWxkX29iamVjdCgnZGVsZXRlZCcsIHRydWUsICdqb2JzX3JlbW92ZWQnLCBq
-b2JzX3JlbW92ZWQpOwplbmQ7CiQkOwoKcmV2b2tlIGFsbCBvbiBmdW5jdGlv
-biBwdWJsaWMuYWRtaW5fZGVsZXRlX2NvbXBhbnkodXVpZCwgdXVpZCkgZnJv
-bSBwdWJsaWMsIGFub24sIGF1dGhlbnRpY2F0ZWQ7CmdyYW50IGV4ZWN1dGUg
-b24gZnVuY3Rpb24gcHVibGljLmFkbWluX2RlbGV0ZV9jb21wYW55KHV1aWQs
-IHV1aWQpIHRvIHNlcnZpY2Vfcm9sZTsKCmNyZWF0ZSBmdW5jdGlvbiBwcml2
-YXRlLnJlcXVpcmVfbGl2ZV9jb21wYW55X2Zvcl9qb2IoKQpyZXR1cm5zIHRy
-aWdnZXIKbGFuZ3VhZ2UgcGxwZ3NxbApzZWN1cml0eSBpbnZva2VyCnNldCBz
-ZWFyY2hfcGF0aCA9ICcnCmFzICQkCmJlZ2luCiAgaWYgbmV3LmRlbGV0ZWRf
-YXQgaXMgbm90IG51bGwgdGhlbgogICAgcmV0dXJuIG5ldzsKICBlbmQgaWY7
-CiAgaWYgdGdfb3AgPSAnVVBEQVRFJyB0aGVuCiAgICBpZiBvbGQuZGVsZXRl
-ZF9hdCBpcyBudWxsIGFuZCBvbGQuY29tcGFueV9pZCBpcyBub3QgZGlzdGlu
-Y3QgZnJvbSBuZXcuY29tcGFueV9pZCB0aGVuCiAgICAgIHJldHVybiBuZXc7
-CiAgICBlbmQgaWY7CiAgZW5kIGlmOwogIHBlcmZvcm0gMSBmcm9tIHB1Ymxp
-Yy5jb21wYW5pZXMKICAgIHdoZXJlIGlkID0gbmV3LmNvbXBhbnlfaWQgYW5k
-IGRlbGV0ZWRfYXQgaXMgbnVsbAogICAgZm9yIHNoYXJlOwogIGlmIG5vdCBm
-b3VuZCB0aGVuCiAgICByYWlzZSBleGNlcHRpb24gJ0Egam9iIHJlcXVpcmVz
-IGFuIGFjdGl2ZSBjb21wYW55IHJlY29yZCcgdXNpbmcgZXJyY29kZSA9ICc0
-MjUwMSc7CiAgZW5kIGlmOwogIHJldHVybiBuZXc7CmVuZDsKJCQ7CgpyZXZv
-a2UgYWxsIG9uIGZ1bmN0aW9uIHByaXZhdGUucmVxdWlyZV9saXZlX2NvbXBh
-bnlfZm9yX2pvYigpIGZyb20gcHVibGljLCBhbm9uLCBhdXRoZW50aWNhdGVk
-OwpjcmVhdGUgdHJpZ2dlciByZXF1aXJlX2xpdmVfY29tcGFueV9mb3Jfam9i
-CmJlZm9yZSBpbnNlcnQgb3IgdXBkYXRlIG9mIGNvbXBhbnlfaWQsIGRlbGV0
-ZWRfYXQgb24gcHVibGljLmpvYnMKZm9yIGVhY2ggcm93IGV4ZWN1dGUgZnVu
-Y3Rpb24gcHJpdmF0ZS5yZXF1aXJlX2xpdmVfY29tcGFueV9mb3Jfam9iKCk7
-Cg==
+create function public.admin_delete_company(p_actor_id uuid, p_company_id uuid)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  deletion_time timestamptz := now();
+  jobs_removed integer;
+begin
+  perform 1 from public.profiles
+    where id = p_actor_id and role = 'admin' and status = 'active'
+    for share;
+  if not found then
+    raise exception 'Active administrator required' using errcode = '42501';
+  end if;
+
+  update public.companies set deleted_at = deletion_time
+    where id = p_company_id and deleted_at is null;
+  if not found then
+    if exists (select 1 from public.companies where id = p_company_id) then
+      return jsonb_build_object('deleted', false, 'jobs_removed', 0);
+    end if;
+    raise exception 'Company not found' using errcode = 'P0002';
+  end if;
+
+  update public.jobs set deleted_at = deletion_time
+    where company_id = p_company_id and deleted_at is null;
+  get diagnostics jobs_removed = row_count;
+  return jsonb_build_object('deleted', true, 'jobs_removed', jobs_removed);
+end;
+$$;
+
+revoke all on function public.admin_delete_company(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.admin_delete_company(uuid, uuid) to service_role;
+
+create function private.require_live_company_for_job()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if new.deleted_at is not null then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' then
+    if old.deleted_at is null and old.company_id is not distinct from new.company_id then
+      return new;
+    end if;
+  end if;
+  perform 1 from public.companies
+    where id = new.company_id and deleted_at is null
+    for share;
+  if not found then
+    raise exception 'A job requires an active company record' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function private.require_live_company_for_job() from public, anon, authenticated;
+create trigger require_live_company_for_job
+before insert or update of company_id, deleted_at on public.jobs
+for each row execute function private.require_live_company_for_job();
