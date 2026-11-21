@@ -247,6 +247,30 @@ export const getCompanyDocuments = asyncHandler(async (req, res) => {
   res.json({ documents });
 });
 
+export const deleteCompany = asyncHandler(async (req, res) => {
+  const { companyId } = req.params;
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(companyId)) {
+    throw new ApiError(400, 'Invalid company ID.', 'INVALID_COMPANY_ID');
+  }
+
+  const { data, error } = await serviceDb.rpc('admin_delete_company', {
+    p_actor_id: req.user.id, p_company_id: companyId,
+  });
+  if (error?.code === '42501') throw new ApiError(403, 'Administrator access is required.', 'ADMIN_REQUIRED');
+  if (error?.code === 'P0002') throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
+  if (error) throw new ApiError(500, 'Company could not be deleted. Try again.', 'COMPANY_DELETE_FAILED');
+
+  if (data.deleted) {
+    await writeAuditLog(req, {
+      action: 'admin.company.delete',
+      entityType: 'company',
+      entityId: companyId,
+      metadata: { jobsRemoved: data.jobs_removed },
+    });
+  }
+  res.status(204).end();
+});
+
 export const updateCompanyVerification = asyncHandler(async (req, res) => {
   const { companyId } = req.params;
   const { verification_status, rejection_reason } = req.body;
@@ -279,12 +303,15 @@ export const updateCompanyVerification = asyncHandler(async (req, res) => {
     .from('companies')
     .update(updates)
     .eq('id', companyId)
+    .is('deleted_at', null)
     .select('id,name,website,description,status,verification_status,rejection_reason,registration_number,verification_document_path,created_at,verified_at')
-    .single();
+    .maybeSingle();
 
   if (updateError) {
     throw new ApiError(500, 'Failed to update company verification status.', 'COMPANY_VERIFICATION_FAILED', updateError.message);
   }
+
+  if (!updated) throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
 
   await writeAuditLog(req, {
     action: 'admin.company.verification.update',

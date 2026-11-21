@@ -209,9 +209,11 @@ export const updateCompany = asyncHandler(async (req, res) => {
       .from('companies')
       .select(companySelectFields)
       .eq('id', companyId)
-      .single();
+      .is('deleted_at', null)
+      .maybeSingle();
 
     if (error) mapCompanyUpdateError(error);
+    if (!company) throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
     return res.json({ company });
   }
 
@@ -219,10 +221,12 @@ export const updateCompany = asyncHandler(async (req, res) => {
     .from('companies')
     .update(payload)
     .eq('id', companyId)
+    .is('deleted_at', null)
     .select(companySelectFields)
-    .single();
+    .maybeSingle();
 
   if (error) mapCompanyUpdateError(error);
+  if (!company) throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
 
   await writeAuditLog(req, {
     action: 'company.update',
@@ -370,7 +374,7 @@ export const dashboard = asyncHandler(async (req, res) => {
 
   res.json({
     metrics: {
-      companies: companyIds.length,
+      companies: companiesRes.data?.length ?? 0,
       jobs: jobs.length,
       activeJobs: activeJobsRes.count || 0,
       applications: recentAppsRes.count || applicationStats.length,

@@ -127,6 +127,7 @@ admin.patch('/jobs/:jobId', writeLimiter, validate(adminJobUpdateSchema), adminC
 admin.delete('/jobs/:jobId', writeLimiter, adminController.deleteJob);
 admin.get('/companies', adminController.listCompanies);
 admin.get('/companies/:companyId/documents', adminController.getCompanyDocuments);
+admin.delete('/companies/:companyId', writeLimiter, adminController.deleteCompany);
 admin.patch('/companies/:companyId/verification', writeLimiter, validate(adminCompanyVerificationSchema), adminController.updateCompanyVerification);
 admin.patch('/companies/:companyId', writeLimiter, validate(adminCompanyVerificationSchema), adminController.updateCompanyVerification);
 admin.get('/applications', adminController.listApplications);

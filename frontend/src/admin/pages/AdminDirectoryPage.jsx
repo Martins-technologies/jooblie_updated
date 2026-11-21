@@ -33,6 +33,7 @@ export default function AdminDirectoryPage({ type = 'users' }) {
   const { user } = useAuth();
   const [selected,setSelected] = useState(null), [newRole,setNewRole] = useState(''), [saving,setSaving] = useState(false), [roleError,setRoleError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [companyDeleteError, setCompanyDeleteError] = useState('');
   const [newVerification, setNewVerification] = useState('pending'), [rejectionReason, setRejectionReason] = useState(''), [verificationError, setVerificationError] = useState('');
   const [companyDocuments, setCompanyDocuments] = useState(null);
   const [documentError, setDocumentError] = useState('');
@@ -85,6 +86,25 @@ export default function AdminDirectoryPage({ type = 'users' }) {
       showSuccessToast(`Company verification updated to ${humanize(newVerification)}.`);
     } catch (error) {
       setVerificationError(error.message || 'Could not update company verification.');
+    } finally {
+      pending.current = false;
+      setSaving(false);
+    }
+  }
+  async function deleteCompany() {
+    if (pending.current || !selectedCompanyId) return;
+    pending.current = true;
+    setSaving(true);
+    setCompanyDeleteError('');
+    try {
+      await apiRequest(`/admin/companies/${selectedCompanyId}`, {
+        method: 'DELETE', auth: true, notifyError: false,
+      });
+      setSelected(null);
+      collection.reload();
+      showSuccessToast('Company deleted.');
+    } catch (error) {
+      setCompanyDeleteError(error.message || 'This company could not be deleted.');
     } finally {
       pending.current = false;
       setSaving(false);
@@ -157,6 +177,7 @@ export default function AdminDirectoryPage({ type = 'users' }) {
   const open = item => {
     setRoleError('');
     setConfirmDelete(false);
+    setCompanyDeleteError('');
     setVerificationError('');
     setApplicationStatusError('');
     setSelected(item);
@@ -245,7 +266,20 @@ export default function AdminDirectoryPage({ type = 'users' }) {
             </li>)}
           </ul> : <p className="admin-note">No documents uploaded.</p>}
       </section>}
-      {type==='companies' && <form onSubmit={saveVerification} className="admin-edit-form" style={{ marginTop: '16px' }}>{verificationError && <div className="error-banner" role="alert">{verificationError}</div>}<label>Verification status<Select aria-label="Verification status" value={newVerification} disabled={saving} onChange={event=>setNewVerification(event.target.value)}><option value="pending">Pending Review</option><option value="verified">Verified (Approved)</option><option value="rejected">Rejected</option></Select></label>{newVerification==='rejected' && <label style={{marginTop:'10px'}}>Rejection reason<textarea className="form-input" style={{minHeight:'70px',marginTop:'4px'}} placeholder="Optional reason for rejection (e.g. invalid business registration, unable to verify domain ownership)..." value={rejectionReason} disabled={saving} maxLength={500} onChange={event=>setRejectionReason(event.target.value)}/></label>}<p className="admin-note">{newVerification==='verified'?'Verifying this company marks their business identity as authentic and enables their posted jobs to be immediately approved and active.':newVerification==='rejected'?'Rejecting verification indicates this company identity could not be verified. Any newly posted jobs will require manual admin moderation.':'Pending review indicates the company identity is awaiting verification of business credentials.'}</p><div className="admin-dialog__actions" style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>{safeWebsite(selected.website) && <a className="button button--secondary" href={safeWebsite(selected.website)} target="_blank" rel="noopener noreferrer">Visit website<ArrowUpRight size={14}/></a>}<button type="button" className="button button--secondary" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="button button--primary" disabled={saving || (newVerification===(selected.verification_status||'pending') && (newVerification!=='rejected' || rejectionReason.trim()===(selected.rejection_reason||'').trim()))}>{saving?'Updating verification…':'Save verification'}</button></div></form>}
+      {type==='companies' && !confirmDelete && <form onSubmit={saveVerification} className="admin-edit-form" style={{ marginTop: '16px' }}>{verificationError && <div className="error-banner" role="alert">{verificationError}</div>}<label>Verification status<Select aria-label="Verification status" value={newVerification} disabled={saving} onChange={event=>setNewVerification(event.target.value)}><option value="pending">Pending Review</option><option value="verified">Verified (Approved)</option><option value="rejected">Rejected</option></Select></label>{newVerification==='rejected' && <label style={{marginTop:'10px'}}>Rejection reason<textarea className="form-input" style={{minHeight:'70px',marginTop:'4px'}} placeholder="Optional reason for rejection (e.g. invalid business registration, unable to verify domain ownership)..." value={rejectionReason} disabled={saving} maxLength={500} onChange={event=>setRejectionReason(event.target.value)}/></label>}<p className="admin-note">{newVerification==='verified'?'Verifying this company marks their business identity as authentic and enables their posted jobs to be immediately approved and active.':newVerification==='rejected'?'Rejecting verification indicates this company identity could not be verified. Any newly posted jobs will require manual admin moderation.':'Pending review indicates the company identity is awaiting verification of business credentials.'}</p><div className="admin-dialog__actions" style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>{safeWebsite(selected.website) && <a className="button button--secondary" href={safeWebsite(selected.website)} target="_blank" rel="noopener noreferrer">Visit website<ArrowUpRight size={14}/></a>}<button type="button" className="button button--secondary" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="button button--primary" disabled={saving || (newVerification===(selected.verification_status||'pending') && (newVerification!=='rejected' || rejectionReason.trim()===(selected.rejection_reason||'').trim()))}>{saving?'Updating verification…':'Save verification'}</button></div></form>}
+      {type === 'companies' && <section className="admin-edit-form" aria-label="Delete company">
+        {confirmDelete ? <>
+          <p className="admin-note">Delete <strong>{selected.name}</strong> and remove its jobs from listings? Existing applications and verification documents will be kept.</p>
+          {companyDeleteError && <p className="error-banner" role="alert">{companyDeleteError}</p>}
+          <div className="admin-dialog__actions">
+            <button type="button" className="button button--secondary" disabled={saving} onClick={() => setConfirmDelete(false)}>Back</button>
+            <button type="button" className="button button--primary" disabled={saving} onClick={deleteCompany}>{saving ? 'Deleting company…' : 'Confirm deletion'}</button>
+          </div>
+        </> : <button type="button" className="button button--secondary" disabled={saving} onClick={() => {
+          setCompanyDeleteError('');
+          setConfirmDelete(true);
+        }}>Delete company</button>}
+      </section>}
       {type==='applications' && <form onSubmit={saveApplicationStatus} className="admin-edit-form" style={{ marginTop: '16px' }}>{applicationStatusError && <div className="error-banner" role="alert">{applicationStatusError}</div>}<label>Application status<Select aria-label="Application status" value={newApplicationStatus} disabled={saving} onChange={event=>setNewApplicationStatus(event.target.value)}><option value="submitted">Submitted</option><option value="viewed">In Progress (Viewed)</option><option value="shortlisted">Shortlisted</option><option value="interviewing">Interviewing</option><option value="offered">Offered</option><option value="hired">Hired</option><option value="rejected">Rejected</option></Select></label><p className="admin-note">Updating the application status will immediately reflect on the candidate's application tracker and the recruiter's hiring board.</p><div className="admin-dialog__actions" style={{ display: 'flex', gap: '8px', marginTop: '16px' }}><button type="button" className="button button--secondary" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="button button--primary" disabled={saving || newApplicationStatus === selected.status}>{saving?'Updating status…':'Save status'}</button></div></form>}
       {type==='registrations' && <form onSubmit={saveRegistration} className="admin-edit-form registration-followup">{registrationError&&<div className="error-banner" role="alert">{registrationError}</div>}<label>Follow-up status<Select value={newRegistrationStatus} disabled={saving} onChange={event=>setNewRegistrationStatus(event.target.value)}><option value="new">New registration</option><option value="contacted">Contact attempted</option><option value="reviewing">Profile review</option><option value="closed">Closed / no current match</option></Select></label><label>Assign administrator<Select value={newRegistrationOwner} disabled={saving} onChange={event=>setNewRegistrationOwner(event.target.value)}><option value="">Unassigned</option>{registrationOwners.map(owner=><option key={owner.id} value={owner.id}>{owner.full_name||owner.email}</option>)}</Select></label><p className="admin-note">Employer-sharing permission is recorded separately. Do not share this person’s information with employers unless that permission is granted.</p><div className="admin-dialog__actions"><button type="button" className="button button--secondary" disabled={saving} onClick={close}>Close</button><button type="submit" className="button button--primary" disabled={saving}>{saving?'Saving…':'Save follow-up'}</button></div></form>}
     </AdminDialog>}
