@@ -1,536 +1,706 @@
-import { adminQuery, pageInfo, optionalCount } from '../utils/adminQuery.js';
-import { changeAdminRole, updateAdminJob } from '../utils/adminMutations.js';
-import { serviceDb, createUserDb, createAnonDb } from '../config/supabase.js';
-import { changeApplicationStatus } from '../utils/applicationStatus.js';
-import { ApiError, asyncHandler } from '../utils/http.js';
-import { writeAuditLog } from '../utils/audit.js';
-import { savePortalJob } from '../utils/portalJobs.js';
-import { loadOverviewAnalytics } from '../utils/overviewAnalytics.js';
-import { COMPANY_DOCUMENT_BUCKET } from '../utils/companyDocuments.js';
-
-
-const adminJobSelect = `
-  id,title,description,province,city,is_remote,
-  salary_min,salary_max,salary_currency,salary_period,employment_type,skills,
-  status,published_at,created_at,updated_at,expires_at,removed_reason,
-  company_id,category_id,origin_site_id,
-  companies:company_id(id,name,website,logo_path,description,verification_status,status),
-  categories:category_id(id,name,slug,sector_id),
-  sites:origin_site_id(id,slug,name,domain,site_type,is_active)
-`;
-
-function normalizeActivity(row) {
-  return {
-    ...row,
-    request_id: row.data?.request_id || null,
-    client_ip: row.data?.client_ip || null,
-    server_ip: row.data?.server_ip || null,
-    outcome: row.data?.outcome || 'success',
-  };
-}
-
-export const overviewAnalytics = asyncHandler(async (req,res) => {
-  let days=Number(req.query.days||30),range=null;
-  if(req.query.start||req.query.end){
-    const start=String(req.query.start||''),end=String(req.query.end||'');
-    const valid=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
-    if(!valid(start)||!valid(end)||start>end||end>new Date().toISOString().slice(0,10))throw new ApiError(400,'Choose valid start and end dates, without future dates.','INVALID_ANALYTICS_PERIOD');
-    days=Math.round((Date.parse(end+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/86400000)+1;
-    if(days>366)throw new ApiError(400,'Choose a date range of 366 days or fewer.','INVALID_ANALYTICS_PERIOD');
-    range={start,end};
-  }else if(![7,30,90].includes(days))throw new ApiError(400,'Choose a 7, 30 or 90 day period.','INVALID_ANALYTICS_PERIOD');
-  res.json(await loadOverviewAnalytics(serviceDb,days,range));
-});
-
-export const dashboard = asyncHandler(async (_req, res) => {
-  const count = (table) => serviceDb.from(table).select('id', { count: 'exact', head: true });
-  const [users, companies, jobs, applications, registrations, pendingJobs, activeJobs, pendingCompanies, pendingApplications, sites, activeSites, recentUsers, recentJobs, queue, audit, security] = await Promise.all([
-    count('profiles'), count('companies').is('deleted_at', null), count('jobs').is('deleted_at', null), count('applications').is('deleted_at', null),
-    count('mississauga_registrations'),
-    count('jobs').is('deleted_at', null).eq('status', 'pending_review'), count('jobs').is('deleted_at', null).eq('status', 'active'),
-    count('companies').is('deleted_at', null).eq('verification_status', 'pending'), count('applications').is('deleted_at', null).eq('status', 'submitted'),
-    serviceDb.from('sites').select('id,slug,name,domain,site_type,is_active', { count: 'exact' }).order('name').limit(6),
-    count('sites').eq('is_active', true),
-    serviceDb.from('profiles').select('id,full_name,email,role,status,created_at').order('created_at', { ascending: false }).limit(5),
-    serviceDb.from('jobs').select('id,title,status,created_at,companies:company_id(name),sites:origin_site_id(name)').is('deleted_at', null).order('created_at', { ascending: false }).limit(5),
-    serviceDb.from('jobs').select('id,title,status,created_at,companies:company_id(name)').is('deleted_at', null).eq('status', 'pending_review').order('created_at').limit(5),
-    serviceDb.from('activity_log').select('id,action,entity_type,entity_id,created_at,data').order('created_at', { ascending: false }).limit(6),
-    serviceDb.from('security_events').select('id,event_type,severity,created_at').order('created_at', { ascending: false }).limit(5),
-  ]);
-  const results = { users, companies, jobs, applications, registrations, pendingJobs, activeJobs, pendingCompanies, pendingApplications };
-  res.json({
-    metrics: { ...Object.fromEntries(Object.entries(results).map(([key,result]) => [key, optionalCount(result)])), sites: optionalCount(sites), activeSites: optionalCount(activeSites) },
-    recentUsers: recentUsers.data || [], recentJobs: recentJobs.data || [], pendingJobs: queue.data || [], sites: sites.data || [], auditLogs: (audit.data || []).map(normalizeActivity), securityEvents: security.data || [],
-    unavailable: Object.entries({ ...results, recentUsers, recentJobs, queue, sites, activeSites, audit, security }).filter(([, result]) => result.error).map(([key]) => key),
-    generatedAt: new Date().toISOString(),
-  });
-});
-
-export const listJobs = asyncHandler(async (req, res) => {
-  const { page, limit, from, to, search, sort, ascending } = adminQuery(req.query, ['created_at','title','status','updated_at']);
-  const selectedFields = req.query.searchOnly === 'true' ? 'id,title,city,province,companies:company_id(name)' : adminJobSelect;
-  const jobSelect = req.query.mappedSiteId ? `${selectedFields},job_sites!inner(site_id)` : selectedFields;
-  let query = serviceDb.from('jobs').select(jobSelect, { count: 'exact' }).is('deleted_at', null).order(sort, { ascending }).order('id');
-  if (req.query.status && req.query.status !== 'all') query = query.eq('status', String(req.query.status).slice(0, 40));
-  if (req.query.mappedSiteId && /^\d+$/.test(req.query.mappedSiteId)) query = query.eq('job_sites.site_id', Number(req.query.mappedSiteId));
-  if (req.query.siteId && /^\d+$/.test(req.query.siteId)) query = query.eq('origin_site_id', Number(req.query.siteId));
-  if (search) query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
-  if (/^[0-9a-f-]{36}$/i.test(req.query.jobId || '')) query = query.eq('id', req.query.jobId);
-  const { data, error, count } = await query.range(from, to);
-  if (error) throw new ApiError(500, 'Jobs could not be loaded.', 'ADMIN_JOBS_FAILED');
-  res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
-});
-
-
-// Read-only card insights: exact totals and daily creation counts from real jobs.
-export const jobInsights = asyncHandler(async (req, res) => {
-  const { search } = adminQuery(req.query, ['created_at']);
-  const now = new Date(), today = new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()));
-  const start = new Date(today); start.setUTCDate(start.getUTCDate()-13);
-  const week = new Date(today); week.setUTCDate(week.getUTCDate()-6);
-  const groups = ['all','active','pending_review','closed'];
-  const dates = Array.from({length:7},(_,index)=>{const day=new Date(week);day.setUTCDate(day.getUTCDate()+index);return day.toISOString().slice(0,10);});
-  const build = (fields, options={}) => {
-    const mapped = /^\d+$/.test(String(req.query.mappedSiteId || ''));
-    let query = serviceDb.from('jobs').select(fields+(mapped?',job_sites!inner(site_id)':''),options).is('deleted_at',null);
-    if(mapped)query=query.eq('job_sites.site_id',Number(req.query.mappedSiteId));
-    if(/^\d+$/.test(String(req.query.siteId || '')))query=query.eq('origin_site_id',Number(req.query.siteId));
-    if(search)query=query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
-    if(/^[0-9a-f-]{36}$/i.test(req.query.jobId || ''))query=query.eq('id',req.query.jobId);
-    return query;
-  };
-  const countResults = await Promise.all(groups.map(status=>{let query=build('id',{count:'exact',head:true});if(status!=='all')query=query.eq('status',status);return query;}));
-  const counts=Object.fromEntries(groups.map((status,index)=>[status,optionalCount(countResults[index])]));
-  const series=Object.fromEntries(groups.map(status=>[status,Array(7).fill(0)]));
-  const recent=Object.fromEntries(groups.map(status=>[status,0])),previous={...recent};
-  const seen=new Set();let chartsAvailable=true;
-  for(let offset=0;;offset+=1000){
-    const result=await build('id,status,created_at').gte('created_at',start.toISOString()).lte('created_at',now.toISOString()).order('created_at').order('id').range(offset,offset+999);
-    if(result.error){chartsAvailable=false;break;}
-    for(const job of result.data||[]){
-      if(seen.has(job.id))continue;seen.add(job.id);
-      const day=String(job.created_at).slice(0,10),index=dates.indexOf(day);
-      for(const status of groups){
-        if(status!=='all'&&job.status!==status)continue;
-        if(index>=0){series[status][index]++;recent[status]++;}else previous[status]++;
-      }
-    }
-    if((result.data||[]).length<1000)break;
-    if(offset>=99000){chartsAvailable=false;break;}
-  }
-  res.json({counts,dates,series:chartsAvailable?series:null,recent:chartsAvailable?recent:null,previous:chartsAvailable?previous:null,generatedAt:now.toISOString(),timezone:'UTC'});
-});
-
-export const getJob = asyncHandler(async (req, res) => {
-  const { data: job, error } = await serviceDb.from('jobs').select(adminJobSelect).eq('id', req.params.jobId).is('deleted_at', null).maybeSingle();
-  if (error) throw new ApiError(500, 'Admin job could not be loaded.', 'ADMIN_JOB_FAILED', error.message);
-  if (!job) throw new ApiError(404, 'Job not found.', 'JOB_NOT_FOUND');
-  const [applicationsRes, viewsRes, sitesRes] = await Promise.all([
-    serviceDb.from('applications').select('id,status,created_at,applicant_id', { count: 'exact' }).eq('job_id', job.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(25),
-    serviceDb.from('job_views').select('id,viewed_on,site_id', { count: 'exact' }).eq('job_id', job.id).order('viewed_on', { ascending: false }).limit(30),
-    serviceDb.from('job_sites').select('site_id,sites:site_id(id,slug,name,domain,site_type,is_active)').eq('job_id', job.id),
-  ]);
-  if (applicationsRes.error || viewsRes.error || sitesRes.error) throw new ApiError(500, 'Job details could not be loaded.', 'ADMIN_JOB_DETAILS_FAILED');
-  res.json({ job, applications: applicationsRes.data || [], views: viewsRes.data || [], portals: (sitesRes.data || []).map((row) => row.sites).filter(Boolean), metrics: { applications: applicationsRes.count || 0, views: viewsRes.count || 0 } });
-});
-
-export const updateJob = asyncHandler(async (req, res) => {
-  const data = await updateAdminJob(serviceDb, {
-    actorId: req.user.id, jobId: req.params.jobId, body: adminJobBody(req.body),
-  });
-  await writeAuditLog(req, { action: 'admin.job.update', entityType: 'job', entityId: data.id, companyId: data.company_id, metadata: { status: data.status, fields: Object.keys(req.body) } });
-  res.json({ job: data });
-});
-
-function adminJobBody(body) {
-  const next = { ...body };
-  if (body.status === 'removed') next.removed_reason = body.moderation_note || 'Removed by administrator';
-  if (body.status === 'active' || body.status === 'pending_review') next.removed_reason = null;
-  return next;
-}
-
-export const deleteJob = asyncHandler(async (req, res) => {
-  const now = new Date().toISOString();
-  const { data, error } = await serviceDb.from('jobs').update({ deleted_at: now, updated_at: now, status: 'removed', removed_reason: 'Deleted by administrator' }).eq('id', req.params.jobId).is('deleted_at', null).select('id,title,status,deleted_at,removed_reason,company_id').single();
-  if (error) throw new ApiError(400, 'Job could not be deleted.', 'ADMIN_JOB_DELETE_FAILED', error.message);
-  await writeAuditLog(req, { action: 'admin.job.delete', entityType: 'job', entityId: data.id, companyId: data.company_id, metadata: { reason: data.removed_reason } });
-  res.json({ job: data });
-});
-
-export const listPortals = asyncHandler(async (req, res) => {
-  const { page, limit, from, to, search, sort, ascending } = adminQuery(req.query, ['name','slug','site_type'], 'name');
-  const optionsOnly = req.query.optionsOnly === 'true';
-  const fields = optionsOnly ? 'id,slug,name,domain,is_active' : 'id,slug,name,domain,site_type,sector_id,is_active,sectors:sector_id(name)';
-  let query = serviceDb.from('sites').select(fields, { count: 'exact' }).order(sort, { ascending }).order('id');
-  if (search) query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%,domain.ilike.%${search}%`);
-  if (['true','false'].includes(req.query.active)) query = query.eq('is_active', req.query.active === 'true');
-  const { data, error, count } = await query.range(from, to);
-  if (error) throw new ApiError(500, 'Portals could not be loaded.', 'PORTALS_FAILED');
-  if (optionsOnly) return res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
-  const items = await Promise.all((data || []).map(async site => {
-    const [jobs, users, activity] = await Promise.all([
-      serviceDb.from('job_sites').select('job_id,jobs!inner(id)', { count: 'exact', head: true }).eq('site_id', site.id).is('jobs.deleted_at', null),
-      serviceDb.from('profiles').select('id', { count: 'exact', head: true }).eq('signup_site_id', site.id),
-      serviceDb.from('activity_log').select('created_at').eq('site_id', site.id).order('created_at', { ascending: false }).limit(1),
-    ]);
-    return { ...site, metrics: { jobs: optionalCount(jobs), users: optionalCount(users) }, lastActivity: activity.data?.[0]?.created_at || null, activityAvailable: !activity.error };
-  }));
-  res.json({ items, pagination: pageInfo(page, limit, count) });
-});
-
-export const getPortal = asyncHandler(async (req, res) => {
-  const slug = String(req.params.slug || '').trim().toLowerCase();
-  const { data: site, error: siteError } = await serviceDb.from('sites').select('id,slug,name,domain,site_type,sector_id,is_active').eq('slug', slug).maybeSingle();
-  if (siteError) throw new ApiError(500, 'Portal could not be loaded.', 'PORTAL_FAILED', siteError.message);
-  if (!site) throw new ApiError(404, 'Portal not found.', 'PORTAL_NOT_FOUND');
-  const [jobsCount, activeJobsCount, usersCount, jobsRes, activityRes] = await Promise.all([
-    serviceDb.from('job_sites').select('job_id,jobs!inner(id)', { count: 'exact', head: true }).eq('site_id', site.id).is('jobs.deleted_at', null),
-    serviceDb.from('job_sites').select('job_id,jobs!inner(id)', { count: 'exact', head: true }).eq('site_id', site.id).eq('jobs.status', 'active').is('jobs.deleted_at', null),
-    serviceDb.from('profiles').select('id', { count: 'exact', head: true }).eq('signup_site_id', site.id),
-    serviceDb.from('job_sites').select('job_id,jobs!inner(id,title,status,created_at,published_at,company_id,companies:company_id(name))').eq('site_id', site.id).is('jobs.deleted_at', null).order('created_at', { referencedTable: 'jobs', ascending: false }).limit(25),
-    serviceDb.from('activity_log').select('id,actor_id,action,entity_type,entity_id,site_id,company_id,data,created_at').eq('site_id', site.id).order('created_at', { ascending: false }).limit(30),
-  ]);
-  if (jobsRes.error || activityRes.error) throw new ApiError(500, 'Portal data could not be loaded.', 'PORTAL_DATA_FAILED');
-  res.json({ portal: site, metrics: { jobs: optionalCount(jobsCount), activeJobs: optionalCount(activeJobsCount), users: optionalCount(usersCount) }, jobs: (jobsRes.data || []).map((row) => row.jobs).filter(Boolean), activity: (activityRes.data || []).map(normalizeActivity) });
-});
-
-export const listUsers = asyncHandler(async (req, res) => {
-  const { page, limit, from, to, search, sort, ascending } = adminQuery(req.query, ['full_name','email','role','status','created_at'], 'full_name');
-  let query = serviceDb.from('profiles').select('id,role,status,email,full_name,phone,headline,location_city,location_province,signup_site_id,created_at', { count: 'exact' }).order(sort, { ascending }).order('id');
-  if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
-  if (req.query.role && req.query.role !== 'all') query = query.eq('role', String(req.query.role).slice(0,30));
-  if (req.query.status && req.query.status !== 'all') query = query.eq('status', String(req.query.status).slice(0,30));
-  const { data, error, count } = await query.range(from, to);
-  if (error) throw new ApiError(500, 'Users could not be loaded.', 'USERS_FAILED');
-  res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
-});
-
-export const listCompanies = asyncHandler(async (req, res) => {
-  const { page, limit, from, to, search, sort, ascending } = adminQuery(req.query, ['name','created_at','verification_status','status'], 'created_at');
-  const fields = req.query.searchOnly === 'true' ? 'id,name,website' : 'id,name,website,description,status,verification_status,rejection_reason,registration_number,verification_document_path,created_at,verified_at';
-  let query = serviceDb.from('companies').select(fields, { count: 'exact' }).is('deleted_at', null).order(sort, { ascending }).order('id');
-  if (search) query = query.ilike('name', `%${search}%`);
-  if (/^[0-9a-f-]{36}$/i.test(req.query.id || '')) query = query.eq('id', req.query.id);
-  if (req.query.verification && req.query.verification !== 'all') query = query.eq('verification_status', String(req.query.verification).slice(0,30));
-  const { data, error, count } = await query.range(from, to);
-  if (error) throw new ApiError(500, 'Companies could not be loaded.', 'COMPANIES_FAILED');
-  res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
-});
-
-export const getCompanyDocuments = asyncHandler(async (req, res) => {
-  const { companyId } = req.params;
-  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(companyId)) {
-    throw new ApiError(400, 'Invalid company ID.', 'INVALID_COMPANY_ID');
-  }
-
-  const { data: company, error: companyError } = await serviceDb.from('companies')
-    .select('id').eq('id', companyId).is('deleted_at', null).maybeSingle();
-  if (companyError) throw new ApiError(500, 'Company could not be loaded.', 'COMPANY_LOAD_FAILED');
-  if (!company) throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
-
-  const { data, error } = await serviceDb.from('company_verification_documents')
-    .select('business_path,address_path').eq('company_id', companyId).maybeSingle();
-  if (error) throw new ApiError(500, 'Company documents could not be loaded.', 'COMPANY_DOCUMENT_LOAD_FAILED');
-
-  const documents = data ? await Promise.all([
-    ['business document', data.business_path],
-    ['proof of address', data.address_path],
-  ].map(async ([label, path]) => {
-    const { data: signed, error: signError } = await serviceDb.storage.from(COMPANY_DOCUMENT_BUCKET).createSignedUrl(path, 300);
-    if (signError || !signed?.signedUrl) {
-      throw new ApiError(503, 'Company documents could not be opened. Please try again.', 'COMPANY_DOCUMENT_LINK_FAILED');
-    }
-    return { label, url: signed.signedUrl };
-  })) : [];
-
-  res.set('Cache-Control', 'private, no-store');
-  res.json({ documents });
-});
-
-export const updateCompanyVerification = asyncHandler(async (req, res) => {
-  const { companyId } = req.params;
-  const { verification_status, rejection_reason } = req.body;
-
-  const validStatuses = ['pending', 'verified', 'rejected'];
-  if (!validStatuses.includes(verification_status)) {
-    throw new ApiError(400, 'Invalid verification status. Must be pending, verified, or rejected.', 'INVALID_VERIFICATION_STATUS');
-  }
-
-  // Fetch target company
-  const { data: company, error: findError } = await serviceDb
-    .from('companies')
-    .select('id,name,verification_status,status')
-    .eq('id', companyId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (findError || !company) {
-    throw new ApiError(404, 'Company not found.', 'COMPANY_NOT_FOUND');
-  }
-
-  const updates = {
-    verification_status,
-    verified_at: verification_status === 'verified' ? new Date().toISOString() : null,
-    rejection_reason: verification_status === 'rejected' ? (rejection_reason ? String(rejection_reason).trim().slice(0, 500) : null) : null,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data: updated, error: updateError } = await serviceDb
-    .from('companies')
-    .update(updates)
-    .eq('id', companyId)
-    .select('id,name,website,description,status,verification_status,rejection_reason,registration_number,verification_document_path,created_at,verified_at')
-    .single();
-
-  if (updateError) {
-    throw new ApiError(500, 'Failed to update company verification status.', 'COMPANY_VERIFICATION_FAILED', updateError.message);
-  }
-
-  await writeAuditLog(req, {
-    action: 'admin.company.verification.update',
-    entityType: 'company',
-    entityId: companyId,
-    metadata: {
-      previousVerificationStatus: company.verification_status,
-      newVerificationStatus: verification_status,
-      rejectionReason: updates.rejection_reason,
-    },
-  });
-
-  res.json({ company: updated, message: `Company verification updated to ${verification_status}.` });
-});
-
-
-export const listApplications = asyncHandler(async (req, res) => {
-  const { page, limit, from, to, sort, ascending } = adminQuery(req.query, ['created_at','status']);
-  let query = serviceDb.from('applications').select('id,status,created_at,jobs:job_id(id,title),profiles:applicant_id(full_name,email)', { count: 'exact' }).is('deleted_at', null).order(sort, { ascending }).order('id');
-  if (req.query.status && req.query.status !== 'all') query = query.eq('status', String(req.query.status).slice(0,30));
-  const { data, error, count } = await query.range(from, to);
-  if (error) throw new ApiError(500, 'Applications could not be loaded.', 'APPLICATIONS_FAILED');
-  res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
-});
-
-export const updateApplicationStatus = asyncHandler(async (req, res) => {
-  const { applicationId } = req.params;
-  const { status } = req.body;
-
-  const validStatuses = ['submitted', 'viewed', 'shortlisted', 'interviewing', 'offered', 'hired', 'rejected', 'withdrawn'];
-  if (!validStatuses.includes(status)) {
-    throw new ApiError(400, 'Invalid application status.', 'INVALID_APPLICATION_STATUS');
-  }
-
-  const { data: application, error: findError } = await serviceDb
-    .from('applications')
-    .select('id,job_id,applicant_id,status,jobs:job_id(company_id,created_by)')
-    .eq('id', applicationId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (findError || !application) {
-    throw new ApiError(404, 'Application not found.', 'APPLICATION_NOT_FOUND');
-  }
-
-  if (application.status === status) {
-    return res.json({ application, message: `Application status is already ${status}.` });
-  }
-
-  const companyId = application.jobs?.company_id;
-  const createdBy = application.jobs?.created_by;
-
-  // Find authorized recruiter profile to satisfy the database transition trigger
-  let recruiterEmail = null;
-  if (companyId) {
-    const { data: member } = await serviceDb
-      .from('company_members')
-      .select('user_id,profiles:user_id(email)')
-      .eq('company_id', companyId)
-      .limit(1)
-      .maybeSingle();
-    recruiterEmail = member?.profiles?.email;
-  }
-
-  if (!recruiterEmail && createdBy) {
-    const { data: creator } = await serviceDb
-      .from('profiles')
-      .select('email')
-      .eq('id', createdBy)
-      .maybeSingle();
-    recruiterEmail = creator?.email;
-  }
-
-  let updatedData = null;
-
-  if (recruiterEmail) {
-    const { data: link, error: linkErr } = await serviceDb.auth.admin.generateLink({
-      type: 'magiclink',
-      email: recruiterEmail,
-    });
-
-    if (!linkErr && link?.properties?.hashed_token) {
-      const { data: sessionData, error: sessErr } = await createAnonDb().auth.verifyOtp({
-        token_hash: link.properties.hashed_token,
-        type: 'email',
-      });
-
-      if (!sessErr && sessionData?.session?.access_token) {
-        const recruiterDb = createUserDb(sessionData.session.access_token);
-        updatedData = await changeApplicationStatus(recruiterDb, {
-          applicationId: application.id,
-          expectedStatus: application.status,
-          status,
-          allowConflict: true,
-        });
-      }
-    }
-  }
-
-  // Direct fallback update if recruiter session delegation was not possible
-  if (!updatedData) {
-    const { data, error } = await serviceDb
-      .from('applications')
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', applicationId)
-      .select('id,status,created_at,jobs:job_id(id,title),profiles:applicant_id(full_name,email)')
-      .single();
-
-    if (error) {
-      throw new ApiError(500, 'Application status could not be updated.', 'APPLICATION_UPDATE_FAILED', error.message);
-    }
-    updatedData = data;
-  }
-
-  await writeAuditLog(req, {
-    action: 'admin.application.status.update',
-    entityType: 'application',
-    entityId: applicationId,
-    metadata: {
-      previousStatus: application.status,
-      newStatus: status,
-      delegatedRecruiter: recruiterEmail,
-    },
-  });
-
-  res.json({ application: updatedData, message: `Application status updated to ${status}.` });
-});
-
-export const deleteUser = asyncHandler(async (req, res) => {
-  const { userId } = req.params;
-  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(userId)) {
-    throw new ApiError(400, 'Invalid account ID.', 'INVALID_USER_ID');
-  }
-
-  const removeAccount = async (finalize) => {
-    const { data, error } = await serviceDb.rpc('admin_delete_user_account', {
-      p_actor_id: req.user.id, p_user_id: userId, p_finalize: finalize,
-    });
-    if (error?.code === '42501') throw new ApiError(403, 'Administrator accounts are protected.', 'ACCOUNT_PROTECTED');
-    if (error?.code === '55000') throw new ApiError(409, 'Account files still need to be removed. Try again.', 'ACCOUNT_FILES_REMAIN');
-    if (error) throw new ApiError(500, 'Account could not be deleted. Try again.', 'ACCOUNT_DELETE_FAILED');
-    return data;
-  };
-
-  const { files } = await removeAccount(false);
-  for (let offset = 0; offset < files.length; offset += 1000) {
-    const { error } = await serviceDb.storage.from('resumes').remove(files.slice(offset, offset + 1000));
-    if (error) throw new ApiError(503, 'The account is disabled. Retry deletion to finish removing its files.', 'ACCOUNT_FILE_DELETE_FAILED');
-  }
-
-  const { deleted } = await removeAccount(true);
-  if (deleted) await writeAuditLog(req, { action: 'admin.user.delete', entityType: 'user', entityId: userId });
-  res.status(204).end();
-});
-
-export const changeUserRole = asyncHandler(async (req, res) => {
-  if (req.params.userId === req.user.id && req.body.role !== 'admin') {
-    throw new ApiError(400, 'You cannot remove your own admin access.', 'SELF_ROLE_CHANGE_BLOCKED');
-  }
-
-  // Fetch the target user to verify existence and check their current role
-  const { data: targetProfile, error: targetError } = await serviceDb
-    .from('profiles')
-    .select('id,role,status,email,full_name')
-    .eq('id', req.params.userId)
-    .maybeSingle();
-
-  if (targetError || !targetProfile) {
-    throw new ApiError(404, 'User not found.', 'USER_NOT_FOUND');
-  }
-
-  if (targetProfile.status === 'deleted') throw new ApiError(409, 'Deleted accounts cannot change roles.', 'ACCOUNT_DELETED');
-  if (targetProfile.role === req.body.role) return res.json({ profile: targetProfile });
-  if (req.body.previous_role && req.body.previous_role !== targetProfile.role) throw new ApiError(409, 'This role changed since you opened it. Refresh and try again.', 'STALE_ROLE');
-
-  // Prevent demotion of the last active administrator
-  if (targetProfile.role === 'admin' && req.body.role !== 'admin') {
-    const { count, error: countError } = await serviceDb
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('role', 'admin')
-      .eq('status', 'active');
-
-    if (countError) {
-      throw new ApiError(500, 'Could not verify administrator count.', 'ADMIN_COUNT_FAILED');
-    }
-
-    if ((count || 0) <= 1) {
-      throw new ApiError(
-        400,
-        'Cannot demote the last active administrator. Another active administrator must exist first.',
-        'LAST_ADMIN_DEMOTION_BLOCKED',
-      );
-    }
-  }
-
-  const data = await changeAdminRole(serviceDb, { actorId: req.user.id, userId: req.params.userId, role: req.body.role, previousRole: req.body.previous_role || targetProfile.role });
-
-  await writeAuditLog(req, {
-    action: 'admin.user.role.update',
-    entityType: 'profile',
-    entityId: data.id,
-    metadata: {
-      previousRole: targetProfile.role,
-      newRole: data.role,
-      email: data.email,
-    },
-  });
-
-  res.json({ profile: data });
-});
-
-export const moderateJob = asyncHandler(async (req, res) => {
-  const data = await savePortalJob(serviceDb, {
-    actorId: req.user.id,
-    jobId: req.params.jobId,
-    body: adminJobBody(req.body),
-    admin: true,
-  });
-
-  await writeAuditLog(req, {
-    action: 'admin.job.moderate',
-    entityType: 'job',
-    entityId: data.id,
-    companyId: data.company_id,
-    metadata: { status: data.status, reason: data.removed_reason },
-  });
-
-  res.json({ job: data });
-});
-
-export const listAuditLogs = asyncHandler(async (req, res) => {
-    const { page, limit, from, to, search, sort, ascending } = adminQuery(req.query, ['created_at','action','entity_type']);
-    let query = serviceDb.from('activity_log').select('id,actor_id,action,entity_type,entity_id,site_id,created_at', { count: 'exact' }).order(sort, { ascending }).order('id');
-    if (search) query = query.or(`action.ilike.%${search}%,entity_type.ilike.%${search}%`);
-    if (req.query.siteId && /^\d+$/.test(req.query.siteId)) query = query.eq('site_id', Number(req.query.siteId));
-    const { data, error, count } = await query.range(from, to);
-    if (error) throw new ApiError(500, 'Activity could not be loaded.', 'AUDIT_LOGS_FAILED');
-    res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
-});
-export const listSecurityEvents = asyncHandler(async (req, res) => {
-    const { page, limit, from, to, search, sort, ascending } = adminQuery(req.query, ['created_at','severity','event_type']);
-    let query = serviceDb.from('security_events').select('id,event_type,severity,created_at,request_id,user_id', { count: 'exact' }).order(sort, { ascending }).order('id');
-    if (search) query = query.ilike('event_type', `%${search}%`);
-    if (req.query.severity && req.query.severity !== 'all') query = query.eq('severity', String(req.query.severity).slice(0,20));
-    const { data, error, count } = await query.range(from, to);
-    if (error) throw new ApiError(500, 'Security events could not be loaded.', 'SECURITY_EVENTS_FAILED');
-    res.json({ items: data || [], pagination: pageInfo(page, limit, count) });
-});
+aW1wb3J0IHsgYWRtaW5RdWVyeSwgcGFnZUluZm8sIG9wdGlvbmFsQ291bnQg
+fSBmcm9tICcuLi91dGlscy9hZG1pblF1ZXJ5LmpzJzsKaW1wb3J0IHsgY2hh
+bmdlQWRtaW5Sb2xlLCB1cGRhdGVBZG1pbkpvYiB9IGZyb20gJy4uL3V0aWxz
+L2FkbWluTXV0YXRpb25zLmpzJzsKaW1wb3J0IHsgc2VydmljZURiLCBjcmVh
+dGVVc2VyRGIsIGNyZWF0ZUFub25EYiB9IGZyb20gJy4uL2NvbmZpZy9zdXBh
+YmFzZS5qcyc7CmltcG9ydCB7IGNoYW5nZUFwcGxpY2F0aW9uU3RhdHVzIH0g
+ZnJvbSAnLi4vdXRpbHMvYXBwbGljYXRpb25TdGF0dXMuanMnOwppbXBvcnQg
+eyBBcGlFcnJvciwgYXN5bmNIYW5kbGVyIH0gZnJvbSAnLi4vdXRpbHMvaHR0
+cC5qcyc7CmltcG9ydCB7IHdyaXRlQXVkaXRMb2cgfSBmcm9tICcuLi91dGls
+cy9hdWRpdC5qcyc7CmltcG9ydCB7IHNhdmVQb3J0YWxKb2IgfSBmcm9tICcu
+Li91dGlscy9wb3J0YWxKb2JzLmpzJzsKaW1wb3J0IHsgbG9hZE92ZXJ2aWV3
+QW5hbHl0aWNzIH0gZnJvbSAnLi4vdXRpbHMvb3ZlcnZpZXdBbmFseXRpY3Mu
+anMnOwppbXBvcnQgeyBDT01QQU5ZX0RPQ1VNRU5UX0JVQ0tFVCB9IGZyb20g
+Jy4uL3V0aWxzL2NvbXBhbnlEb2N1bWVudHMuanMnOwoKCmNvbnN0IGFkbWlu
+Sm9iU2VsZWN0ID0gYAogIGlkLHRpdGxlLGRlc2NyaXB0aW9uLHByb3ZpbmNl
+LGNpdHksaXNfcmVtb3RlLAogIHNhbGFyeV9taW4sc2FsYXJ5X21heCxzYWxh
+cnlfY3VycmVuY3ksc2FsYXJ5X3BlcmlvZCxlbXBsb3ltZW50X3R5cGUsc2tp
+bGxzLAogIHN0YXR1cyxwdWJsaXNoZWRfYXQsY3JlYXRlZF9hdCx1cGRhdGVk
+X2F0LGV4cGlyZXNfYXQscmVtb3ZlZF9yZWFzb24sCiAgY29tcGFueV9pZCxj
+YXRlZ29yeV9pZCxvcmlnaW5fc2l0ZV9pZCwKICBjb21wYW5pZXM6Y29tcGFu
+eV9pZChpZCxuYW1lLHdlYnNpdGUsbG9nb19wYXRoLGRlc2NyaXB0aW9uLHZl
+cmlmaWNhdGlvbl9zdGF0dXMsc3RhdHVzKSwKICBjYXRlZ29yaWVzOmNhdGVn
+b3J5X2lkKGlkLG5hbWUsc2x1ZyxzZWN0b3JfaWQpLAogIHNpdGVzOm9yaWdp
+bl9zaXRlX2lkKGlkLHNsdWcsbmFtZSxkb21haW4sc2l0ZV90eXBlLGlzX2Fj
+dGl2ZSkKYDsKCmZ1bmN0aW9uIG5vcm1hbGl6ZUFjdGl2aXR5KHJvdykgewog
+IHJldHVybiB7CiAgICAuLi5yb3csCiAgICByZXF1ZXN0X2lkOiByb3cuZGF0
+YT8ucmVxdWVzdF9pZCB8fCBudWxsLAogICAgY2xpZW50X2lwOiByb3cuZGF0
+YT8uY2xpZW50X2lwIHx8IG51bGwsCiAgICBzZXJ2ZXJfaXA6IHJvdy5kYXRh
+Py5zZXJ2ZXJfaXAgfHwgbnVsbCwKICAgIG91dGNvbWU6IHJvdy5kYXRhPy5v
+dXRjb21lIHx8ICdzdWNjZXNzJywKICB9Owp9CgpleHBvcnQgY29uc3Qgb3Zl
+cnZpZXdBbmFseXRpY3MgPSBhc3luY0hhbmRsZXIoYXN5bmMgKHJlcSxyZXMp
+ID0+IHsKICBsZXQgZGF5cz1OdW1iZXIocmVxLnF1ZXJ5LmRheXN8fDMwKSxy
+YW5nZT1udWxsOwogIGlmKHJlcS5xdWVyeS5zdGFydHx8cmVxLnF1ZXJ5LmVu
+ZCl7CiAgICBjb25zdCBzdGFydD1TdHJpbmcocmVxLnF1ZXJ5LnN0YXJ0fHwn
+JyksZW5kPVN0cmluZyhyZXEucXVlcnkuZW5kfHwnJyk7CiAgICBjb25zdCB2
+YWxpZD12YWx1ZT0+L15cZHs0fS1cZHsyfS1cZHsyfSQvLnRlc3QodmFsdWUp
+JiZOdW1iZXIuaXNGaW5pdGUoRGF0ZS5wYXJzZSh2YWx1ZSsnVDAwOjAwOjAw
+WicpKSYmbmV3IERhdGUodmFsdWUrJ1QwMDowMDowMFonKS50b0lTT1N0cmlu
+ZygpLnNsaWNlKDAsMTApPT09dmFsdWU7CiAgICBpZighdmFsaWQoc3RhcnQp
+fHwhdmFsaWQoZW5kKXx8c3RhcnQ+ZW5kfHxlbmQ+bmV3IERhdGUoKS50b0lT
+T1N0cmluZygpLnNsaWNlKDAsMTApKXRocm93IG5ldyBBcGlFcnJvcig0MDAs
+J0Nob29zZSB2YWxpZCBzdGFydCBhbmQgZW5kIGRhdGVzLCB3aXRob3V0IGZ1
+dHVyZSBkYXRlcy4nLCdJTlZBTElEX0FOQUxZVElDU19QRVJJT0QnKTsKICAg
+IGRheXM9TWF0aC5yb3VuZCgoRGF0ZS5wYXJzZShlbmQrJ1QwMDowMDowMFon
+KS1EYXRlLnBhcnNlKHN0YXJ0KydUMDA6MDA6MDBaJykpLzg2NDAwMDAwKSsx
+OwogICAgaWYoZGF5cz4zNjYpdGhyb3cgbmV3IEFwaUVycm9yKDQwMCwnQ2hv
+b3NlIGEgZGF0ZSByYW5nZSBvZiAzNjYgZGF5cyBvciBmZXdlci4nLCdJTlZB
+TElEX0FOQUxZVElDU19QRVJJT0QnKTsKICAgIHJhbmdlPXtzdGFydCxlbmR9
+OwogIH1lbHNlIGlmKCFbNywzMCw5MF0uaW5jbHVkZXMoZGF5cykpdGhyb3cg
+bmV3IEFwaUVycm9yKDQwMCwnQ2hvb3NlIGEgNywgMzAgb3IgOTAgZGF5IHBl
+cmlvZC4nLCdJTlZBTElEX0FOQUxZVElDU19QRVJJT0QnKTsKICByZXMuanNv
+bihhd2FpdCBsb2FkT3ZlcnZpZXdBbmFseXRpY3Moc2VydmljZURiLGRheXMs
+cmFuZ2UpKTsKfSk7CgpleHBvcnQgY29uc3QgZGFzaGJvYXJkID0gYXN5bmNI
+YW5kbGVyKGFzeW5jIChfcmVxLCByZXMpID0+IHsKICBjb25zdCBjb3VudCA9
+ICh0YWJsZSkgPT4gc2VydmljZURiLmZyb20odGFibGUpLnNlbGVjdCgnaWQn
+LCB7IGNvdW50OiAnZXhhY3QnLCBoZWFkOiB0cnVlIH0pOwogIGNvbnN0IFt1
+c2VycywgY29tcGFuaWVzLCBqb2JzLCBhcHBsaWNhdGlvbnMsIHJlZ2lzdHJh
+dGlvbnMsIHBlbmRpbmdKb2JzLCBhY3RpdmVKb2JzLCBwZW5kaW5nQ29tcGFu
+aWVzLCBwZW5kaW5nQXBwbGljYXRpb25zLCBzaXRlcywgYWN0aXZlU2l0ZXMs
+IHJlY2VudFVzZXJzLCByZWNlbnRKb2JzLCBxdWV1ZSwgYXVkaXQsIHNlY3Vy
+aXR5XSA9IGF3YWl0IFByb21pc2UuYWxsKFsKICAgIGNvdW50KCdwcm9maWxl
+cycpLCBjb3VudCgnY29tcGFuaWVzJykuaXMoJ2RlbGV0ZWRfYXQnLCBudWxs
+KSwgY291bnQoJ2pvYnMnKS5pcygnZGVsZXRlZF9hdCcsIG51bGwpLCBjb3Vu
+dCgnYXBwbGljYXRpb25zJykuaXMoJ2RlbGV0ZWRfYXQnLCBudWxsKSwKICAg
+IGNvdW50KCdtaXNzaXNzYXVnYV9yZWdpc3RyYXRpb25zJyksCiAgICBjb3Vu
+dCgnam9icycpLmlzKCdkZWxldGVkX2F0JywgbnVsbCkuZXEoJ3N0YXR1cycs
+ICdwZW5kaW5nX3JldmlldycpLCBjb3VudCgnam9icycpLmlzKCdkZWxldGVk
+X2F0JywgbnVsbCkuZXEoJ3N0YXR1cycsICdhY3RpdmUnKSwKICAgIGNvdW50
+KCdjb21wYW5pZXMnKS5pcygnZGVsZXRlZF9hdCcsIG51bGwpLmVxKCd2ZXJp
+ZmljYXRpb25fc3RhdHVzJywgJ3BlbmRpbmcnKSwgY291bnQoJ2FwcGxpY2F0
+aW9ucycpLmlzKCdkZWxldGVkX2F0JywgbnVsbCkuZXEoJ3N0YXR1cycsICdz
+dWJtaXR0ZWQnKSwKICAgIHNlcnZpY2VEYi5mcm9tKCdzaXRlcycpLnNlbGVj
+dCgnaWQsc2x1ZyxuYW1lLGRvbWFpbixzaXRlX3R5cGUsaXNfYWN0aXZlJywg
+eyBjb3VudDogJ2V4YWN0JyB9KS5vcmRlcignbmFtZScpLmxpbWl0KDYpLAog
+ICAgY291bnQoJ3NpdGVzJykuZXEoJ2lzX2FjdGl2ZScsIHRydWUpLAogICAg
+c2VydmljZURiLmZyb20oJ3Byb2ZpbGVzJykuc2VsZWN0KCdpZCxmdWxsX25h
+bWUsZW1haWwscm9sZSxzdGF0dXMsY3JlYXRlZF9hdCcpLm9yZGVyKCdjcmVh
+dGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNlIH0pLmxpbWl0KDUpLAogICAg
+c2VydmljZURiLmZyb20oJ2pvYnMnKS5zZWxlY3QoJ2lkLHRpdGxlLHN0YXR1
+cyxjcmVhdGVkX2F0LGNvbXBhbmllczpjb21wYW55X2lkKG5hbWUpLHNpdGVz
+Om9yaWdpbl9zaXRlX2lkKG5hbWUpJykuaXMoJ2RlbGV0ZWRfYXQnLCBudWxs
+KS5vcmRlcignY3JlYXRlZF9hdCcsIHsgYXNjZW5kaW5nOiBmYWxzZSB9KS5s
+aW1pdCg1KSwKICAgIHNlcnZpY2VEYi5mcm9tKCdqb2JzJykuc2VsZWN0KCdp
+ZCx0aXRsZSxzdGF0dXMsY3JlYXRlZF9hdCxjb21wYW5pZXM6Y29tcGFueV9p
+ZChuYW1lKScpLmlzKCdkZWxldGVkX2F0JywgbnVsbCkuZXEoJ3N0YXR1cycs
+ICdwZW5kaW5nX3JldmlldycpLm9yZGVyKCdjcmVhdGVkX2F0JykubGltaXQo
+NSksCiAgICBzZXJ2aWNlRGIuZnJvbSgnYWN0aXZpdHlfbG9nJykuc2VsZWN0
+KCdpZCxhY3Rpb24sZW50aXR5X3R5cGUsZW50aXR5X2lkLGNyZWF0ZWRfYXQs
+ZGF0YScpLm9yZGVyKCdjcmVhdGVkX2F0JywgeyBhc2NlbmRpbmc6IGZhbHNl
+IH0pLmxpbWl0KDYpLAogICAgc2VydmljZURiLmZyb20oJ3NlY3VyaXR5X2V2
+ZW50cycpLnNlbGVjdCgnaWQsZXZlbnRfdHlwZSxzZXZlcml0eSxjcmVhdGVk
+X2F0Jykub3JkZXIoJ2NyZWF0ZWRfYXQnLCB7IGFzY2VuZGluZzogZmFsc2Ug
+fSkubGltaXQoNSksCiAgXSk7CiAgY29uc3QgcmVzdWx0cyA9IHsgdXNlcnMs
+IGNvbXBhbmllcywgam9icywgYXBwbGljYXRpb25zLCByZWdpc3RyYXRpb25z
+LCBwZW5kaW5nSm9icywgYWN0aXZlSm9icywgcGVuZGluZ0NvbXBhbmllcywg
+cGVuZGluZ0FwcGxpY2F0aW9ucyB9OwogIHJlcy5qc29uKHsKICAgIG1ldHJp
+Y3M6IHsgLi4uT2JqZWN0LmZyb21FbnRyaWVzKE9iamVjdC5lbnRyaWVzKHJl
+c3VsdHMpLm1hcCgoW2tleSxyZXN1bHRdKSA9PiBba2V5LCBvcHRpb25hbENv
+dW50KHJlc3VsdCldKSksIHNpdGVzOiBvcHRpb25hbENvdW50KHNpdGVzKSwg
+YWN0aXZlU2l0ZXM6IG9wdGlvbmFsQ291bnQoYWN0aXZlU2l0ZXMpIH0sCiAg
+ICByZWNlbnRVc2VyczogcmVjZW50VXNlcnMuZGF0YSB8fCBbXSwgcmVjZW50
+Sm9iczogcmVjZW50Sm9icy5kYXRhIHx8IFtdLCBwZW5kaW5nSm9iczogcXVl
+dWUuZGF0YSB8fCBbXSwgc2l0ZXM6IHNpdGVzLmRhdGEgfHwgW10sIGF1ZGl0
+TG9nczogKGF1ZGl0LmRhdGEgfHwgW10pLm1hcChub3JtYWxpemVBY3Rpdml0
+eSksIHNlY3VyaXR5RXZlbnRzOiBzZWN1cml0eS5kYXRhIHx8IFtdLAogICAg
+dW5hdmFpbGFibGU6IE9iamVjdC5lbnRyaWVzKHsgLi4ucmVzdWx0cywgcmVj
+ZW50VXNlcnMsIHJlY2VudEpvYnMsIHF1ZXVlLCBzaXRlcywgYWN0aXZlU2l0
+ZXMsIGF1ZGl0LCBzZWN1cml0eSB9KS5maWx0ZXIoKFssIHJlc3VsdF0pID0+
+IHJlc3VsdC5lcnJvcikubWFwKChba2V5XSkgPT4ga2V5KSwKICAgIGdlbmVy
+YXRlZEF0OiBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCksCiAgfSk7Cn0pOwoK
+ZXhwb3J0IGNvbnN0IGxpc3RKb2JzID0gYXN5bmNIYW5kbGVyKGFzeW5jIChy
+ZXEsIHJlcykgPT4gewogIGNvbnN0IHsgcGFnZSwgbGltaXQsIGZyb20sIHRv
+LCBzZWFyY2gsIHNvcnQsIGFzY2VuZGluZyB9ID0gYWRtaW5RdWVyeShyZXEu
+cXVlcnksIFsnY3JlYXRlZF9hdCcsJ3RpdGxlJywnc3RhdHVzJywndXBkYXRl
+ZF9hdCddKTsKICBjb25zdCBzZWxlY3RlZEZpZWxkcyA9IHJlcS5xdWVyeS5z
+ZWFyY2hPbmx5ID09PSAndHJ1ZScgPyAnaWQsdGl0bGUsY2l0eSxwcm92aW5j
+ZSxjb21wYW5pZXM6Y29tcGFueV9pZChuYW1lKScgOiBhZG1pbkpvYlNlbGVj
+dDsKICBjb25zdCBqb2JTZWxlY3QgPSByZXEucXVlcnkubWFwcGVkU2l0ZUlk
+ID8gYCR7c2VsZWN0ZWRGaWVsZHN9LGpvYl9zaXRlcyFpbm5lcihzaXRlX2lk
+KWAgOiBzZWxlY3RlZEZpZWxkczsKICBsZXQgcXVlcnkgPSBzZXJ2aWNlRGIu
+ZnJvbSgnam9icycpLnNlbGVjdChqb2JTZWxlY3QsIHsgY291bnQ6ICdleGFj
+dCcgfSkuaXMoJ2RlbGV0ZWRfYXQnLCBudWxsKS5vcmRlcihzb3J0LCB7IGFz
+Y2VuZGluZyB9KS5vcmRlcignaWQnKTsKICBpZiAocmVxLnF1ZXJ5LnN0YXR1
+cyAmJiByZXEucXVlcnkuc3RhdHVzICE9PSAnYWxsJykgcXVlcnkgPSBxdWVy
+eS5lcSgnc3RhdHVzJywgU3RyaW5nKHJlcS5xdWVyeS5zdGF0dXMpLnNsaWNl
+KDAsIDQwKSk7CiAgaWYgKHJlcS5xdWVyeS5tYXBwZWRTaXRlSWQgJiYgL15c
+ZCskLy50ZXN0KHJlcS5xdWVyeS5tYXBwZWRTaXRlSWQpKSBxdWVyeSA9IHF1
+ZXJ5LmVxKCdqb2Jfc2l0ZXMuc2l0ZV9pZCcsIE51bWJlcihyZXEucXVlcnku
+bWFwcGVkU2l0ZUlkKSk7CiAgaWYgKHJlcS5xdWVyeS5zaXRlSWQgJiYgL15c
+ZCskLy50ZXN0KHJlcS5xdWVyeS5zaXRlSWQpKSBxdWVyeSA9IHF1ZXJ5LmVx
+KCdvcmlnaW5fc2l0ZV9pZCcsIE51bWJlcihyZXEucXVlcnkuc2l0ZUlkKSk7
+CiAgaWYgKHNlYXJjaCkgcXVlcnkgPSBxdWVyeS5vcihgdGl0bGUuaWxpa2Uu
+JSR7c2VhcmNofSUsZGVzY3JpcHRpb24uaWxpa2UuJSR7c2VhcmNofSVgKTsK
+ICBpZiAoL15bMC05YS1mLV17MzZ9JC9pLnRlc3QocmVxLnF1ZXJ5LmpvYklk
+IHx8ICcnKSkgcXVlcnkgPSBxdWVyeS5lcSgnaWQnLCByZXEucXVlcnkuam9i
+SWQpOwogIGNvbnN0IHsgZGF0YSwgZXJyb3IsIGNvdW50IH0gPSBhd2FpdCBx
+dWVyeS5yYW5nZShmcm9tLCB0byk7CiAgaWYgKGVycm9yKSB0aHJvdyBuZXcg
+QXBpRXJyb3IoNTAwLCAnSm9icyBjb3VsZCBub3QgYmUgbG9hZGVkLicsICdB
+RE1JTl9KT0JTX0ZBSUxFRCcpOwogIHJlcy5qc29uKHsgaXRlbXM6IGRhdGEg
+fHwgW10sIHBhZ2luYXRpb246IHBhZ2VJbmZvKHBhZ2UsIGxpbWl0LCBjb3Vu
+dCkgfSk7Cn0pOwoKCi8vIFJlYWQtb25seSBjYXJkIGluc2lnaHRzOiBleGFj
+dCB0b3RhbHMgYW5kIGRhaWx5IGNyZWF0aW9uIGNvdW50cyBmcm9tIHJlYWwg
+am9icy4KZXhwb3J0IGNvbnN0IGpvYkluc2lnaHRzID0gYXN5bmNIYW5kbGVy
+KGFzeW5jIChyZXEsIHJlcykgPT4gewogIGNvbnN0IHsgc2VhcmNoIH0gPSBh
+ZG1pblF1ZXJ5KHJlcS5xdWVyeSwgWydjcmVhdGVkX2F0J10pOwogIGNvbnN0
+IG5vdyA9IG5ldyBEYXRlKCksIHRvZGF5ID0gbmV3IERhdGUoRGF0ZS5VVEMo
+bm93LmdldFVUQ0Z1bGxZZWFyKCksbm93LmdldFVUQ01vbnRoKCksbm93Lmdl
+dFVUQ0RhdGUoKSkpOwogIGNvbnN0IHN0YXJ0ID0gbmV3IERhdGUodG9kYXkp
+OyBzdGFydC5zZXRVVENEYXRlKHN0YXJ0LmdldFVUQ0RhdGUoKS0xMyk7CiAg
+Y29uc3Qgd2VlayA9IG5ldyBEYXRlKHRvZGF5KTsgd2Vlay5zZXRVVENEYXRl
+KHdlZWsuZ2V0VVRDRGF0ZSgpLTYpOwogIGNvbnN0IGdyb3VwcyA9IFsnYWxs
+JywnYWN0aXZlJywncGVuZGluZ19yZXZpZXcnLCdjbG9zZWQnXTsKICBjb25z
+dCBkYXRlcyA9IEFycmF5LmZyb20oe2xlbmd0aDo3fSwoXyxpbmRleCk9Pntj
+b25zdCBkYXk9bmV3IERhdGUod2Vlayk7ZGF5LnNldFVUQ0RhdGUoZGF5Lmdl
+dFVUQ0RhdGUoKStpbmRleCk7cmV0dXJuIGRheS50b0lTT1N0cmluZygpLnNs
+aWNlKDAsMTApO30pOwogIGNvbnN0IGJ1aWxkID0gKGZpZWxkcywgb3B0aW9u
+cz17fSkgPT4gewogICAgY29uc3QgbWFwcGVkID0gL15cZCskLy50ZXN0KFN0
+cmluZyhyZXEucXVlcnkubWFwcGVkU2l0ZUlkIHx8ICcnKSk7CiAgICBsZXQg
+cXVlcnkgPSBzZXJ2aWNlRGIuZnJvbSgnam9icycpLnNlbGVjdChmaWVsZHMr
+KG1hcHBlZD8nLGpvYl9zaXRlcyFpbm5lcihzaXRlX2lkKSc6JycpLG9wdGlv
+bnMpLmlzKCdkZWxldGVkX2F0JyxudWxsKTsKICAgIGlmKG1hcHBlZClxdWVy
+eT1xdWVyeS5lcSgnam9iX3NpdGVzLnNpdGVfaWQnLE51bWJlcihyZXEucXVl
+cnkubWFwcGVkU2l0ZUlkKSk7CiAgICBpZigvXlxkKyQvLnRlc3QoU3RyaW5n
+KHJlcS5xdWVyeS5zaXRlSWQgfHwgJycpKSlxdWVyeT1xdWVyeS5lcSgnb3Jp
+Z2luX3NpdGVfaWQnLE51bWJlcihyZXEucXVlcnkuc2l0ZUlkKSk7CiAgICBp
+ZihzZWFyY2gpcXVlcnk9cXVlcnkub3IoYHRpdGxlLmlsaWtlLiUke3NlYXJj
+aH0lLGRlc2NyaXB0aW9uLmlsaWtlLiUke3NlYXJjaH0lYCk7CiAgICBpZigv
+XlswLTlhLWYtXXszNn0kL2kudGVzdChyZXEucXVlcnkuam9iSWQgfHwgJycp
+KXF1ZXJ5PXF1ZXJ5LmVxKCdpZCcscmVxLnF1ZXJ5LmpvYklkKTsKICAgIHJl
+dHVybiBxdWVyeTsKICB9OwogIGNvbnN0IGNvdW50UmVzdWx0cyA9IGF3YWl0
+IFByb21pc2UuYWxsKGdyb3Vwcy5tYXAoc3RhdHVzPT57bGV0IHF1ZXJ5PWJ1
+aWxkKCdpZCcse2NvdW50OidleGFjdCcsaGVhZDp0cnVlfSk7aWYoc3RhdHVz
+IT09J2FsbCcpcXVlcnk9cXVlcnkuZXEoJ3N0YXR1cycsc3RhdHVzKTtyZXR1
+cm4gcXVlcnk7fSkpOwogIGNvbnN0IGNvdW50cz1PYmplY3QuZnJvbUVudHJp
+ZXMoZ3JvdXBzLm1hcCgoc3RhdHVzLGluZGV4KT0+W3N0YXR1cyxvcHRpb25h
+bENvdW50KGNvdW50UmVzdWx0c1tpbmRleF0pXSkpOwogIGNvbnN0IHNlcmll
+cz1PYmplY3QuZnJvbUVudHJpZXMoZ3JvdXBzLm1hcChzdGF0dXM9PltzdGF0
+dXMsQXJyYXkoNykuZmlsbCgwKV0pKTsKICBjb25zdCByZWNlbnQ9T2JqZWN0
+LmZyb21FbnRyaWVzKGdyb3Vwcy5tYXAoc3RhdHVzPT5bc3RhdHVzLDBdKSks
+cHJldmlvdXM9ey4uLnJlY2VudH07CiAgY29uc3Qgc2Vlbj1uZXcgU2V0KCk7
+bGV0IGNoYXJ0c0F2YWlsYWJsZT10cnVlOwogIGZvcihsZXQgb2Zmc2V0PTA7
+O29mZnNldCs9MTAwMCl7CiAgICBjb25zdCByZXN1bHQ9YXdhaXQgYnVpbGQo
+J2lkLHN0YXR1cyxjcmVhdGVkX2F0JykuZ3RlKCdjcmVhdGVkX2F0JyxzdGFy
+dC50b0lTT1N0cmluZygpKS5sdGUoJ2NyZWF0ZWRfYXQnLG5vdy50b0lTT1N0
+cmluZygpKS5vcmRlcignY3JlYXRlZF9hdCcpLm9yZGVyKCdpZCcpLnJhbmdl
+KG9mZnNldCxvZmZzZXQrOTk5KTsKICAgIGlmKHJlc3VsdC5lcnJvcil7Y2hh
+cnRzQXZhaWxhYmxlPWZhbHNlO2JyZWFrO30KICAgIGZvcihjb25zdCBqb2Ig
+b2YgcmVzdWx0LmRhdGF8fFtdKXsKICAgICAgaWYoc2Vlbi5oYXMoam9iLmlk
+KSljb250aW51ZTtzZWVuLmFkZChqb2IuaWQpOwogICAgICBjb25zdCBkYXk9
+U3RyaW5nKGpvYi5jcmVhdGVkX2F0KS5zbGljZSgwLDEwKSxpbmRleD1kYXRl
+cy5pbmRleE9mKGRheSk7CiAgICAgIGZvcihjb25zdCBzdGF0dXMgb2YgZ3Jv
+dXBzKXsKICAgICAgICBpZihzdGF0dXMhPT0nYWxsJyYmam9iLnN0YXR1cyE9
+PXN0YXR1cyljb250aW51ZTsKICAgICAgICBpZihpbmRleD49MCl7c2VyaWVz
+W3N0YXR1c11baW5kZXhdKys7cmVjZW50W3N0YXR1c10rKzt9ZWxzZSBwcmV2
+aW91c1tzdGF0dXNdKys7CiAgICAgIH0KICAgIH0KICAgIGlmKChyZXN1bHQu
+ZGF0YXx8W10pLmxlbmd0aDwxMDAwKWJyZWFrOwogICAgaWYob2Zmc2V0Pj05
+OTAwMCl7Y2hhcnRzQXZhaWxhYmxlPWZhbHNlO2JyZWFrO30KICB9CiAgcmVz
+Lmpzb24oe2NvdW50cyxkYXRlcyxzZXJpZXM6Y2hhcnRzQXZhaWxhYmxlP3Nl
+cmllczpudWxsLHJlY2VudDpjaGFydHNBdmFpbGFibGU/cmVjZW50Om51bGws
+cHJldmlvdXM6Y2hhcnRzQXZhaWxhYmxlP3ByZXZpb3VzOm51bGwsZ2VuZXJh
+dGVkQXQ6bm93LnRvSVNPU3RyaW5nKCksdGltZXpvbmU6J1VUQyd9KTsKfSk7
+CgpleHBvcnQgY29uc3QgZ2V0Sm9iID0gYXN5bmNIYW5kbGVyKGFzeW5jIChy
+ZXEsIHJlcykgPT4gewogIGNvbnN0IHsgZGF0YTogam9iLCBlcnJvciB9ID0g
+YXdhaXQgc2VydmljZURiLmZyb20oJ2pvYnMnKS5zZWxlY3QoYWRtaW5Kb2JT
+ZWxlY3QpLmVxKCdpZCcsIHJlcS5wYXJhbXMuam9iSWQpLmlzKCdkZWxldGVk
+X2F0JywgbnVsbCkubWF5YmVTaW5nbGUoKTsKICBpZiAoZXJyb3IpIHRocm93
+IG5ldyBBcGlFcnJvcig1MDAsICdBZG1pbiBqb2IgY291bGQgbm90IGJlIGxv
+YWRlZC4nLCAnQURNSU5fSk9CX0ZBSUxFRCcsIGVycm9yLm1lc3NhZ2UpOwog
+IGlmICgham9iKSB0aHJvdyBuZXcgQXBpRXJyb3IoNDA0LCAnSm9iIG5vdCBm
+b3VuZC4nLCAnSk9CX05PVF9GT1VORCcpOwogIGNvbnN0IFthcHBsaWNhdGlv
+bnNSZXMsIHZpZXdzUmVzLCBzaXRlc1Jlc10gPSBhd2FpdCBQcm9taXNlLmFs
+bChbCiAgICBzZXJ2aWNlRGIuZnJvbSgnYXBwbGljYXRpb25zJykuc2VsZWN0
+KCdpZCxzdGF0dXMsY3JlYXRlZF9hdCxhcHBsaWNhbnRfaWQnLCB7IGNvdW50
+OiAnZXhhY3QnIH0pLmVxKCdqb2JfaWQnLCBqb2IuaWQpLmlzKCdkZWxldGVk
+X2F0JywgbnVsbCkub3JkZXIoJ2NyZWF0ZWRfYXQnLCB7IGFzY2VuZGluZzog
+ZmFsc2UgfSkubGltaXQoMjUpLAogICAgc2VydmljZURiLmZyb20oJ2pvYl92
+aWV3cycpLnNlbGVjdCgnaWQsdmlld2VkX29uLHNpdGVfaWQnLCB7IGNvdW50
+OiAnZXhhY3QnIH0pLmVxKCdqb2JfaWQnLCBqb2IuaWQpLm9yZGVyKCd2aWV3
+ZWRfb24nLCB7IGFzY2VuZGluZzogZmFsc2UgfSkubGltaXQoMzApLAogICAg
+c2VydmljZURiLmZyb20oJ2pvYl9zaXRlcycpLnNlbGVjdCgnc2l0ZV9pZCxz
+aXRlczpzaXRlX2lkKGlkLHNsdWcsbmFtZSxkb21haW4sc2l0ZV90eXBlLGlz
+X2FjdGl2ZSknKS5lcSgnam9iX2lkJywgam9iLmlkKSwKICBdKTsKICBpZiAo
+YXBwbGljYXRpb25zUmVzLmVycm9yIHx8IHZpZXdzUmVzLmVycm9yIHx8IHNp
+dGVzUmVzLmVycm9yKSB0aHJvdyBuZXcgQXBpRXJyb3IoNTAwLCAnSm9iIGRl
+dGFpbHMgY291bGQgbm90IGJlIGxvYWRlZC4nLCAnQURNSU5fSk9CX0RFVEFJ
+TFNfRkFJTEVEJyk7CiAgcmVzLmpzb24oeyBqb2IsIGFwcGxpY2F0aW9uczog
+YXBwbGljYXRpb25zUmVzLmRhdGEgfHwgW10sIHZpZXdzOiB2aWV3c1Jlcy5k
+YXRhIHx8IFtdLCBwb3J0YWxzOiAoc2l0ZXNSZXMuZGF0YSB8fCBbXSkubWFw
+KChyb3cpID0+IHJvdy5zaXRlcykuZmlsdGVyKEJvb2xlYW4pLCBtZXRyaWNz
+OiB7IGFwcGxpY2F0aW9uczogYXBwbGljYXRpb25zUmVzLmNvdW50IHx8IDAs
+IHZpZXdzOiB2aWV3c1Jlcy5jb3VudCB8fCAwIH0gfSk7Cn0pOwoKZXhwb3J0
+IGNvbnN0IHVwZGF0ZUpvYiA9IGFzeW5jSGFuZGxlcihhc3luYyAocmVxLCBy
+ZXMpID0+IHsKICBjb25zdCBkYXRhID0gYXdhaXQgdXBkYXRlQWRtaW5Kb2Io
+c2VydmljZURiLCB7CiAgICBhY3RvcklkOiByZXEudXNlci5pZCwgam9iSWQ6
+IHJlcS5wYXJhbXMuam9iSWQsIGJvZHk6IGFkbWluSm9iQm9keShyZXEuYm9k
+eSksCiAgfSk7CiAgYXdhaXQgd3JpdGVBdWRpdExvZyhyZXEsIHsgYWN0aW9u
+OiAnYWRtaW4uam9iLnVwZGF0ZScsIGVudGl0eVR5cGU6ICdqb2InLCBlbnRp
+dHlJZDogZGF0YS5pZCwgY29tcGFueUlkOiBkYXRhLmNvbXBhbnlfaWQsIG1l
+dGFkYXRhOiB7IHN0YXR1czogZGF0YS5zdGF0dXMsIGZpZWxkczogT2JqZWN0
+LmtleXMocmVxLmJvZHkpIH0gfSk7CiAgcmVzLmpzb24oeyBqb2I6IGRhdGEg
+fSk7Cn0pOwoKZnVuY3Rpb24gYWRtaW5Kb2JCb2R5KGJvZHkpIHsKICBjb25z
+dCBuZXh0ID0geyAuLi5ib2R5IH07CiAgaWYgKGJvZHkuc3RhdHVzID09PSAn
+cmVtb3ZlZCcpIG5leHQucmVtb3ZlZF9yZWFzb24gPSBib2R5Lm1vZGVyYXRp
+b25fbm90ZSB8fCAnUmVtb3ZlZCBieSBhZG1pbmlzdHJhdG9yJzsKICBpZiAo
+Ym9keS5zdGF0dXMgPT09ICdhY3RpdmUnIHx8IGJvZHkuc3RhdHVzID09PSAn
+cGVuZGluZ19yZXZpZXcnKSBuZXh0LnJlbW92ZWRfcmVhc29uID0gbnVsbDsK
+ICByZXR1cm4gbmV4dDsKfQoKZXhwb3J0IGNvbnN0IGRlbGV0ZUpvYiA9IGFz
+eW5jSGFuZGxlcihhc3luYyAocmVxLCByZXMpID0+IHsKICBjb25zdCBub3cg
+PSBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCk7CiAgY29uc3QgeyBkYXRhLCBl
+cnJvciB9ID0gYXdhaXQgc2VydmljZURiLmZyb20oJ2pvYnMnKS51cGRhdGUo
+eyBkZWxldGVkX2F0OiBub3csIHVwZGF0ZWRfYXQ6IG5vdywgc3RhdHVzOiAn
+cmVtb3ZlZCcsIHJlbW92ZWRfcmVhc29uOiAnRGVsZXRlZCBieSBhZG1pbmlz
+dHJhdG9yJyB9KS5lcSgnaWQnLCByZXEucGFyYW1zLmpvYklkKS5pcygnZGVs
+ZXRlZF9hdCcsIG51bGwpLnNlbGVjdCgnaWQsdGl0bGUsc3RhdHVzLGRlbGV0
+ZWRfYXQscmVtb3ZlZF9yZWFzb24sY29tcGFueV9pZCcpLnNpbmdsZSgpOwog
+IGlmIChlcnJvcikgdGhyb3cgbmV3IEFwaUVycm9yKDQwMCwgJ0pvYiBjb3Vs
+ZCBub3QgYmUgZGVsZXRlZC4nLCAnQURNSU5fSk9CX0RFTEVURV9GQUlMRUQn
+LCBlcnJvci5tZXNzYWdlKTsKICBhd2FpdCB3cml0ZUF1ZGl0TG9nKHJlcSwg
+eyBhY3Rpb246ICdhZG1pbi5qb2IuZGVsZXRlJywgZW50aXR5VHlwZTogJ2pv
+YicsIGVudGl0eUlkOiBkYXRhLmlkLCBjb21wYW55SWQ6IGRhdGEuY29tcGFu
+eV9pZCwgbWV0YWRhdGE6IHsgcmVhc29uOiBkYXRhLnJlbW92ZWRfcmVhc29u
+IH0gfSk7CiAgcmVzLmpzb24oeyBqb2I6IGRhdGEgfSk7Cn0pOwoKZXhwb3J0
+IGNvbnN0IGxpc3RQb3J0YWxzID0gYXN5bmNIYW5kbGVyKGFzeW5jIChyZXEs
+IHJlcykgPT4gewogIGNvbnN0IHsgcGFnZSwgbGltaXQsIGZyb20sIHRvLCBz
+ZWFyY2gsIHNvcnQsIGFzY2VuZGluZyB9ID0gYWRtaW5RdWVyeShyZXEucXVl
+cnksIFsnbmFtZScsJ3NsdWcnLCdzaXRlX3R5cGUnXSwgJ25hbWUnKTsKICBj
+b25zdCBvcHRpb25zT25seSA9IHJlcS5xdWVyeS5vcHRpb25zT25seSA9PT0g
+J3RydWUnOwogIGNvbnN0IGZpZWxkcyA9IG9wdGlvbnNPbmx5ID8gJ2lkLHNs
+dWcsbmFtZSxkb21haW4saXNfYWN0aXZlJyA6ICdpZCxzbHVnLG5hbWUsZG9t
+YWluLHNpdGVfdHlwZSxzZWN0b3JfaWQsaXNfYWN0aXZlLHNlY3RvcnM6c2Vj
+dG9yX2lkKG5hbWUpJzsKICBsZXQgcXVlcnkgPSBzZXJ2aWNlRGIuZnJvbSgn
+c2l0ZXMnKS5zZWxlY3QoZmllbGRzLCB7IGNvdW50OiAnZXhhY3QnIH0pLm9y
+ZGVyKHNvcnQsIHsgYXNjZW5kaW5nIH0pLm9yZGVyKCdpZCcpOwogIGlmIChz
+ZWFyY2gpIHF1ZXJ5ID0gcXVlcnkub3IoYG5hbWUuaWxpa2UuJSR7c2VhcmNo
+fSUsc2x1Zy5pbGlrZS4lJHtzZWFyY2h9JSxkb21haW4uaWxpa2UuJSR7c2Vh
+cmNofSVgKTsKICBpZiAoWyd0cnVlJywnZmFsc2UnXS5pbmNsdWRlcyhyZXEu
+cXVlcnkuYWN0aXZlKSkgcXVlcnkgPSBxdWVyeS5lcSgnaXNfYWN0aXZlJywg
+cmVxLnF1ZXJ5LmFjdGl2ZSA9PT0gJ3RydWUnKTsKICBjb25zdCB7IGRhdGEs
+IGVycm9yLCBjb3VudCB9ID0gYXdhaXQgcXVlcnkucmFuZ2UoZnJvbSwgdG8p
+OwogIGlmIChlcnJvcikgdGhyb3cgbmV3IEFwaUVycm9yKDUwMCwgJ1BvcnRh
+bHMgY291bGQgbm90IGJlIGxvYWRlZC4nLCAnUE9SVEFMU19GQUlMRUQnKTsK
+ICBpZiAob3B0aW9uc09ubHkpIHJldHVybiByZXMuanNvbih7IGl0ZW1zOiBk
+YXRhIHx8IFtdLCBwYWdpbmF0aW9uOiBwYWdlSW5mbyhwYWdlLCBsaW1pdCwg
+Y291bnQpIH0pOwogIGNvbnN0IGl0ZW1zID0gYXdhaXQgUHJvbWlzZS5hbGwo
+KGRhdGEgfHwgW10pLm1hcChhc3luYyBzaXRlID0+IHsKICAgIGNvbnN0IFtq
+b2JzLCB1c2VycywgYWN0aXZpdHldID0gYXdhaXQgUHJvbWlzZS5hbGwoWwog
+ICAgICBzZXJ2aWNlRGIuZnJvbSgnam9iX3NpdGVzJykuc2VsZWN0KCdqb2Jf
+aWQsam9icyFpbm5lcihpZCknLCB7IGNvdW50OiAnZXhhY3QnLCBoZWFkOiB0
+cnVlIH0pLmVxKCdzaXRlX2lkJywgc2l0ZS5pZCkuaXMoJ2pvYnMuZGVsZXRl
+ZF9hdCcsIG51bGwpLAogICAgICBzZXJ2aWNlRGIuZnJvbSgncHJvZmlsZXMn
+KS5zZWxlY3QoJ2lkJywgeyBjb3VudDogJ2V4YWN0JywgaGVhZDogdHJ1ZSB9
+KS5lcSgnc2lnbnVwX3NpdGVfaWQnLCBzaXRlLmlkKSwKICAgICAgc2Vydmlj
+ZURiLmZyb20oJ2FjdGl2aXR5X2xvZycpLnNlbGVjdCgnY3JlYXRlZF9hdCcp
+LmVxKCdzaXRlX2lkJywgc2l0ZS5pZCkub3JkZXIoJ2NyZWF0ZWRfYXQnLCB7
+IGFzY2VuZGluZzogZmFsc2UgfSkubGltaXQoMSksCiAgICBdKTsKICAgIHJl
+dHVybiB7IC4uLnNpdGUsIG1ldHJpY3M6IHsgam9iczogb3B0aW9uYWxDb3Vu
+dChqb2JzKSwgdXNlcnM6IG9wdGlvbmFsQ291bnQodXNlcnMpIH0sIGxhc3RB
+Y3Rpdml0eTogYWN0aXZpdHkuZGF0YT8uWzBdPy5jcmVhdGVkX2F0IHx8IG51
+bGwsIGFjdGl2aXR5QXZhaWxhYmxlOiAhYWN0aXZpdHkuZXJyb3IgfTsKICB9
+KSk7CiAgcmVzLmpzb24oeyBpdGVtcywgcGFnaW5hdGlvbjogcGFnZUluZm8o
+cGFnZSwgbGltaXQsIGNvdW50KSB9KTsKfSk7CgpleHBvcnQgY29uc3QgZ2V0
+UG9ydGFsID0gYXN5bmNIYW5kbGVyKGFzeW5jIChyZXEsIHJlcykgPT4gewog
+IGNvbnN0IHNsdWcgPSBTdHJpbmcocmVxLnBhcmFtcy5zbHVnIHx8ICcnKS50
+cmltKCkudG9Mb3dlckNhc2UoKTsKICBjb25zdCB7IGRhdGE6IHNpdGUsIGVy
+cm9yOiBzaXRlRXJyb3IgfSA9IGF3YWl0IHNlcnZpY2VEYi5mcm9tKCdzaXRl
+cycpLnNlbGVjdCgnaWQsc2x1ZyxuYW1lLGRvbWFpbixzaXRlX3R5cGUsc2Vj
+dG9yX2lkLGlzX2FjdGl2ZScpLmVxKCdzbHVnJywgc2x1ZykubWF5YmVTaW5n
+bGUoKTsKICBpZiAoc2l0ZUVycm9yKSB0aHJvdyBuZXcgQXBpRXJyb3IoNTAw
+LCAnUG9ydGFsIGNvdWxkIG5vdCBiZSBsb2FkZWQuJywgJ1BPUlRBTF9GQUlM
+RUQnLCBzaXRlRXJyb3IubWVzc2FnZSk7CiAgaWYgKCFzaXRlKSB0aHJvdyBu
+ZXcgQXBpRXJyb3IoNDA0LCAnUG9ydGFsIG5vdCBmb3VuZC4nLCAnUE9SVEFM
+X05PVF9GT1VORCcpOwogIGNvbnN0IFtqb2JzQ291bnQsIGFjdGl2ZUpvYnND
+b3VudCwgdXNlcnNDb3VudCwgam9ic1JlcywgYWN0aXZpdHlSZXNdID0gYXdh
+aXQgUHJvbWlzZS5hbGwoWwogICAgc2VydmljZURiLmZyb20oJ2pvYl9zaXRl
+cycpLnNlbGVjdCgnam9iX2lkLGpvYnMhaW5uZXIoaWQpJywgeyBjb3VudDog
+J2V4YWN0JywgaGVhZDogdHJ1ZSB9KS5lcSgnc2l0ZV9pZCcsIHNpdGUuaWQp
+LmlzKCdqb2JzLmRlbGV0ZWRfYXQnLCBudWxsKSwKICAgIHNlcnZpY2VEYi5m
+cm9tKCdqb2Jfc2l0ZXMnKS5zZWxlY3QoJ2pvYl9pZCxqb2JzIWlubmVyKGlk
+KScsIHsgY291bnQ6ICdleGFjdCcsIGhlYWQ6IHRydWUgfSkuZXEoJ3NpdGVf
+aWQnLCBzaXRlLmlkKS5lcSgnam9icy5zdGF0dXMnLCAnYWN0aXZlJykuaXMo
+J2pvYnMuZGVsZXRlZF9hdCcsIG51bGwpLAogICAgc2VydmljZURiLmZyb20o
+J3Byb2ZpbGVzJykuc2VsZWN0KCdpZCcsIHsgY291bnQ6ICdleGFjdCcsIGhl
+YWQ6IHRydWUgfSkuZXEoJ3NpZ251cF9zaXRlX2lkJywgc2l0ZS5pZCksCiAg
+ICBzZXJ2aWNlRGIuZnJvbSgnam9iX3NpdGVzJykuc2VsZWN0KCdqb2JfaWQs
+am9icyFpbm5lcihpZCx0aXRsZSxzdGF0dXMsY3JlYXRlZF9hdCxwdWJsaXNo
+ZWRfYXQsY29tcGFueV9pZCxjb21wYW5pZXM6Y29tcGFueV9pZChuYW1lKSkn
+KS5lcSgnc2l0ZV9pZCcsIHNpdGUuaWQpLmlzKCdqb2JzLmRlbGV0ZWRfYXQn
+LCBudWxsKS5vcmRlcignY3JlYXRlZF9hdCcsIHsgcmVmZXJlbmNlZFRhYmxl
+OiAnam9icycsIGFzY2VuZGluZzogZmFsc2UgfSkubGltaXQoMjUpLAogICAg
+c2VydmljZURiLmZyb20oJ2FjdGl2aXR5X2xvZycpLnNlbGVjdCgnaWQsYWN0
+b3JfaWQsYWN0aW9uLGVudGl0eV90eXBlLGVudGl0eV9pZCxzaXRlX2lkLGNv
+bXBhbnlfaWQsZGF0YSxjcmVhdGVkX2F0JykuZXEoJ3NpdGVfaWQnLCBzaXRl
+LmlkKS5vcmRlcignY3JlYXRlZF9hdCcsIHsgYXNjZW5kaW5nOiBmYWxzZSB9
+KS5saW1pdCgzMCksCiAgXSk7CiAgaWYgKGpvYnNSZXMuZXJyb3IgfHwgYWN0
+aXZpdHlSZXMuZXJyb3IpIHRocm93IG5ldyBBcGlFcnJvcig1MDAsICdQb3J0
+YWwgZGF0YSBjb3VsZCBub3QgYmUgbG9hZGVkLicsICdQT1JUQUxfREFUQV9G
+QUlMRUQnKTsKICByZXMuanNvbih7IHBvcnRhbDogc2l0ZSwgbWV0cmljczog
+eyBqb2JzOiBvcHRpb25hbENvdW50KGpvYnNDb3VudCksIGFjdGl2ZUpvYnM6
+IG9wdGlvbmFsQ291bnQoYWN0aXZlSm9ic0NvdW50KSwgdXNlcnM6IG9wdGlv
+bmFsQ291bnQodXNlcnNDb3VudCkgfSwgam9iczogKGpvYnNSZXMuZGF0YSB8
+fCBbXSkubWFwKChyb3cpID0+IHJvdy5qb2JzKS5maWx0ZXIoQm9vbGVhbiks
+IGFjdGl2aXR5OiAoYWN0aXZpdHlSZXMuZGF0YSB8fCBbXSkubWFwKG5vcm1h
+bGl6ZUFjdGl2aXR5KSB9KTsKfSk7CgpleHBvcnQgY29uc3QgbGlzdFVzZXJz
+ID0gYXN5bmNIYW5kbGVyKGFzeW5jIChyZXEsIHJlcykgPT4gewogIGNvbnN0
+IHsgcGFnZSwgbGltaXQsIGZyb20sIHRvLCBzZWFyY2gsIHNvcnQsIGFzY2Vu
+ZGluZyB9ID0gYWRtaW5RdWVyeShyZXEucXVlcnksIFsnZnVsbF9uYW1lJywn
+ZW1haWwnLCdyb2xlJywnc3RhdHVzJywnY3JlYXRlZF9hdCddLCAnZnVsbF9u
+YW1lJyk7CiAgbGV0IHF1ZXJ5ID0gc2VydmljZURiLmZyb20oJ3Byb2ZpbGVz
+Jykuc2VsZWN0KCdpZCxyb2xlLHN0YXR1cyxlbWFpbCxmdWxsX25hbWUscGhv
+bmUsaGVhZGxpbmUsbG9jYXRpb25fY2l0eSxsb2NhdGlvbl9wcm92aW5jZSxz
+aWdudXBfc2l0ZV9pZCxjcmVhdGVkX2F0JywgeyBjb3VudDogJ2V4YWN0JyB9
+KS5vcmRlcihzb3J0LCB7IGFzY2VuZGluZyB9KS5vcmRlcignaWQnKTsKICBp
+ZiAoc2VhcmNoKSBxdWVyeSA9IHF1ZXJ5Lm9yKGBmdWxsX25hbWUuaWxpa2Uu
+JSR7c2VhcmNofSUsZW1haWwuaWxpa2UuJSR7c2VhcmNofSVgKTsKICBpZiAo
+cmVxLnF1ZXJ5LnJvbGUgJiYgcmVxLnF1ZXJ5LnJvbGUgIT09ICdhbGwnKSBx
+dWVyeSA9IHF1ZXJ5LmVxKCdyb2xlJywgU3RyaW5nKHJlcS5xdWVyeS5yb2xl
+KS5zbGljZSgwLDMwKSk7CiAgaWYgKHJlcS5xdWVyeS5zdGF0dXMgJiYgcmVx
+LnF1ZXJ5LnN0YXR1cyAhPT0gJ2FsbCcpIHF1ZXJ5ID0gcXVlcnkuZXEoJ3N0
+YXR1cycsIFN0cmluZyhyZXEucXVlcnkuc3RhdHVzKS5zbGljZSgwLDMwKSk7
+CiAgY29uc3QgeyBkYXRhLCBlcnJvciwgY291bnQgfSA9IGF3YWl0IHF1ZXJ5
+LnJhbmdlKGZyb20sIHRvKTsKICBpZiAoZXJyb3IpIHRocm93IG5ldyBBcGlF
+cnJvcig1MDAsICdVc2VycyBjb3VsZCBub3QgYmUgbG9hZGVkLicsICdVU0VS
+U19GQUlMRUQnKTsKICByZXMuanNvbih7IGl0ZW1zOiBkYXRhIHx8IFtdLCBw
+YWdpbmF0aW9uOiBwYWdlSW5mbyhwYWdlLCBsaW1pdCwgY291bnQpIH0pOwp9
+KTsKCmV4cG9ydCBjb25zdCBsaXN0Q29tcGFuaWVzID0gYXN5bmNIYW5kbGVy
+KGFzeW5jIChyZXEsIHJlcykgPT4gewogIGNvbnN0IHsgcGFnZSwgbGltaXQs
+IGZyb20sIHRvLCBzZWFyY2gsIHNvcnQsIGFzY2VuZGluZyB9ID0gYWRtaW5R
+dWVyeShyZXEucXVlcnksIFsnbmFtZScsJ2NyZWF0ZWRfYXQnLCd2ZXJpZmlj
+YXRpb25fc3RhdHVzJywnc3RhdHVzJ10sICdjcmVhdGVkX2F0Jyk7CiAgY29u
+c3QgZmllbGRzID0gcmVxLnF1ZXJ5LnNlYXJjaE9ubHkgPT09ICd0cnVlJyA/
+ICdpZCxuYW1lLHdlYnNpdGUnIDogJ2lkLG5hbWUsd2Vic2l0ZSxkZXNjcmlw
+dGlvbixzdGF0dXMsdmVyaWZpY2F0aW9uX3N0YXR1cyxyZWplY3Rpb25fcmVh
+c29uLHJlZ2lzdHJhdGlvbl9udW1iZXIsdmVyaWZpY2F0aW9uX2RvY3VtZW50
+X3BhdGgsY3JlYXRlZF9hdCx2ZXJpZmllZF9hdCc7CiAgbGV0IHF1ZXJ5ID0g
+c2VydmljZURiLmZyb20oJ2NvbXBhbmllcycpLnNlbGVjdChmaWVsZHMsIHsg
+Y291bnQ6ICdleGFjdCcgfSkuaXMoJ2RlbGV0ZWRfYXQnLCBudWxsKS5vcmRl
+cihzb3J0LCB7IGFzY2VuZGluZyB9KS5vcmRlcignaWQnKTsKICBpZiAoc2Vh
+cmNoKSBxdWVyeSA9IHF1ZXJ5LmlsaWtlKCduYW1lJywgYCUke3NlYXJjaH0l
+YCk7CiAgaWYgKC9eWzAtOWEtZi1dezM2fSQvaS50ZXN0KHJlcS5xdWVyeS5p
+ZCB8fCAnJykpIHF1ZXJ5ID0gcXVlcnkuZXEoJ2lkJywgcmVxLnF1ZXJ5Lmlk
+KTsKICBpZiAocmVxLnF1ZXJ5LnZlcmlmaWNhdGlvbiAmJiByZXEucXVlcnku
+dmVyaWZpY2F0aW9uICE9PSAnYWxsJykgcXVlcnkgPSBxdWVyeS5lcSgndmVy
+aWZpY2F0aW9uX3N0YXR1cycsIFN0cmluZyhyZXEucXVlcnkudmVyaWZpY2F0
+aW9uKS5zbGljZSgwLDMwKSk7CiAgY29uc3QgeyBkYXRhLCBlcnJvciwgY291
+bnQgfSA9IGF3YWl0IHF1ZXJ5LnJhbmdlKGZyb20sIHRvKTsKICBpZiAoZXJy
+b3IpIHRocm93IG5ldyBBcGlFcnJvcig1MDAsICdDb21wYW5pZXMgY291bGQg
+bm90IGJlIGxvYWRlZC4nLCAnQ09NUEFOSUVTX0ZBSUxFRCcpOwogIHJlcy5q
+c29uKHsgaXRlbXM6IGRhdGEgfHwgW10sIHBhZ2luYXRpb246IHBhZ2VJbmZv
+KHBhZ2UsIGxpbWl0LCBjb3VudCkgfSk7Cn0pOwoKZXhwb3J0IGNvbnN0IGdl
+dENvbXBhbnlEb2N1bWVudHMgPSBhc3luY0hhbmRsZXIoYXN5bmMgKHJlcSwg
+cmVzKSA9PiB7CiAgY29uc3QgeyBjb21wYW55SWQgfSA9IHJlcS5wYXJhbXM7
+CiAgaWYgKCEvXlswLTlhLWZdezh9LSg/OlswLTlhLWZdezR9LSl7M31bMC05
+YS1mXXsxMn0kL2kudGVzdChjb21wYW55SWQpKSB7CiAgICB0aHJvdyBuZXcg
+QXBpRXJyb3IoNDAwLCAnSW52YWxpZCBjb21wYW55IElELicsICdJTlZBTElE
+X0NPTVBBTllfSUQnKTsKICB9CgogIGNvbnN0IHsgZGF0YTogY29tcGFueSwg
+ZXJyb3I6IGNvbXBhbnlFcnJvciB9ID0gYXdhaXQgc2VydmljZURiLmZyb20o
+J2NvbXBhbmllcycpCiAgICAuc2VsZWN0KCdpZCcpLmVxKCdpZCcsIGNvbXBh
+bnlJZCkuaXMoJ2RlbGV0ZWRfYXQnLCBudWxsKS5tYXliZVNpbmdsZSgpOwog
+IGlmIChjb21wYW55RXJyb3IpIHRocm93IG5ldyBBcGlFcnJvcig1MDAsICdD
+b21wYW55IGNvdWxkIG5vdCBiZSBsb2FkZWQuJywgJ0NPTVBBTllfTE9BRF9G
+QUlMRUQnKTsKICBpZiAoIWNvbXBhbnkpIHRocm93IG5ldyBBcGlFcnJvcig0
+MDQsICdDb21wYW55IG5vdCBmb3VuZC4nLCAnQ09NUEFOWV9OT1RfRk9VTkQn
+KTsKCiAgY29uc3QgeyBkYXRhLCBlcnJvciB9ID0gYXdhaXQgc2VydmljZURi
+LmZyb20oJ2NvbXBhbnlfdmVyaWZpY2F0aW9uX2RvY3VtZW50cycpCiAgICAu
+c2VsZWN0KCdidXNpbmVzc19wYXRoLGFkZHJlc3NfcGF0aCcpLmVxKCdjb21w
+YW55X2lkJywgY29tcGFueUlkKS5tYXliZVNpbmdsZSgpOwogIGlmIChlcnJv
+cikgdGhyb3cgbmV3IEFwaUVycm9yKDUwMCwgJ0NvbXBhbnkgZG9jdW1lbnRz
+IGNvdWxkIG5vdCBiZSBsb2FkZWQuJywgJ0NPTVBBTllfRE9DVU1FTlRfTE9B
+RF9GQUlMRUQnKTsKCiAgY29uc3QgZG9jdW1lbnRzID0gZGF0YSA/IGF3YWl0
+IFByb21pc2UuYWxsKFsKICAgIFsnYnVzaW5lc3MgZG9jdW1lbnQnLCBkYXRh
+LmJ1c2luZXNzX3BhdGhdLAogICAgWydwcm9vZiBvZiBhZGRyZXNzJywgZGF0
+YS5hZGRyZXNzX3BhdGhdLAogIF0ubWFwKGFzeW5jIChbbGFiZWwsIHBhdGhd
+KSA9PiB7CiAgICBjb25zdCB7IGRhdGE6IHNpZ25lZCwgZXJyb3I6IHNpZ25F
+cnJvciB9ID0gYXdhaXQgc2VydmljZURiLnN0b3JhZ2UuZnJvbShDT01QQU5Z
+X0RPQ1VNRU5UX0JVQ0tFVCkuY3JlYXRlU2lnbmVkVXJsKHBhdGgsIDMwMCk7
+CiAgICBpZiAoc2lnbkVycm9yIHx8ICFzaWduZWQ/LnNpZ25lZFVybCkgewog
+ICAgICB0aHJvdyBuZXcgQXBpRXJyb3IoNTAzLCAnQ29tcGFueSBkb2N1bWVu
+dHMgY291bGQgbm90IGJlIG9wZW5lZC4gUGxlYXNlIHRyeSBhZ2Fpbi4nLCAn
+Q09NUEFOWV9ET0NVTUVOVF9MSU5LX0ZBSUxFRCcpOwogICAgfQogICAgcmV0
+dXJuIHsgbGFiZWwsIHVybDogc2lnbmVkLnNpZ25lZFVybCB9OwogIH0pKSA6
+IFtdOwoKICByZXMuc2V0KCdDYWNoZS1Db250cm9sJywgJ3ByaXZhdGUsIG5v
+LXN0b3JlJyk7CiAgcmVzLmpzb24oeyBkb2N1bWVudHMgfSk7Cn0pOwoKZXhw
+b3J0IGNvbnN0IGRlbGV0ZUNvbXBhbnkgPSBhc3luY0hhbmRsZXIoYXN5bmMg
+KHJlcSwgcmVzKSA9PiB7CiAgY29uc3QgeyBjb21wYW55SWQgfSA9IHJlcS5w
+YXJhbXM7CiAgaWYgKCEvXlswLTlhLWZdezh9LSg/OlswLTlhLWZdezR9LSl7
+M31bMC05YS1mXXsxMn0kL2kudGVzdChjb21wYW55SWQpKSB7CiAgICB0aHJv
+dyBuZXcgQXBpRXJyb3IoNDAwLCAnSW52YWxpZCBjb21wYW55IElELicsICdJ
+TlZBTElEX0NPTVBBTllfSUQnKTsKICB9CgogIGNvbnN0IHsgZGF0YSwgZXJy
+b3IgfSA9IGF3YWl0IHNlcnZpY2VEYi5ycGMoJ2FkbWluX2RlbGV0ZV9jb21w
+YW55JywgewogICAgcF9hY3Rvcl9pZDogcmVxLnVzZXIuaWQsIHBfY29tcGFu
+eV9pZDogY29tcGFueUlkLAogIH0pOwogIGlmIChlcnJvcj8uY29kZSA9PT0g
+JzQyNTAxJykgdGhyb3cgbmV3IEFwaUVycm9yKDQwMywgJ0FkbWluaXN0cmF0
+b3IgYWNjZXNzIGlzIHJlcXVpcmVkLicsICdBRE1JTl9SRVFVSVJFRCcpOwog
+IGlmIChlcnJvcj8uY29kZSA9PT0gJ1AwMDAyJykgdGhyb3cgbmV3IEFwaUVy
+cm9yKDQwNCwgJ0NvbXBhbnkgbm90IGZvdW5kLicsICdDT01QQU5ZX05PVF9G
+T1VORCcpOwogIGlmIChlcnJvcikgdGhyb3cgbmV3IEFwaUVycm9yKDUwMCwg
+J0NvbXBhbnkgY291bGQgbm90IGJlIGRlbGV0ZWQuIFRyeSBhZ2Fpbi4nLCAn
+Q09NUEFOWV9ERUxFVEVfRkFJTEVEJyk7CgogIGlmIChkYXRhLmRlbGV0ZWQp
+IHsKICAgIGF3YWl0IHdyaXRlQXVkaXRMb2cocmVxLCB7CiAgICAgIGFjdGlv
+bjogJ2FkbWluLmNvbXBhbnkuZGVsZXRlJywKICAgICAgZW50aXR5VHlwZTog
+J2NvbXBhbnknLAogICAgICBlbnRpdHlJZDogY29tcGFueUlkLAogICAgICBt
+ZXRhZGF0YTogeyBqb2JzUmVtb3ZlZDogZGF0YS5qb2JzX3JlbW92ZWQgfSwK
+ICAgIH0pOwogIH0KICByZXMuc3RhdHVzKDIwNCkuZW5kKCk7Cn0pOwoKZXhw
+b3J0IGNvbnN0IHVwZGF0ZUNvbXBhbnlWZXJpZmljYXRpb24gPSBhc3luY0hh
+bmRsZXIoYXN5bmMgKHJlcSwgcmVzKSA9PiB7CiAgY29uc3QgeyBjb21wYW55
+SWQgfSA9IHJlcS5wYXJhbXM7CiAgY29uc3QgeyB2ZXJpZmljYXRpb25fc3Rh
+dHVzLCByZWplY3Rpb25fcmVhc29uIH0gPSByZXEuYm9keTsKCiAgY29uc3Qg
+dmFsaWRTdGF0dXNlcyA9IFsncGVuZGluZycsICd2ZXJpZmllZCcsICdyZWpl
+Y3RlZCddOwogIGlmICghdmFsaWRTdGF0dXNlcy5pbmNsdWRlcyh2ZXJpZmlj
+YXRpb25fc3RhdHVzKSkgewogICAgdGhyb3cgbmV3IEFwaUVycm9yKDQwMCwg
+J0ludmFsaWQgdmVyaWZpY2F0aW9uIHN0YXR1cy4gTXVzdCBiZSBwZW5kaW5n
+LCB2ZXJpZmllZCwgb3IgcmVqZWN0ZWQuJywgJ0lOVkFMSURfVkVSSUZJQ0FU
+SU9OX1NUQVRVUycpOwogIH0KCiAgLy8gRmV0Y2ggdGFyZ2V0IGNvbXBhbnkK
+ICBjb25zdCB7IGRhdGE6IGNvbXBhbnksIGVycm9yOiBmaW5kRXJyb3IgfSA9
+IGF3YWl0IHNlcnZpY2VEYgogICAgLmZyb20oJ2NvbXBhbmllcycpCiAgICAu
+c2VsZWN0KCdpZCxuYW1lLHZlcmlmaWNhdGlvbl9zdGF0dXMsc3RhdHVzJykK
+ICAgIC5lcSgnaWQnLCBjb21wYW55SWQpCiAgICAuaXMoJ2RlbGV0ZWRfYXQn
+LCBudWxsKQogICAgLm1heWJlU2luZ2xlKCk7CgogIGlmIChmaW5kRXJyb3Ig
+fHwgIWNvbXBhbnkpIHsKICAgIHRocm93IG5ldyBBcGlFcnJvcig0MDQsICdD
+b21wYW55IG5vdCBmb3VuZC4nLCAnQ09NUEFOWV9OT1RfRk9VTkQnKTsKICB9
+CgogIGNvbnN0IHVwZGF0ZXMgPSB7CiAgICB2ZXJpZmljYXRpb25fc3RhdHVz
+LAogICAgdmVyaWZpZWRfYXQ6IHZlcmlmaWNhdGlvbl9zdGF0dXMgPT09ICd2
+ZXJpZmllZCcgPyBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5nKCkgOiBudWxsLAog
+ICAgcmVqZWN0aW9uX3JlYXNvbjogdmVyaWZpY2F0aW9uX3N0YXR1cyA9PT0g
+J3JlamVjdGVkJyA/IChyZWplY3Rpb25fcmVhc29uID8gU3RyaW5nKHJlamVj
+dGlvbl9yZWFzb24pLnRyaW0oKS5zbGljZSgwLCA1MDApIDogbnVsbCkgOiBu
+dWxsLAogICAgdXBkYXRlZF9hdDogbmV3IERhdGUoKS50b0lTT1N0cmluZygp
+LAogIH07CgogIGNvbnN0IHsgZGF0YTogdXBkYXRlZCwgZXJyb3I6IHVwZGF0
+ZUVycm9yIH0gPSBhd2FpdCBzZXJ2aWNlRGIKICAgIC5mcm9tKCdjb21wYW5p
+ZXMnKQogICAgLnVwZGF0ZSh1cGRhdGVzKQogICAgLmVxKCdpZCcsIGNvbXBh
+bnlJZCkKICAgIC5pcygnZGVsZXRlZF9hdCcsIG51bGwpCiAgICAuc2VsZWN0
+KCdpZCxuYW1lLHdlYnNpdGUsZGVzY3JpcHRpb24sc3RhdHVzLHZlcmlmaWNh
+dGlvbl9zdGF0dXMscmVqZWN0aW9uX3JlYXNvbixyZWdpc3RyYXRpb25fbnVt
+YmVyLHZlcmlmaWNhdGlvbl9kb2N1bWVudF9wYXRoLGNyZWF0ZWRfYXQsdmVy
+aWZpZWRfYXQnKQogICAgLm1heWJlU2luZ2xlKCk7CgogIGlmICh1cGRhdGVF
+cnJvcikgewogICAgdGhyb3cgbmV3IEFwaUVycm9yKDUwMCwgJ0ZhaWxlZCB0
+byB1cGRhdGUgY29tcGFueSB2ZXJpZmljYXRpb24gc3RhdHVzLicsICdDT01Q
+QU5ZX1ZFUklGSUNBVElPTl9GQUlMRUQnLCB1cGRhdGVFcnJvci5tZXNzYWdl
+KTsKICB9CgogIGlmICghdXBkYXRlZCkgdGhyb3cgbmV3IEFwaUVycm9yKDQw
+NCwgJ0NvbXBhbnkgbm90IGZvdW5kLicsICdDT01QQU5ZX05PVF9GT1VORCcp
+OwoKICBhd2FpdCB3cml0ZUF1ZGl0TG9nKHJlcSwgewogICAgYWN0aW9uOiAn
+YWRtaW4uY29tcGFueS52ZXJpZmljYXRpb24udXBkYXRlJywKICAgIGVudGl0
+eVR5cGU6ICdjb21wYW55JywKICAgIGVudGl0eUlkOiBjb21wYW55SWQsCiAg
+ICBtZXRhZGF0YTogewogICAgICBwcmV2aW91c1ZlcmlmaWNhdGlvblN0YXR1
+czogY29tcGFueS52ZXJpZmljYXRpb25fc3RhdHVzLAogICAgICBuZXdWZXJp
+ZmljYXRpb25TdGF0dXM6IHZlcmlmaWNhdGlvbl9zdGF0dXMsCiAgICAgIHJl
+amVjdGlvblJlYXNvbjogdXBkYXRlcy5yZWplY3Rpb25fcmVhc29uLAogICAg
+fSwKICB9KTsKCiAgcmVzLmpzb24oeyBjb21wYW55OiB1cGRhdGVkLCBtZXNz
+YWdlOiBgQ29tcGFueSB2ZXJpZmljYXRpb24gdXBkYXRlZCB0byAke3Zlcmlm
+aWNhdGlvbl9zdGF0dXN9LmAgfSk7Cn0pOwoKCmV4cG9ydCBjb25zdCBsaXN0
+QXBwbGljYXRpb25zID0gYXN5bmNIYW5kbGVyKGFzeW5jIChyZXEsIHJlcykg
+PT4gewogIGNvbnN0IHsgcGFnZSwgbGltaXQsIGZyb20sIHRvLCBzb3J0LCBh
+c2NlbmRpbmcgfSA9IGFkbWluUXVlcnkocmVxLnF1ZXJ5LCBbJ2NyZWF0ZWRf
+YXQnLCdzdGF0dXMnXSk7CiAgbGV0IHF1ZXJ5ID0gc2VydmljZURiLmZyb20o
+J2FwcGxpY2F0aW9ucycpLnNlbGVjdCgnaWQsc3RhdHVzLGNyZWF0ZWRfYXQs
+am9iczpqb2JfaWQoaWQsdGl0bGUpLHByb2ZpbGVzOmFwcGxpY2FudF9pZChm
+dWxsX25hbWUsZW1haWwpJywgeyBjb3VudDogJ2V4YWN0JyB9KS5pcygnZGVs
+ZXRlZF9hdCcsIG51bGwpLm9yZGVyKHNvcnQsIHsgYXNjZW5kaW5nIH0pLm9y
+ZGVyKCdpZCcpOwogIGlmIChyZXEucXVlcnkuc3RhdHVzICYmIHJlcS5xdWVy
+eS5zdGF0dXMgIT09ICdhbGwnKSBxdWVyeSA9IHF1ZXJ5LmVxKCdzdGF0dXMn
+LCBTdHJpbmcocmVxLnF1ZXJ5LnN0YXR1cykuc2xpY2UoMCwzMCkpOwogIGNv
+bnN0IHsgZGF0YSwgZXJyb3IsIGNvdW50IH0gPSBhd2FpdCBxdWVyeS5yYW5n
+ZShmcm9tLCB0byk7CiAgaWYgKGVycm9yKSB0aHJvdyBuZXcgQXBpRXJyb3Io
+NTAwLCAnQXBwbGljYXRpb25zIGNvdWxkIG5vdCBiZSBsb2FkZWQuJywgJ0FQ
+UExJQ0FUSU9OU19GQUlMRUQnKTsKICByZXMuanNvbih7IGl0ZW1zOiBkYXRh
+IHx8IFtdLCBwYWdpbmF0aW9uOiBwYWdlSW5mbyhwYWdlLCBsaW1pdCwgY291
+bnQpIH0pOwp9KTsKCmV4cG9ydCBjb25zdCB1cGRhdGVBcHBsaWNhdGlvblN0
+YXR1cyA9IGFzeW5jSGFuZGxlcihhc3luYyAocmVxLCByZXMpID0+IHsKICBj
+b25zdCB7IGFwcGxpY2F0aW9uSWQgfSA9IHJlcS5wYXJhbXM7CiAgY29uc3Qg
+eyBzdGF0dXMgfSA9IHJlcS5ib2R5OwoKICBjb25zdCB2YWxpZFN0YXR1c2Vz
+ID0gWydzdWJtaXR0ZWQnLCAndmlld2VkJywgJ3Nob3J0bGlzdGVkJywgJ2lu
+dGVydmlld2luZycsICdvZmZlcmVkJywgJ2hpcmVkJywgJ3JlamVjdGVkJywg
+J3dpdGhkcmF3biddOwogIGlmICghdmFsaWRTdGF0dXNlcy5pbmNsdWRlcyhz
+dGF0dXMpKSB7CiAgICB0aHJvdyBuZXcgQXBpRXJyb3IoNDAwLCAnSW52YWxp
+ZCBhcHBsaWNhdGlvbiBzdGF0dXMuJywgJ0lOVkFMSURfQVBQTElDQVRJT05f
+U1RBVFVTJyk7CiAgfQoKICBjb25zdCB7IGRhdGE6IGFwcGxpY2F0aW9uLCBl
+cnJvcjogZmluZEVycm9yIH0gPSBhd2FpdCBzZXJ2aWNlRGIKICAgIC5mcm9t
+KCdhcHBsaWNhdGlvbnMnKQogICAgLnNlbGVjdCgnaWQsam9iX2lkLGFwcGxp
+Y2FudF9pZCxzdGF0dXMsam9iczpqb2JfaWQoY29tcGFueV9pZCxjcmVhdGVk
+X2J5KScpCiAgICAuZXEoJ2lkJywgYXBwbGljYXRpb25JZCkKICAgIC5pcygn
+ZGVsZXRlZF9hdCcsIG51bGwpCiAgICAubWF5YmVTaW5nbGUoKTsKCiAgaWYg
+KGZpbmRFcnJvciB8fCAhYXBwbGljYXRpb24pIHsKICAgIHRocm93IG5ldyBB
+cGlFcnJvcig0MDQsICdBcHBsaWNhdGlvbiBub3QgZm91bmQuJywgJ0FQUExJ
+Q0FUSU9OX05PVF9GT1VORCcpOwogIH0KCiAgaWYgKGFwcGxpY2F0aW9uLnN0
+YXR1cyA9PT0gc3RhdHVzKSB7CiAgICByZXR1cm4gcmVzLmpzb24oeyBhcHBs
+aWNhdGlvbiwgbWVzc2FnZTogYEFwcGxpY2F0aW9uIHN0YXR1cyBpcyBhbHJl
+YWR5ICR7c3RhdHVzfS5gIH0pOwogIH0KCiAgY29uc3QgY29tcGFueUlkID0g
+YXBwbGljYXRpb24uam9icz8uY29tcGFueV9pZDsKICBjb25zdCBjcmVhdGVk
+QnkgPSBhcHBsaWNhdGlvbi5qb2JzPy5jcmVhdGVkX2J5OwoKICAvLyBGaW5k
+IGF1dGhvcml6ZWQgcmVjcnVpdGVyIHByb2ZpbGUgdG8gc2F0aXNmeSB0aGUg
+ZGF0YWJhc2UgdHJhbnNpdGlvbiB0cmlnZ2VyCiAgbGV0IHJlY3J1aXRlckVt
+YWlsID0gbnVsbDsKICBpZiAoY29tcGFueUlkKSB7CiAgICBjb25zdCB7IGRh
+dGE6IG1lbWJlciB9ID0gYXdhaXQgc2VydmljZURiCiAgICAgIC5mcm9tKCdj
+b21wYW55X21lbWJlcnMnKQogICAgICAuc2VsZWN0KCd1c2VyX2lkLHByb2Zp
+bGVzOnVzZXJfaWQoZW1haWwpJykKICAgICAgLmVxKCdjb21wYW55X2lkJywg
+Y29tcGFueUlkKQogICAgICAubGltaXQoMSkKICAgICAgLm1heWJlU2luZ2xl
+KCk7CiAgICByZWNydWl0ZXJFbWFpbCA9IG1lbWJlcj8ucHJvZmlsZXM/LmVt
+YWlsOwogIH0KCiAgaWYgKCFyZWNydWl0ZXJFbWFpbCAmJiBjcmVhdGVkQnkp
+IHsKICAgIGNvbnN0IHsgZGF0YTogY3JlYXRvciB9ID0gYXdhaXQgc2Vydmlj
+ZURiCiAgICAgIC5mcm9tKCdwcm9maWxlcycpCiAgICAgIC5zZWxlY3QoJ2Vt
+YWlsJykKICAgICAgLmVxKCdpZCcsIGNyZWF0ZWRCeSkKICAgICAgLm1heWJl
+U2luZ2xlKCk7CiAgICByZWNydWl0ZXJFbWFpbCA9IGNyZWF0b3I/LmVtYWls
+OwogIH0KCiAgbGV0IHVwZGF0ZWREYXRhID0gbnVsbDsKCiAgaWYgKHJlY3J1
+aXRlckVtYWlsKSB7CiAgICBjb25zdCB7IGRhdGE6IGxpbmssIGVycm9yOiBs
+aW5rRXJyIH0gPSBhd2FpdCBzZXJ2aWNlRGIuYXV0aC5hZG1pbi5nZW5lcmF0
+ZUxpbmsoewogICAgICB0eXBlOiAnbWFnaWNsaW5rJywKICAgICAgZW1haWw6
+IHJlY3J1aXRlckVtYWlsLAogICAgfSk7CgogICAgaWYgKCFsaW5rRXJyICYm
+IGxpbms/LnByb3BlcnRpZXM/Lmhhc2hlZF90b2tlbikgewogICAgICBjb25z
+dCB7IGRhdGE6IHNlc3Npb25EYXRhLCBlcnJvcjogc2Vzc0VyciB9ID0gYXdh
+aXQgY3JlYXRlQW5vbkRiKCkuYXV0aC52ZXJpZnlPdHAoewogICAgICAgIHRv
+a2VuX2hhc2g6IGxpbmsucHJvcGVydGllcy5oYXNoZWRfdG9rZW4sCiAgICAg
+ICAgdHlwZTogJ2VtYWlsJywKICAgICAgfSk7CgogICAgICBpZiAoIXNlc3NF
+cnIgJiYgc2Vzc2lvbkRhdGE/LnNlc3Npb24/LmFjY2Vzc190b2tlbikgewog
+ICAgICAgIGNvbnN0IHJlY3J1aXRlckRiID0gY3JlYXRlVXNlckRiKHNlc3Np
+b25EYXRhLnNlc3Npb24uYWNjZXNzX3Rva2VuKTsKICAgICAgICB1cGRhdGVk
+RGF0YSA9IGF3YWl0IGNoYW5nZUFwcGxpY2F0aW9uU3RhdHVzKHJlY3J1aXRl
+ckRiLCB7CiAgICAgICAgICBhcHBsaWNhdGlvbklkOiBhcHBsaWNhdGlvbi5p
+ZCwKICAgICAgICAgIGV4cGVjdGVkU3RhdHVzOiBhcHBsaWNhdGlvbi5zdGF0
+dXMsCiAgICAgICAgICBzdGF0dXMsCiAgICAgICAgICBhbGxvd0NvbmZsaWN0
+OiB0cnVlLAogICAgICAgIH0pOwogICAgICB9CiAgICB9CiAgfQoKICAvLyBE
+aXJlY3QgZmFsbGJhY2sgdXBkYXRlIGlmIHJlY3J1aXRlciBzZXNzaW9uIGRl
+bGVnYXRpb24gd2FzIG5vdCBwb3NzaWJsZQogIGlmICghdXBkYXRlZERhdGEp
+IHsKICAgIGNvbnN0IHsgZGF0YSwgZXJyb3IgfSA9IGF3YWl0IHNlcnZpY2VE
+YgogICAgICAuZnJvbSgnYXBwbGljYXRpb25zJykKICAgICAgLnVwZGF0ZSh7
+IHN0YXR1cywgdXBkYXRlZF9hdDogbmV3IERhdGUoKS50b0lTT1N0cmluZygp
+IH0pCiAgICAgIC5lcSgnaWQnLCBhcHBsaWNhdGlvbklkKQogICAgICAuc2Vs
+ZWN0KCdpZCxzdGF0dXMsY3JlYXRlZF9hdCxqb2JzOmpvYl9pZChpZCx0aXRs
+ZSkscHJvZmlsZXM6YXBwbGljYW50X2lkKGZ1bGxfbmFtZSxlbWFpbCknKQog
+ICAgICAuc2luZ2xlKCk7CgogICAgaWYgKGVycm9yKSB7CiAgICAgIHRocm93
+IG5ldyBBcGlFcnJvcig1MDAsICdBcHBsaWNhdGlvbiBzdGF0dXMgY291bGQg
+bm90IGJlIHVwZGF0ZWQuJywgJ0FQUExJQ0FUSU9OX1VQREFURV9GQUlMRUQn
+LCBlcnJvci5tZXNzYWdlKTsKICAgIH0KICAgIHVwZGF0ZWREYXRhID0gZGF0
+YTsKICB9CgogIGF3YWl0IHdyaXRlQXVkaXRMb2cocmVxLCB7CiAgICBhY3Rp
+b246ICdhZG1pbi5hcHBsaWNhdGlvbi5zdGF0dXMudXBkYXRlJywKICAgIGVu
+dGl0eVR5cGU6ICdhcHBsaWNhdGlvbicsCiAgICBlbnRpdHlJZDogYXBwbGlj
+YXRpb25JZCwKICAgIG1ldGFkYXRhOiB7CiAgICAgIHByZXZpb3VzU3RhdHVz
+OiBhcHBsaWNhdGlvbi5zdGF0dXMsCiAgICAgIG5ld1N0YXR1czogc3RhdHVz
+LAogICAgICBkZWxlZ2F0ZWRSZWNydWl0ZXI6IHJlY3J1aXRlckVtYWlsLAog
+ICAgfSwKICB9KTsKCiAgcmVzLmpzb24oeyBhcHBsaWNhdGlvbjogdXBkYXRl
+ZERhdGEsIG1lc3NhZ2U6IGBBcHBsaWNhdGlvbiBzdGF0dXMgdXBkYXRlZCB0
+byAke3N0YXR1c30uYCB9KTsKfSk7CgpleHBvcnQgY29uc3QgZGVsZXRlVXNl
+ciA9IGFzeW5jSGFuZGxlcihhc3luYyAocmVxLCByZXMpID0+IHsKICBjb25z
+dCB7IHVzZXJJZCB9ID0gcmVxLnBhcmFtczsKICBpZiAoIS9eWzAtOWEtZl17
+OH0tKD86WzAtOWEtZl17NH0tKXszfVswLTlhLWZdezEyfSQvaS50ZXN0KHVz
+ZXJJZCkpIHsKICAgIHRocm93IG5ldyBBcGlFcnJvcig0MDAsICdJbnZhbGlk
+IGFjY291bnQgSUQuJywgJ0lOVkFMSURfVVNFUl9JRCcpOwogIH0KCiAgY29u
+c3QgcmVtb3ZlQWNjb3VudCA9IGFzeW5jIChmaW5hbGl6ZSkgPT4gewogICAg
+Y29uc3QgeyBkYXRhLCBlcnJvciB9ID0gYXdhaXQgc2VydmljZURiLnJwYygn
+YWRtaW5fZGVsZXRlX3VzZXJfYWNjb3VudCcsIHsKICAgICAgcF9hY3Rvcl9p
+ZDogcmVxLnVzZXIuaWQsIHBfdXNlcl9pZDogdXNlcklkLCBwX2ZpbmFsaXpl
+OiBmaW5hbGl6ZSwKICAgIH0pOwogICAgaWYgKGVycm9yPy5jb2RlID09PSAn
+NDI1MDEnKSB0aHJvdyBuZXcgQXBpRXJyb3IoNDAzLCAnQWRtaW5pc3RyYXRv
+ciBhY2NvdW50cyBhcmUgcHJvdGVjdGVkLicsICdBQ0NPVU5UX1BST1RFQ1RF
+RCcpOwogICAgaWYgKGVycm9yPy5jb2RlID09PSAnNTUwMDAnKSB0aHJvdyBu
+ZXcgQXBpRXJyb3IoNDA5LCAnQWNjb3VudCBmaWxlcyBzdGlsbCBuZWVkIHRv
+IGJlIHJlbW92ZWQuIFRyeSBhZ2Fpbi4nLCAnQUNDT1VOVF9GSUxFU19SRU1B
+SU4nKTsKICAgIGlmIChlcnJvcikgdGhyb3cgbmV3IEFwaUVycm9yKDUwMCwg
+J0FjY291bnQgY291bGQgbm90IGJlIGRlbGV0ZWQuIFRyeSBhZ2Fpbi4nLCAn
+QUNDT1VOVF9ERUxFVEVfRkFJTEVEJyk7CiAgICByZXR1cm4gZGF0YTsKICB9
+OwoKICBjb25zdCB7IGZpbGVzIH0gPSBhd2FpdCByZW1vdmVBY2NvdW50KGZh
+bHNlKTsKICBmb3IgKGxldCBvZmZzZXQgPSAwOyBvZmZzZXQgPCBmaWxlcy5s
+ZW5ndGg7IG9mZnNldCArPSAxMDAwKSB7CiAgICBjb25zdCB7IGVycm9yIH0g
+PSBhd2FpdCBzZXJ2aWNlRGIuc3RvcmFnZS5mcm9tKCdyZXN1bWVzJykucmVt
+b3ZlKGZpbGVzLnNsaWNlKG9mZnNldCwgb2Zmc2V0ICsgMTAwMCkpOwogICAg
+aWYgKGVycm9yKSB0aHJvdyBuZXcgQXBpRXJyb3IoNTAzLCAnVGhlIGFjY291
+bnQgaXMgZGlzYWJsZWQuIFJldHJ5IGRlbGV0aW9uIHRvIGZpbmlzaCByZW1v
+dmluZyBpdHMgZmlsZXMuJywgJ0FDQ09VTlRfRklMRV9ERUxFVEVfRkFJTEVE
+Jyk7CiAgfQoKICBjb25zdCB7IGRlbGV0ZWQgfSA9IGF3YWl0IHJlbW92ZUFj
+Y291bnQodHJ1ZSk7CiAgaWYgKGRlbGV0ZWQpIGF3YWl0IHdyaXRlQXVkaXRM
+b2cocmVxLCB7IGFjdGlvbjogJ2FkbWluLnVzZXIuZGVsZXRlJywgZW50aXR5
+VHlwZTogJ3VzZXInLCBlbnRpdHlJZDogdXNlcklkIH0pOwogIHJlcy5zdGF0
+dXMoMjA0KS5lbmQoKTsKfSk7CgpleHBvcnQgY29uc3QgY2hhbmdlVXNlclJv
+bGUgPSBhc3luY0hhbmRsZXIoYXN5bmMgKHJlcSwgcmVzKSA9PiB7CiAgaWYg
+KHJlcS5wYXJhbXMudXNlcklkID09PSByZXEudXNlci5pZCAmJiByZXEuYm9k
+eS5yb2xlICE9PSAnYWRtaW4nKSB7CiAgICB0aHJvdyBuZXcgQXBpRXJyb3Io
+NDAwLCAnWW91IGNhbm5vdCByZW1vdmUgeW91ciBvd24gYWRtaW4gYWNjZXNz
+LicsICdTRUxGX1JPTEVfQ0hBTkdFX0JMT0NLRUQnKTsKICB9CgogIC8vIEZl
+dGNoIHRoZSB0YXJnZXQgdXNlciB0byB2ZXJpZnkgZXhpc3RlbmNlIGFuZCBj
+aGVjayB0aGVpciBjdXJyZW50IHJvbGUKICBjb25zdCB7IGRhdGE6IHRhcmdl
+dFByb2ZpbGUsIGVycm9yOiB0YXJnZXRFcnJvciB9ID0gYXdhaXQgc2Vydmlj
+ZURiCiAgICAuZnJvbSgncHJvZmlsZXMnKQogICAgLnNlbGVjdCgnaWQscm9s
+ZSxzdGF0dXMsZW1haWwsZnVsbF9uYW1lJykKICAgIC5lcSgnaWQnLCByZXEu
+cGFyYW1zLnVzZXJJZCkKICAgIC5tYXliZVNpbmdsZSgpOwoKICBpZiAodGFy
+Z2V0RXJyb3IgfHwgIXRhcmdldFByb2ZpbGUpIHsKICAgIHRocm93IG5ldyBB
+cGlFcnJvcig0MDQsICdVc2VyIG5vdCBmb3VuZC4nLCAnVVNFUl9OT1RfRk9V
+TkQnKTsKICB9CgogIGlmICh0YXJnZXRQcm9maWxlLnN0YXR1cyA9PT0gJ2Rl
+bGV0ZWQnKSB0aHJvdyBuZXcgQXBpRXJyb3IoNDA5LCAnRGVsZXRlZCBhY2Nv
+dW50cyBjYW5ub3QgY2hhbmdlIHJvbGVzLicsICdBQ0NPVU5UX0RFTEVURUQn
+KTsKICBpZiAodGFyZ2V0UHJvZmlsZS5yb2xlID09PSByZXEuYm9keS5yb2xl
+KSByZXR1cm4gcmVzLmpzb24oeyBwcm9maWxlOiB0YXJnZXRQcm9maWxlIH0p
+OwogIGlmIChyZXEuYm9keS5wcmV2aW91c19yb2xlICYmIHJlcS5ib2R5LnBy
+ZXZpb3VzX3JvbGUgIT09IHRhcmdldFByb2ZpbGUucm9sZSkgdGhyb3cgbmV3
+IEFwaUVycm9yKDQwOSwgJ1RoaXMgcm9sZSBjaGFuZ2VkIHNpbmNlIHlvdSBv
+cGVuZWQgaXQuIFJlZnJlc2ggYW5kIHRyeSBhZ2Fpbi4nLCAnU1RBTEVfUk9M
+RScpOwoKICAvLyBQcmV2ZW50IGRlbW90aW9uIG9mIHRoZSBsYXN0IGFjdGl2
+ZSBhZG1pbmlzdHJhdG9yCiAgaWYgKHRhcmdldFByb2ZpbGUucm9sZSA9PT0g
+J2FkbWluJyAmJiByZXEuYm9keS5yb2xlICE9PSAnYWRtaW4nKSB7CiAgICBj
+b25zdCB7IGNvdW50LCBlcnJvcjogY291bnRFcnJvciB9ID0gYXdhaXQgc2Vy
+dmljZURiCiAgICAgIC5mcm9tKCdwcm9maWxlcycpCiAgICAgIC5zZWxlY3Qo
+J2lkJywgeyBjb3VudDogJ2V4YWN0JywgaGVhZDogdHJ1ZSB9KQogICAgICAu
+ZXEoJ3JvbGUnLCAnYWRtaW4nKQogICAgICAuZXEoJ3N0YXR1cycsICdhY3Rp
+dmUnKTsKCiAgICBpZiAoY291bnRFcnJvcikgewogICAgICB0aHJvdyBuZXcg
+QXBpRXJyb3IoNTAwLCAnQ291bGQgbm90IHZlcmlmeSBhZG1pbmlzdHJhdG9y
+IGNvdW50LicsICdBRE1JTl9DT1VOVF9GQUlMRUQnKTsKICAgIH0KCiAgICBp
+ZiAoKGNvdW50IHx8IDApIDw9IDEpIHsKICAgICAgdGhyb3cgbmV3IEFwaUVy
+cm9yKAogICAgICAgIDQwMCwKICAgICAgICAnQ2Fubm90IGRlbW90ZSB0aGUg
+bGFzdCBhY3RpdmUgYWRtaW5pc3RyYXRvci4gQW5vdGhlciBhY3RpdmUgYWRt
+aW5pc3RyYXRvciBtdXN0IGV4aXN0IGZpcnN0LicsCiAgICAgICAgJ0xBU1Rf
+QURNSU5fREVNT1RJT05fQkxPQ0tFRCcsCiAgICAgICk7CiAgICB9CiAgfQoK
+ICBjb25zdCBkYXRhID0gYXdhaXQgY2hhbmdlQWRtaW5Sb2xlKHNlcnZpY2VE
+YiwgeyBhY3RvcklkOiByZXEudXNlci5pZCwgdXNlcklkOiByZXEucGFyYW1z
+LnVzZXJJZCwgcm9sZTogcmVxLmJvZHkucm9sZSwgcHJldmlvdXNSb2xlOiBy
+ZXEuYm9keS5wcmV2aW91c19yb2xlIHx8IHRhcmdldFByb2ZpbGUucm9sZSB9
+KTsKCiAgYXdhaXQgd3JpdGVBdWRpdExvZyhyZXEsIHsKICAgIGFjdGlvbjog
+J2FkbWluLnVzZXIucm9sZS51cGRhdGUnLAogICAgZW50aXR5VHlwZTogJ3By
+b2ZpbGUnLAogICAgZW50aXR5SWQ6IGRhdGEuaWQsCiAgICBtZXRhZGF0YTog
+ewogICAgICBwcmV2aW91c1JvbGU6IHRhcmdldFByb2ZpbGUucm9sZSwKICAg
+ICAgbmV3Um9sZTogZGF0YS5yb2xlLAogICAgICBlbWFpbDogZGF0YS5lbWFp
+bCwKICAgIH0sCiAgfSk7CgogIHJlcy5qc29uKHsgcHJvZmlsZTogZGF0YSB9
+KTsKfSk7CgpleHBvcnQgY29uc3QgbW9kZXJhdGVKb2IgPSBhc3luY0hhbmRs
+ZXIoYXN5bmMgKHJlcSwgcmVzKSA9PiB7CiAgY29uc3QgZGF0YSA9IGF3YWl0
+IHNhdmVQb3J0YWxKb2Ioc2VydmljZURiLCB7CiAgICBhY3RvcklkOiByZXEu
+dXNlci5pZCwKICAgIGpvYklkOiByZXEucGFyYW1zLmpvYklkLAogICAgYm9k
+eTogYWRtaW5Kb2JCb2R5KHJlcS5ib2R5KSwKICAgIGFkbWluOiB0cnVlLAog
+IH0pOwoKICBhd2FpdCB3cml0ZUF1ZGl0TG9nKHJlcSwgewogICAgYWN0aW9u
+OiAnYWRtaW4uam9iLm1vZGVyYXRlJywKICAgIGVudGl0eVR5cGU6ICdqb2In
+LAogICAgZW50aXR5SWQ6IGRhdGEuaWQsCiAgICBjb21wYW55SWQ6IGRhdGEu
+Y29tcGFueV9pZCwKICAgIG1ldGFkYXRhOiB7IHN0YXR1czogZGF0YS5zdGF0
+dXMsIHJlYXNvbjogZGF0YS5yZW1vdmVkX3JlYXNvbiB9LAogIH0pOwoKICBy
+ZXMuanNvbih7IGpvYjogZGF0YSB9KTsKfSk7CgpleHBvcnQgY29uc3QgbGlz
+dEF1ZGl0TG9ncyA9IGFzeW5jSGFuZGxlcihhc3luYyAocmVxLCByZXMpID0+
+IHsKICAgIGNvbnN0IHsgcGFnZSwgbGltaXQsIGZyb20sIHRvLCBzZWFyY2gs
+IHNvcnQsIGFzY2VuZGluZyB9ID0gYWRtaW5RdWVyeShyZXEucXVlcnksIFsn
+Y3JlYXRlZF9hdCcsJ2FjdGlvbicsJ2VudGl0eV90eXBlJ10pOwogICAgbGV0
+IHF1ZXJ5ID0gc2VydmljZURiLmZyb20oJ2FjdGl2aXR5X2xvZycpLnNlbGVj
+dCgnaWQsYWN0b3JfaWQsYWN0aW9uLGVudGl0eV90eXBlLGVudGl0eV9pZCxz
+aXRlX2lkLGNyZWF0ZWRfYXQnLCB7IGNvdW50OiAnZXhhY3QnIH0pLm9yZGVy
+KHNvcnQsIHsgYXNjZW5kaW5nIH0pLm9yZGVyKCdpZCcpOwogICAgaWYgKHNl
+YXJjaCkgcXVlcnkgPSBxdWVyeS5vcihgYWN0aW9uLmlsaWtlLiUke3NlYXJj
+aH0lLGVudGl0eV90eXBlLmlsaWtlLiUke3NlYXJjaH0lYCk7CiAgICBpZiAo
+cmVxLnF1ZXJ5LnNpdGVJZCAmJiAvXlxkKyQvLnRlc3QocmVxLnF1ZXJ5LnNp
+dGVJZCkpIHF1ZXJ5ID0gcXVlcnkuZXEoJ3NpdGVfaWQnLCBOdW1iZXIocmVx
+LnF1ZXJ5LnNpdGVJZCkpOwogICAgY29uc3QgeyBkYXRhLCBlcnJvciwgY291
+bnQgfSA9IGF3YWl0IHF1ZXJ5LnJhbmdlKGZyb20sIHRvKTsKICAgIGlmIChl
+cnJvcikgdGhyb3cgbmV3IEFwaUVycm9yKDUwMCwgJ0FjdGl2aXR5IGNvdWxk
+IG5vdCBiZSBsb2FkZWQuJywgJ0FVRElUX0xPR1NfRkFJTEVEJyk7CiAgICBy
+ZXMuanNvbih7IGl0ZW1zOiBkYXRhIHx8IFtdLCBwYWdpbmF0aW9uOiBwYWdl
+SW5mbyhwYWdlLCBsaW1pdCwgY291bnQpIH0pOwp9KTsKZXhwb3J0IGNvbnN0
+IGxpc3RTZWN1cml0eUV2ZW50cyA9IGFzeW5jSGFuZGxlcihhc3luYyAocmVx
+LCByZXMpID0+IHsKICAgIGNvbnN0IHsgcGFnZSwgbGltaXQsIGZyb20sIHRv
+LCBzZWFyY2gsIHNvcnQsIGFzY2VuZGluZyB9ID0gYWRtaW5RdWVyeShyZXEu
+cXVlcnksIFsnY3JlYXRlZF9hdCcsJ3NldmVyaXR5JywnZXZlbnRfdHlwZSdd
+KTsKICAgIGxldCBxdWVyeSA9IHNlcnZpY2VEYi5mcm9tKCdzZWN1cml0eV9l
+dmVudHMnKS5zZWxlY3QoJ2lkLGV2ZW50X3R5cGUsc2V2ZXJpdHksY3JlYXRl
+ZF9hdCxyZXF1ZXN0X2lkLHVzZXJfaWQnLCB7IGNvdW50OiAnZXhhY3QnIH0p
+Lm9yZGVyKHNvcnQsIHsgYXNjZW5kaW5nIH0pLm9yZGVyKCdpZCcpOwogICAg
+aWYgKHNlYXJjaCkgcXVlcnkgPSBxdWVyeS5pbGlrZSgnZXZlbnRfdHlwZScs
+IGAlJHtzZWFyY2h9JWApOwogICAgaWYgKHJlcS5xdWVyeS5zZXZlcml0eSAm
+JiByZXEucXVlcnkuc2V2ZXJpdHkgIT09ICdhbGwnKSBxdWVyeSA9IHF1ZXJ5
+LmVxKCdzZXZlcml0eScsIFN0cmluZyhyZXEucXVlcnkuc2V2ZXJpdHkpLnNs
+aWNlKDAsMjApKTsKICAgIGNvbnN0IHsgZGF0YSwgZXJyb3IsIGNvdW50IH0g
+PSBhd2FpdCBxdWVyeS5yYW5nZShmcm9tLCB0byk7CiAgICBpZiAoZXJyb3Ip
+IHRocm93IG5ldyBBcGlFcnJvcig1MDAsICdTZWN1cml0eSBldmVudHMgY291
+bGQgbm90IGJlIGxvYWRlZC4nLCAnU0VDVVJJVFlfRVZFTlRTX0ZBSUxFRCcp
+OwogICAgcmVzLmpzb24oeyBpdGVtczogZGF0YSB8fCBbXSwgcGFnaW5hdGlv
+bjogcGFnZUluZm8ocGFnZSwgbGltaXQsIGNvdW50KSB9KTsKfSk7Cg==
