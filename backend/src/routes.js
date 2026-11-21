@@ -1,145 +1,195 @@
-import rateLimit from 'express-rate-limit';
-import {contactSchema,deliverContact} from './utils/contact.js';
-import {asyncHandler} from './utils/http.js';
-import { Router } from 'express';
-import { authLimiter, writeLimiter } from './middleware/security.js';
-import { requireAuth, requireRole } from './middleware/auth.js';
-import { siteContext } from './middleware/siteContext.js';
-import { validate } from './middleware/validate.js';
-import {
-  applicationSchema,
-  applicationStatusSchema,
-  profileSchema,
-  companySchema,
-  companyUpdateSchema,
-  jobCreateSchema,
-  jobUpdateSchema,
-  adminJobUpdateSchema,
-  notificationPreferencesSchema,
-  adminJobStatusSchema,
-  adminRoleSchema,
-  adminCompanyVerificationSchema,
-  authSignInSchema,
-  authSignUpSchema,
-  resumeRegisterSchema,
-  mississaugaRegistrationSchema,
-  adminRegistrationUpdateSchema,
-} from './schemas.js';
-import * as publicController from './controllers/public.controller.js';
-import * as authController from './controllers/auth.controller.js';
-import * as seekerController from './controllers/jobSeeker.controller.js';
-import * as recruiterController from './controllers/recruiter.controller.js';
-import * as adminController from './controllers/admin.controller.js';
-import * as registrationController from './controllers/registration.controller.js';
-import { createDeliveryWorkerHandler } from './controllers/registrationDelivery.controller.js';
-import { createNotificationHandlers } from './controllers/notifications.controller.js';
-import { z } from 'zod';
-import { serviceDb, publicDb } from './config/supabase.js';
-
-const router = Router();
-router.post('/internal/registration-deliveries', createDeliveryWorkerHandler({ db: serviceDb }));
-router.post('/public/contact',rateLimit({windowMs:900000,max:5,standardHeaders:true,legacyHeaders:false}),validate(contactSchema),asyncHandler(async(req,res)=>{await deliverContact(req.body,{key:process.env.RESEND_API_KEY,from:process.env.CONTACT_FROM_EMAIL,to:process.env.CONTACT_TO_EMAIL||'Info@jooblie.com'});res.status(202).json({accepted:true});}));
-const notifications = createNotificationHandlers(serviceDb);
-router.get('/notifications', requireAuth, notifications.list);
-router.patch('/notifications/read-all', requireAuth, writeLimiter, validate(z.object({ before: z.string().datetime() }).strict()), notifications.readAll);
-router.patch('/notifications/:notificationId', requireAuth, writeLimiter, validate(z.object({ read: z.boolean() }).strict()), notifications.update);
-
-router.get('/health', (_req, res) => {
-  res.json({
-    ok: true,
-    service: 'jooblie-shared-backend',
-    timestamp: new Date().toISOString(),
-  });
-});
-
-router.get('/ready', async (_req, res, next) => {
-  try {
-    const { error } = await publicDb.from('sites').select('id', { head: true, count: 'exact' }).limit(1);
-    if (error) throw error;
-    res.json({ ok: true, database: 'ready', timestamp: new Date().toISOString() });
-  } catch (error) {
-    next(error);
-  }
-});
-
-const publicRouter = Router();
-publicRouter.use(siteContext);
-publicRouter.post('/registrations', rateLimit({ windowMs: 60 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false }), validate(mississaugaRegistrationSchema), registrationController.createMississaugaRegistration);
-publicRouter.get('/dataset', publicController.getDataset);
-publicRouter.get('/jobs', publicController.listJobs);
-publicRouter.get('/jobs/:jobId', publicController.getJob);
-publicRouter.get('/companies', publicController.listCompanies);
-publicRouter.get('/companies/:companyId', publicController.getCompany);
-publicRouter.get('/categories', publicController.listCategories);
-router.use('/public', publicRouter);
-
-router.post('/auth/sign-in', authLimiter, siteContext, validate(authSignInSchema), authController.signIn);
-router.post('/auth/sign-up', authLimiter, siteContext, validate(authSignUpSchema), authController.signUp);
-router.get('/auth/me', requireAuth, authController.me);
-router.patch('/auth/profile', requireAuth, writeLimiter, validate(profileSchema), authController.updateProfile);
-router.get('/auth/notification-preferences', requireAuth, authController.notificationPreferences);
-router.patch('/auth/notification-preferences', requireAuth, writeLimiter, validate(notificationPreferencesSchema), authController.updateNotificationPreferences);
-
-const seeker = Router();
-seeker.use(requireAuth, requireRole('job_seeker'));
-seeker.use(siteContext);
-seeker.get('/dashboard', seekerController.dashboard);
-seeker.get('/applications', seekerController.listApplications);
-seeker.get('/saved-jobs/status', seekerController.savedJobStatus);
-seeker.get('/saved-jobs', seekerController.listSavedJobs);
-seeker.get('/recommended-jobs', seekerController.recommendedJobs);
-seeker.get('/resumes', seekerController.listResumes);
-seeker.get('/resume-url', seekerController.getOwnResumeUrl);
-seeker.post('/resumes', writeLimiter, validate(resumeRegisterSchema), seekerController.registerResume);
-seeker.post('/parse-resume', writeLimiter, seekerController.parseResume);
-seeker.post('/jobs/:jobId/save', writeLimiter, seekerController.saveJob);
-seeker.delete('/jobs/:jobId/save', writeLimiter, seekerController.unsaveJob);
-seeker.post('/jobs/:jobId/apply', writeLimiter, validate(applicationSchema), seekerController.applyToJob);
-seeker.post('/applications/:applicationId/offer-decision', writeLimiter, seekerController.offerDecision);
-router.use('/job-seeker', seeker);
-
-const recruiter = Router();
-recruiter.use(requireAuth, requireRole('recruiter', 'admin'));
-recruiter.use(siteContext);
-recruiter.get('/dashboard', recruiterController.dashboard);
-recruiter.get('/companies', recruiterController.listCompanies);
-recruiter.get('/portals', recruiterController.listAudiencePortals);
-recruiter.post('/companies', writeLimiter, validate(companySchema), recruiterController.createCompany);
-recruiter.patch('/companies/:companyId', writeLimiter, validate(companyUpdateSchema), recruiterController.updateCompany);
-recruiter.post('/jobs', writeLimiter, validate(jobCreateSchema), recruiterController.createJob);
-recruiter.patch('/jobs/:jobId', writeLimiter, validate(jobUpdateSchema), recruiterController.updateJob);
-recruiter.get('/jobs/:jobId/applications', recruiterController.listApplications);
-recruiter.get('/applications', recruiterController.listAllApplications);
-recruiter.get('/applications/:applicationId/resume-url', recruiterController.getApplicationResumeUrl);
-recruiter.patch('/applications/:applicationId', writeLimiter, validate(applicationStatusSchema), recruiterController.updateApplication);
-router.use('/recruiter', recruiter);
-
-const admin = Router();
-admin.use(requireAuth, requireRole('admin'));
-admin.get('/dashboard', adminController.dashboard);
-admin.get('/analytics', adminController.overviewAnalytics);
-admin.get('/portals', adminController.listPortals);
-admin.get('/portals/:slug', adminController.getPortal);
-admin.get('/jobs', adminController.listJobs);
-admin.get('/jobs/insights', adminController.jobInsights);
-admin.get('/jobs/:jobId', adminController.getJob);
-admin.patch('/jobs/:jobId', writeLimiter, validate(adminJobUpdateSchema), adminController.updateJob);
-admin.delete('/jobs/:jobId', writeLimiter, adminController.deleteJob);
-admin.get('/companies', adminController.listCompanies);
-admin.get('/companies/:companyId/documents', adminController.getCompanyDocuments);
-admin.patch('/companies/:companyId/verification', writeLimiter, validate(adminCompanyVerificationSchema), adminController.updateCompanyVerification);
-admin.patch('/companies/:companyId', writeLimiter, validate(adminCompanyVerificationSchema), adminController.updateCompanyVerification);
-admin.get('/applications', adminController.listApplications);
-admin.patch('/applications/:applicationId', writeLimiter, validate(applicationStatusSchema), adminController.updateApplicationStatus);
-admin.get('/users', adminController.listUsers);
-admin.delete('/users/:userId', writeLimiter, adminController.deleteUser);
-admin.get('/registrations', registrationController.listMississaugaRegistrations);
-admin.get('/registration-owners', registrationController.listRegistrationOwners);
-admin.patch('/registrations/:registrationId', writeLimiter, validate(adminRegistrationUpdateSchema), registrationController.updateMississaugaRegistration);
-admin.patch('/users/:userId/role', writeLimiter, validate(adminRoleSchema), adminController.changeUserRole);
-admin.patch('/jobs/:jobId/status', writeLimiter, validate(adminJobStatusSchema), adminController.moderateJob);
-admin.get('/audit-logs', adminController.listAuditLogs);
-admin.get('/security-events', adminController.listSecurityEvents);
-router.use('/admin', admin);
-
-export default router;
+aW1wb3J0IHJhdGVMaW1pdCBmcm9tICdleHByZXNzLXJhdGUtbGltaXQnOwpp
+bXBvcnQge2NvbnRhY3RTY2hlbWEsZGVsaXZlckNvbnRhY3R9IGZyb20gJy4v
+dXRpbHMvY29udGFjdC5qcyc7CmltcG9ydCB7YXN5bmNIYW5kbGVyfSBmcm9t
+ICcuL3V0aWxzL2h0dHAuanMnOwppbXBvcnQgeyBSb3V0ZXIgfSBmcm9tICdl
+eHByZXNzJzsKaW1wb3J0IHsgYXV0aExpbWl0ZXIsIHdyaXRlTGltaXRlciB9
+IGZyb20gJy4vbWlkZGxld2FyZS9zZWN1cml0eS5qcyc7CmltcG9ydCB7IHJl
+cXVpcmVBdXRoLCByZXF1aXJlUm9sZSB9IGZyb20gJy4vbWlkZGxld2FyZS9h
+dXRoLmpzJzsKaW1wb3J0IHsgc2l0ZUNvbnRleHQgfSBmcm9tICcuL21pZGRs
+ZXdhcmUvc2l0ZUNvbnRleHQuanMnOwppbXBvcnQgeyB2YWxpZGF0ZSB9IGZy
+b20gJy4vbWlkZGxld2FyZS92YWxpZGF0ZS5qcyc7CmltcG9ydCB7CiAgYXBw
+bGljYXRpb25TY2hlbWEsCiAgYXBwbGljYXRpb25TdGF0dXNTY2hlbWEsCiAg
+cHJvZmlsZVNjaGVtYSwKICBjb21wYW55U2NoZW1hLAogIGNvbXBhbnlVcGRh
+dGVTY2hlbWEsCiAgam9iQ3JlYXRlU2NoZW1hLAogIGpvYlVwZGF0ZVNjaGVt
+YSwKICBhZG1pbkpvYlVwZGF0ZVNjaGVtYSwKICBub3RpZmljYXRpb25QcmVm
+ZXJlbmNlc1NjaGVtYSwKICBhZG1pbkpvYlN0YXR1c1NjaGVtYSwKICBhZG1p
+blJvbGVTY2hlbWEsCiAgYWRtaW5Db21wYW55VmVyaWZpY2F0aW9uU2NoZW1h
+LAogIGF1dGhTaWduSW5TY2hlbWEsCiAgYXV0aFNpZ25VcFNjaGVtYSwKICBy
+ZXN1bWVSZWdpc3RlclNjaGVtYSwKICBtaXNzaXNzYXVnYVJlZ2lzdHJhdGlv
+blNjaGVtYSwKICBhZG1pblJlZ2lzdHJhdGlvblVwZGF0ZVNjaGVtYSwKfSBm
+cm9tICcuL3NjaGVtYXMuanMnOwppbXBvcnQgKiBhcyBwdWJsaWNDb250cm9s
+bGVyIGZyb20gJy4vY29udHJvbGxlcnMvcHVibGljLmNvbnRyb2xsZXIuanMn
+OwppbXBvcnQgKiBhcyBhdXRoQ29udHJvbGxlciBmcm9tICcuL2NvbnRyb2xs
+ZXJzL2F1dGguY29udHJvbGxlci5qcyc7CmltcG9ydCAqIGFzIHNlZWtlckNv
+bnRyb2xsZXIgZnJvbSAnLi9jb250cm9sbGVycy9qb2JTZWVrZXIuY29udHJv
+bGxlci5qcyc7CmltcG9ydCAqIGFzIHJlY3J1aXRlckNvbnRyb2xsZXIgZnJv
+bSAnLi9jb250cm9sbGVycy9yZWNydWl0ZXIuY29udHJvbGxlci5qcyc7Cmlt
+cG9ydCAqIGFzIGFkbWluQ29udHJvbGxlciBmcm9tICcuL2NvbnRyb2xsZXJz
+L2FkbWluLmNvbnRyb2xsZXIuanMnOwppbXBvcnQgKiBhcyByZWdpc3RyYXRp
+b25Db250cm9sbGVyIGZyb20gJy4vY29udHJvbGxlcnMvcmVnaXN0cmF0aW9u
+LmNvbnRyb2xsZXIuanMnOwppbXBvcnQgeyBjcmVhdGVEZWxpdmVyeVdvcmtl
+ckhhbmRsZXIgfSBmcm9tICcuL2NvbnRyb2xsZXJzL3JlZ2lzdHJhdGlvbkRl
+bGl2ZXJ5LmNvbnRyb2xsZXIuanMnOwppbXBvcnQgeyBjcmVhdGVOb3RpZmlj
+YXRpb25IYW5kbGVycyB9IGZyb20gJy4vY29udHJvbGxlcnMvbm90aWZpY2F0
+aW9ucy5jb250cm9sbGVyLmpzJzsKaW1wb3J0IHsgeiB9IGZyb20gJ3pvZCc7
+CmltcG9ydCB7IHNlcnZpY2VEYiwgcHVibGljRGIgfSBmcm9tICcuL2NvbmZp
+Zy9zdXBhYmFzZS5qcyc7Cgpjb25zdCByb3V0ZXIgPSBSb3V0ZXIoKTsKcm91
+dGVyLnBvc3QoJy9pbnRlcm5hbC9yZWdpc3RyYXRpb24tZGVsaXZlcmllcycs
+IGNyZWF0ZURlbGl2ZXJ5V29ya2VySGFuZGxlcih7IGRiOiBzZXJ2aWNlRGIg
+fSkpOwpyb3V0ZXIucG9zdCgnL3B1YmxpYy9jb250YWN0JyxyYXRlTGltaXQo
+e3dpbmRvd01zOjkwMDAwMCxtYXg6NSxzdGFuZGFyZEhlYWRlcnM6dHJ1ZSxs
+ZWdhY3lIZWFkZXJzOmZhbHNlfSksdmFsaWRhdGUoY29udGFjdFNjaGVtYSks
+YXN5bmNIYW5kbGVyKGFzeW5jKHJlcSxyZXMpPT57YXdhaXQgZGVsaXZlckNv
+bnRhY3QocmVxLmJvZHkse2tleTpwcm9jZXNzLmVudi5SRVNFTkRfQVBJX0tF
+WSxmcm9tOnByb2Nlc3MuZW52LkNPTlRBQ1RfRlJPTV9FTUFJTCx0bzpwcm9j
+ZXNzLmVudi5DT05UQUNUX1RPX0VNQUlMfHwnSW5mb0Bqb29ibGllLmNvbSd9
+KTtyZXMuc3RhdHVzKDIwMikuanNvbih7YWNjZXB0ZWQ6dHJ1ZX0pO30pKTsK
+Y29uc3Qgbm90aWZpY2F0aW9ucyA9IGNyZWF0ZU5vdGlmaWNhdGlvbkhhbmRs
+ZXJzKHNlcnZpY2VEYik7CnJvdXRlci5nZXQoJy9ub3RpZmljYXRpb25zJywg
+cmVxdWlyZUF1dGgsIG5vdGlmaWNhdGlvbnMubGlzdCk7CnJvdXRlci5wYXRj
+aCgnL25vdGlmaWNhdGlvbnMvcmVhZC1hbGwnLCByZXF1aXJlQXV0aCwgd3Jp
+dGVMaW1pdGVyLCB2YWxpZGF0ZSh6Lm9iamVjdCh7IGJlZm9yZTogei5zdHJp
+bmcoKS5kYXRldGltZSgpIH0pLnN0cmljdCgpKSwgbm90aWZpY2F0aW9ucy5y
+ZWFkQWxsKTsKcm91dGVyLnBhdGNoKCcvbm90aWZpY2F0aW9ucy86bm90aWZp
+Y2F0aW9uSWQnLCByZXF1aXJlQXV0aCwgd3JpdGVMaW1pdGVyLCB2YWxpZGF0
+ZSh6Lm9iamVjdCh7IHJlYWQ6IHouYm9vbGVhbigpIH0pLnN0cmljdCgpKSwg
+bm90aWZpY2F0aW9ucy51cGRhdGUpOwoKcm91dGVyLmdldCgnL2hlYWx0aCcs
+IChfcmVxLCByZXMpID0+IHsKICByZXMuanNvbih7CiAgICBvazogdHJ1ZSwK
+ICAgIHNlcnZpY2U6ICdqb29ibGllLXNoYXJlZC1iYWNrZW5kJywKICAgIHRp
+bWVzdGFtcDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpLAogIH0pOwp9KTsK
+CnJvdXRlci5nZXQoJy9yZWFkeScsIGFzeW5jIChfcmVxLCByZXMsIG5leHQp
+ID0+IHsKICB0cnkgewogICAgY29uc3QgeyBlcnJvciB9ID0gYXdhaXQgcHVi
+bGljRGIuZnJvbSgnc2l0ZXMnKS5zZWxlY3QoJ2lkJywgeyBoZWFkOiB0cnVl
+LCBjb3VudDogJ2V4YWN0JyB9KS5saW1pdCgxKTsKICAgIGlmIChlcnJvcikg
+dGhyb3cgZXJyb3I7CiAgICByZXMuanNvbih7IG9rOiB0cnVlLCBkYXRhYmFz
+ZTogJ3JlYWR5JywgdGltZXN0YW1wOiBuZXcgRGF0ZSgpLnRvSVNPU3RyaW5n
+KCkgfSk7CiAgfSBjYXRjaCAoZXJyb3IpIHsKICAgIG5leHQoZXJyb3IpOwog
+IH0KfSk7Cgpjb25zdCBwdWJsaWNSb3V0ZXIgPSBSb3V0ZXIoKTsKcHVibGlj
+Um91dGVyLnVzZShzaXRlQ29udGV4dCk7CnB1YmxpY1JvdXRlci5wb3N0KCcv
+cmVnaXN0cmF0aW9ucycsIHJhdGVMaW1pdCh7IHdpbmRvd01zOiA2MCAqIDYw
+ICogMTAwMCwgbWF4OiAxMCwgc3RhbmRhcmRIZWFkZXJzOiB0cnVlLCBsZWdh
+Y3lIZWFkZXJzOiBmYWxzZSB9KSwgdmFsaWRhdGUobWlzc2lzc2F1Z2FSZWdp
+c3RyYXRpb25TY2hlbWEpLCByZWdpc3RyYXRpb25Db250cm9sbGVyLmNyZWF0
+ZU1pc3Npc3NhdWdhUmVnaXN0cmF0aW9uKTsKcHVibGljUm91dGVyLmdldCgn
+L2RhdGFzZXQnLCBwdWJsaWNDb250cm9sbGVyLmdldERhdGFzZXQpOwpwdWJs
+aWNSb3V0ZXIuZ2V0KCcvam9icycsIHB1YmxpY0NvbnRyb2xsZXIubGlzdEpv
+YnMpOwpwdWJsaWNSb3V0ZXIuZ2V0KCcvam9icy86am9iSWQnLCBwdWJsaWND
+b250cm9sbGVyLmdldEpvYik7CnB1YmxpY1JvdXRlci5nZXQoJy9jb21wYW5p
+ZXMnLCBwdWJsaWNDb250cm9sbGVyLmxpc3RDb21wYW5pZXMpOwpwdWJsaWNS
+b3V0ZXIuZ2V0KCcvY29tcGFuaWVzLzpjb21wYW55SWQnLCBwdWJsaWNDb250
+cm9sbGVyLmdldENvbXBhbnkpOwpwdWJsaWNSb3V0ZXIuZ2V0KCcvY2F0ZWdv
+cmllcycsIHB1YmxpY0NvbnRyb2xsZXIubGlzdENhdGVnb3JpZXMpOwpyb3V0
+ZXIudXNlKCcvcHVibGljJywgcHVibGljUm91dGVyKTsKCnJvdXRlci5wb3N0
+KCcvYXV0aC9zaWduLWluJywgYXV0aExpbWl0ZXIsIHNpdGVDb250ZXh0LCB2
+YWxpZGF0ZShhdXRoU2lnbkluU2NoZW1hKSwgYXV0aENvbnRyb2xsZXIuc2ln
+bkluKTsKcm91dGVyLnBvc3QoJy9hdXRoL3NpZ24tdXAnLCBhdXRoTGltaXRl
+ciwgc2l0ZUNvbnRleHQsIHZhbGlkYXRlKGF1dGhTaWduVXBTY2hlbWEpLCBh
+dXRoQ29udHJvbGxlci5zaWduVXApOwpyb3V0ZXIuZ2V0KCcvYXV0aC9tZScs
+IHJlcXVpcmVBdXRoLCBhdXRoQ29udHJvbGxlci5tZSk7CnJvdXRlci5wYXRj
+aCgnL2F1dGgvcHJvZmlsZScsIHJlcXVpcmVBdXRoLCB3cml0ZUxpbWl0ZXIs
+IHZhbGlkYXRlKHByb2ZpbGVTY2hlbWEpLCBhdXRoQ29udHJvbGxlci51cGRh
+dGVQcm9maWxlKTsKcm91dGVyLmdldCgnL2F1dGgvbm90aWZpY2F0aW9uLXBy
+ZWZlcmVuY2VzJywgcmVxdWlyZUF1dGgsIGF1dGhDb250cm9sbGVyLm5vdGlm
+aWNhdGlvblByZWZlcmVuY2VzKTsKcm91dGVyLnBhdGNoKCcvYXV0aC9ub3Rp
+ZmljYXRpb24tcHJlZmVyZW5jZXMnLCByZXF1aXJlQXV0aCwgd3JpdGVMaW1p
+dGVyLCB2YWxpZGF0ZShub3RpZmljYXRpb25QcmVmZXJlbmNlc1NjaGVtYSks
+IGF1dGhDb250cm9sbGVyLnVwZGF0ZU5vdGlmaWNhdGlvblByZWZlcmVuY2Vz
+KTsKCmNvbnN0IHNlZWtlciA9IFJvdXRlcigpOwpzZWVrZXIudXNlKHJlcXVp
+cmVBdXRoLCByZXF1aXJlUm9sZSgnam9iX3NlZWtlcicpKTsKc2Vla2VyLnVz
+ZShzaXRlQ29udGV4dCk7CnNlZWtlci5nZXQoJy9kYXNoYm9hcmQnLCBzZWVr
+ZXJDb250cm9sbGVyLmRhc2hib2FyZCk7CnNlZWtlci5nZXQoJy9hcHBsaWNh
+dGlvbnMnLCBzZWVrZXJDb250cm9sbGVyLmxpc3RBcHBsaWNhdGlvbnMpOwpz
+ZWVrZXIuZ2V0KCcvc2F2ZWQtam9icy9zdGF0dXMnLCBzZWVrZXJDb250cm9s
+bGVyLnNhdmVkSm9iU3RhdHVzKTsKc2Vla2VyLmdldCgnL3NhdmVkLWpvYnMn
+LCBzZWVrZXJDb250cm9sbGVyLmxpc3RTYXZlZEpvYnMpOwpzZWVrZXIuZ2V0
+KCcvcmVjb21tZW5kZWQtam9icycsIHNlZWtlckNvbnRyb2xsZXIucmVjb21t
+ZW5kZWRKb2JzKTsKc2Vla2VyLmdldCgnL3Jlc3VtZXMnLCBzZWVrZXJDb250
+cm9sbGVyLmxpc3RSZXN1bWVzKTsKc2Vla2VyLmdldCgnL3Jlc3VtZS11cmwn
+LCBzZWVrZXJDb250cm9sbGVyLmdldE93blJlc3VtZVVybCk7CnNlZWtlci5w
+b3N0KCcvcmVzdW1lcycsIHdyaXRlTGltaXRlciwgdmFsaWRhdGUocmVzdW1l
+UmVnaXN0ZXJTY2hlbWEpLCBzZWVrZXJDb250cm9sbGVyLnJlZ2lzdGVyUmVz
+dW1lKTsKc2Vla2VyLnBvc3QoJy9wYXJzZS1yZXN1bWUnLCB3cml0ZUxpbWl0
+ZXIsIHNlZWtlckNvbnRyb2xsZXIucGFyc2VSZXN1bWUpOwpzZWVrZXIucG9z
+dCgnL2pvYnMvOmpvYklkL3NhdmUnLCB3cml0ZUxpbWl0ZXIsIHNlZWtlckNv
+bnRyb2xsZXIuc2F2ZUpvYik7CnNlZWtlci5kZWxldGUoJy9qb2JzLzpqb2JJ
+ZC9zYXZlJywgd3JpdGVMaW1pdGVyLCBzZWVrZXJDb250cm9sbGVyLnVuc2F2
+ZUpvYik7CnNlZWtlci5wb3N0KCcvam9icy86am9iSWQvYXBwbHknLCB3cml0
+ZUxpbWl0ZXIsIHZhbGlkYXRlKGFwcGxpY2F0aW9uU2NoZW1hKSwgc2Vla2Vy
+Q29udHJvbGxlci5hcHBseVRvSm9iKTsKc2Vla2VyLnBvc3QoJy9hcHBsaWNh
+dGlvbnMvOmFwcGxpY2F0aW9uSWQvb2ZmZXItZGVjaXNpb24nLCB3cml0ZUxp
+bWl0ZXIsIHNlZWtlckNvbnRyb2xsZXIub2ZmZXJEZWNpc2lvbik7CnJvdXRl
+ci51c2UoJy9qb2Itc2Vla2VyJywgc2Vla2VyKTsKCmNvbnN0IHJlY3J1aXRl
+ciA9IFJvdXRlcigpOwpyZWNydWl0ZXIudXNlKHJlcXVpcmVBdXRoLCByZXF1
+aXJlUm9sZSgncmVjcnVpdGVyJywgJ2FkbWluJykpOwpyZWNydWl0ZXIudXNl
+KHNpdGVDb250ZXh0KTsKcmVjcnVpdGVyLmdldCgnL2Rhc2hib2FyZCcsIHJl
+Y3J1aXRlckNvbnRyb2xsZXIuZGFzaGJvYXJkKTsKcmVjcnVpdGVyLmdldCgn
+L2NvbXBhbmllcycsIHJlY3J1aXRlckNvbnRyb2xsZXIubGlzdENvbXBhbmll
+cyk7CnJlY3J1aXRlci5nZXQoJy9wb3J0YWxzJywgcmVjcnVpdGVyQ29udHJv
+bGxlci5saXN0QXVkaWVuY2VQb3J0YWxzKTsKcmVjcnVpdGVyLnBvc3QoJy9j
+b21wYW5pZXMnLCB3cml0ZUxpbWl0ZXIsIHZhbGlkYXRlKGNvbXBhbnlTY2hl
+bWEpLCByZWNydWl0ZXJDb250cm9sbGVyLmNyZWF0ZUNvbXBhbnkpOwpyZWNy
+dWl0ZXIucGF0Y2goJy9jb21wYW5pZXMvOmNvbXBhbnlJZCcsIHdyaXRlTGlt
+aXRlciwgdmFsaWRhdGUoY29tcGFueVVwZGF0ZVNjaGVtYSksIHJlY3J1aXRl
+ckNvbnRyb2xsZXIudXBkYXRlQ29tcGFueSk7CnJlY3J1aXRlci5wb3N0KCcv
+am9icycsIHdyaXRlTGltaXRlciwgdmFsaWRhdGUoam9iQ3JlYXRlU2NoZW1h
+KSwgcmVjcnVpdGVyQ29udHJvbGxlci5jcmVhdGVKb2IpOwpyZWNydWl0ZXIu
+cGF0Y2goJy9qb2JzLzpqb2JJZCcsIHdyaXRlTGltaXRlciwgdmFsaWRhdGUo
+am9iVXBkYXRlU2NoZW1hKSwgcmVjcnVpdGVyQ29udHJvbGxlci51cGRhdGVK
+b2IpOwpyZWNydWl0ZXIuZ2V0KCcvam9icy86am9iSWQvYXBwbGljYXRpb25z
+JywgcmVjcnVpdGVyQ29udHJvbGxlci5saXN0QXBwbGljYXRpb25zKTsKcmVj
+cnVpdGVyLmdldCgnL2FwcGxpY2F0aW9ucycsIHJlY3J1aXRlckNvbnRyb2xs
+ZXIubGlzdEFsbEFwcGxpY2F0aW9ucyk7CnJlY3J1aXRlci5nZXQoJy9hcHBs
+aWNhdGlvbnMvOmFwcGxpY2F0aW9uSWQvcmVzdW1lLXVybCcsIHJlY3J1aXRl
+ckNvbnRyb2xsZXIuZ2V0QXBwbGljYXRpb25SZXN1bWVVcmwpOwpyZWNydWl0
+ZXIucGF0Y2goJy9hcHBsaWNhdGlvbnMvOmFwcGxpY2F0aW9uSWQnLCB3cml0
+ZUxpbWl0ZXIsIHZhbGlkYXRlKGFwcGxpY2F0aW9uU3RhdHVzU2NoZW1hKSwg
+cmVjcnVpdGVyQ29udHJvbGxlci51cGRhdGVBcHBsaWNhdGlvbik7CnJvdXRl
+ci51c2UoJy9yZWNydWl0ZXInLCByZWNydWl0ZXIpOwoKY29uc3QgYWRtaW4g
+PSBSb3V0ZXIoKTsKYWRtaW4udXNlKHJlcXVpcmVBdXRoLCByZXF1aXJlUm9s
+ZSgnYWRtaW4nKSk7CmFkbWluLmdldCgnL2Rhc2hib2FyZCcsIGFkbWluQ29u
+dHJvbGxlci5kYXNoYm9hcmQpOwphZG1pbi5nZXQoJy9hbmFseXRpY3MnLCBh
+ZG1pbkNvbnRyb2xsZXIub3ZlcnZpZXdBbmFseXRpY3MpOwphZG1pbi5nZXQo
+Jy9wb3J0YWxzJywgYWRtaW5Db250cm9sbGVyLmxpc3RQb3J0YWxzKTsKYWRt
+aW4uZ2V0KCcvcG9ydGFscy86c2x1ZycsIGFkbWluQ29udHJvbGxlci5nZXRQ
+b3J0YWwpOwphZG1pbi5nZXQoJy9qb2JzJywgYWRtaW5Db250cm9sbGVyLmxp
+c3RKb2JzKTsKYWRtaW4uZ2V0KCcvam9icy9pbnNpZ2h0cycsIGFkbWluQ29u
+dHJvbGxlci5qb2JJbnNpZ2h0cyk7CmFkbWluLmdldCgnL2pvYnMvOmpvYklk
+JywgYWRtaW5Db250cm9sbGVyLmdldEpvYik7CmFkbWluLnBhdGNoKCcvam9i
+cy86am9iSWQnLCB3cml0ZUxpbWl0ZXIsIHZhbGlkYXRlKGFkbWluSm9iVXBk
+YXRlU2NoZW1hKSwgYWRtaW5Db250cm9sbGVyLnVwZGF0ZUpvYik7CmFkbWlu
+LmRlbGV0ZSgnL2pvYnMvOmpvYklkJywgd3JpdGVMaW1pdGVyLCBhZG1pbkNv
+bnRyb2xsZXIuZGVsZXRlSm9iKTsKYWRtaW4uZ2V0KCcvY29tcGFuaWVzJywg
+YWRtaW5Db250cm9sbGVyLmxpc3RDb21wYW5pZXMpOwphZG1pbi5nZXQoJy9j
+b21wYW5pZXMvOmNvbXBhbnlJZC9kb2N1bWVudHMnLCBhZG1pbkNvbnRyb2xs
+ZXIuZ2V0Q29tcGFueURvY3VtZW50cyk7CmFkbWluLmRlbGV0ZSgnL2NvbXBh
+bmllcy86Y29tcGFueUlkJywgd3JpdGVMaW1pdGVyLCBhZG1pbkNvbnRyb2xs
+ZXIuZGVsZXRlQ29tcGFueSk7CmFkbWluLnBhdGNoKCcvY29tcGFuaWVzLzpj
+b21wYW55SWQvdmVyaWZpY2F0aW9uJywgd3JpdGVMaW1pdGVyLCB2YWxpZGF0
+ZShhZG1pbkNvbXBhbnlWZXJpZmljYXRpb25TY2hlbWEpLCBhZG1pbkNvbnRy
+b2xsZXIudXBkYXRlQ29tcGFueVZlcmlmaWNhdGlvbik7CmFkbWluLnBhdGNo
+KCcvY29tcGFuaWVzLzpjb21wYW55SWQnLCB3cml0ZUxpbWl0ZXIsIHZhbGlk
+YXRlKGFkbWluQ29tcGFueVZlcmlmaWNhdGlvblNjaGVtYSksIGFkbWluQ29u
+dHJvbGxlci51cGRhdGVDb21wYW55VmVyaWZpY2F0aW9uKTsKYWRtaW4uZ2V0
+KCcvYXBwbGljYXRpb25zJywgYWRtaW5Db250cm9sbGVyLmxpc3RBcHBsaWNh
+dGlvbnMpOwphZG1pbi5wYXRjaCgnL2FwcGxpY2F0aW9ucy86YXBwbGljYXRp
+b25JZCcsIHdyaXRlTGltaXRlciwgdmFsaWRhdGUoYXBwbGljYXRpb25TdGF0
+dXNTY2hlbWEpLCBhZG1pbkNvbnRyb2xsZXIudXBkYXRlQXBwbGljYXRpb25T
+dGF0dXMpOwphZG1pbi5nZXQoJy91c2VycycsIGFkbWluQ29udHJvbGxlci5s
+aXN0VXNlcnMpOwphZG1pbi5kZWxldGUoJy91c2Vycy86dXNlcklkJywgd3Jp
+dGVMaW1pdGVyLCBhZG1pbkNvbnRyb2xsZXIuZGVsZXRlVXNlcik7CmFkbWlu
+LmdldCgnL3JlZ2lzdHJhdGlvbnMnLCByZWdpc3RyYXRpb25Db250cm9sbGVy
+Lmxpc3RNaXNzaXNzYXVnYVJlZ2lzdHJhdGlvbnMpOwphZG1pbi5nZXQoJy9y
+ZWdpc3RyYXRpb24tb3duZXJzJywgcmVnaXN0cmF0aW9uQ29udHJvbGxlci5s
+aXN0UmVnaXN0cmF0aW9uT3duZXJzKTsKYWRtaW4ucGF0Y2goJy9yZWdpc3Ry
+YXRpb25zLzpyZWdpc3RyYXRpb25JZCcsIHdyaXRlTGltaXRlciwgdmFsaWRh
+dGUoYWRtaW5SZWdpc3RyYXRpb25VcGRhdGVTY2hlbWEpLCByZWdpc3RyYXRp
+b25Db250cm9sbGVyLnVwZGF0ZU1pc3Npc3NhdWdhUmVnaXN0cmF0aW9uKTsK
+YWRtaW4ucGF0Y2goJy91c2Vycy86dXNlcklkL3JvbGUnLCB3cml0ZUxpbWl0
+ZXIsIHZhbGlkYXRlKGFkbWluUm9sZVNjaGVtYSksIGFkbWluQ29udHJvbGxl
+ci5jaGFuZ2VVc2VyUm9sZSk7CmFkbWluLnBhdGNoKCcvam9icy86am9iSWQv
+c3RhdHVzJywgd3JpdGVMaW1pdGVyLCB2YWxpZGF0ZShhZG1pbkpvYlN0YXR1
+c1NjaGVtYSksIGFkbWluQ29udHJvbGxlci5tb2RlcmF0ZUpvYik7CmFkbWlu
+LmdldCgnL2F1ZGl0LWxvZ3MnLCBhZG1pbkNvbnRyb2xsZXIubGlzdEF1ZGl0
+TG9ncyk7CmFkbWluLmdldCgnL3NlY3VyaXR5LWV2ZW50cycsIGFkbWluQ29u
+dHJvbGxlci5saXN0U2VjdXJpdHlFdmVudHMpOwpyb3V0ZXIudXNlKCcvYWRt
+aW4nLCBhZG1pbik7CgpleHBvcnQgZGVmYXVsdCByb3V0ZXI7Cg==
